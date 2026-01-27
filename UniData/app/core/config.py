@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     meili_default_url: Optional[str] = ""
     meili_default_api_key: Optional[str] = ""
 
-    # 应用身份和令牌映射，JSON 字符串形式，示例: {"app-a": "token-a", "app-b": "token-b"}
-    app_tokens_json: str = ""
+    # JWT 签名秘钥（HS256）
+    jwt_secret: str = "change-me-in-prod"
 
     model_config = SettingsConfigDict(
         env_file=".env",
