@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     meili_default_url: Optional[str] = ""
     meili_default_api_key: Optional[str] = ""
 
+    # 应用身份和令牌映射，JSON 字符串形式，示例: {"app-a": "token-a", "app-b": "token-b"}
+    app_tokens_json: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

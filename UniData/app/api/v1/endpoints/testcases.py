@@ -3,9 +3,11 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import AppIdentity, get_current_app
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.schemas.testcase import TestCaseResponse, ErrorResponse, MeiliEndpointResponse
+from app.services.index_service import index_service
 from app.services.testcase_service import testcase_service
 
 router = APIRouter()
@@ -25,6 +27,8 @@ router = APIRouter()
 async def create_test_case(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    current_app: AppIdentity = Depends(get_current_app),
+    index_uid: str = "",
 ) -> TestCaseResponse:
     body_bytes = await request.body()
 
@@ -35,6 +39,19 @@ async def create_test_case(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="无效的 JSON 格式",
         )
+
+    if not index_uid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="缺少 'index_uid' 参数",
+        )
+
+    await index_service.create_index(
+        db,
+        app_name=current_app.app_name,
+        index_uid=index_uid,
+        description=None,
+    )
 
     id_value = await testcase_service.create_test_case(db, body_bytes)
 
@@ -56,6 +73,8 @@ async def update_test_case(
     id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
+    current_app: AppIdentity = Depends(get_current_app),
+    index_uid: str = "",
 ) -> TestCaseResponse:
     if not id:
         raise HTTPException(
@@ -72,6 +91,19 @@ async def update_test_case(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="无效的 JSON 格式",
         )
+
+    if not index_uid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="缺少 'index_uid' 参数",
+        )
+
+    await index_service.create_index(
+        db,
+        app_name=current_app.app_name,
+        index_uid=index_uid,
+        description=None,
+    )
 
     payload["id"] = id
 
@@ -101,8 +133,15 @@ async def update_test_case(
 )
 async def get_meilisearch_endpoint(
     app_name: str,
+    current_app: AppIdentity = Depends(get_current_app),
 ) -> MeiliEndpointResponse:
     settings = get_settings()
+
+    if app_name != current_app.app_name:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权管理该应用的索引",
+        )
 
     if not settings.meili_default_url or not settings.meili_default_api_key:
         raise HTTPException(
@@ -130,12 +169,27 @@ async def get_meilisearch_endpoint(
 async def delete_test_case(
     id: str,
     db: AsyncSession = Depends(get_db),
+    current_app: AppIdentity = Depends(get_current_app),
+    index_uid: str = "",
 ) -> TestCaseResponse:
     if not id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="缺少 'id' 参数",
         )
+
+    if not index_uid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="缺少 'index_uid' 参数",
+        )
+
+    await index_service.create_index(
+        db,
+        app_name=current_app.app_name,
+        index_uid=index_uid,
+        description=None,
+    )
 
     deleted_id = await testcase_service.delete_test_case(db, id)
 
