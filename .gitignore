@@ -1,0 +1,165 @@
+# ===========================================
+# Environment Variables (SENSITIVE)
+# ===========================================
+.env
+.env.local
+.env.*.local
+*.local
+
+# ===========================================
+# Python
+# ===========================================
+# Virtual environments
+UniData/.venv/
+.venv/
+venv/
+env/
+ENV/
+
+# Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Pytest
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+
+# hatch
+.hatch/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json/
+*.pyi
+
+# pipenv
+Pipfile.lock
+pip_graph.png
+*.dot
+
+# UV
+uv.lock
+
+# ===========================================
+# Go
+# ===========================================
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# ===========================================
+# IDE and Editors
+# ===========================================
+# VS Code
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Vim
+*~
+*.swp
+*.swo
+.*.swp
+.*.swo
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.*.tramp历史
+
+# ===========================================
+# Operating Systems
+# ===========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.pem
+
+# ===========================================
+# Logs and Debug
+# ===========================================
+*.log
+excalidraw.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# ===========================================
+# Docker
+# ===========================================
+.docker/
+docker-compose.override.yml
+*.tar
+
+# ===========================================
+# Miscellaneous
+# ===========================================
+*.tmp
+*.temp
+tmp/
+temp/
+*.bak
+*~
+.cache/
