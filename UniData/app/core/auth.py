@@ -42,6 +42,11 @@ def _base64url_decode(data: str) -> bytes:
     return base64.urlsafe_b64decode(data + padding)
 
 
+def _base64url_encode(data: bytes) -> str:
+    """对数据进行 base64url 编码。"""
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
 def _decode_jwt(token: str, secret: str, algorithms: Optional[List[str]] = None) -> dict:
     """手动解析并验证一个使用 HS256 签名的 JWT。
 

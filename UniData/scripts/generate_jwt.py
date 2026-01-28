@@ -39,8 +39,33 @@ def generate_jwt(app_name: str, scopes: List[str], ttl_seconds: int) -> str:
     return f"{header_b64}.{payload_b64}.{signature_b64}"
 
 
+# 常用 TTL 值常量（秒）
+TTL_SHORT = 3600           # 1 小时
+TTL_DAY = 86400            # 1 天
+TTL_WEEK = 604800          # 1 周
+TTL_MONTH = 2592000        # 30 天
+TTL_YEAR = 31536000        # 1 年
+TTL_LONGTERM = 315360000   # 10 年（长期有效）
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate JWT for UniData apps")
+    parser = argparse.ArgumentParser(
+        description="Generate JWT for UniData apps",
+        epilog="""
+常见 TTL 示例:
+  --ttl 3600       1 小时（默认）
+  --ttl 86400      1 天
+  --ttl 604800     1 周
+  --ttl 2592000    30 天
+  --ttl 31536000   1 年
+  --ttl 315360000  10 年（长期）
+
+示例:
+  python scripts/generate_jwt.py --app-name myapp --scopes read,write --ttl 86400
+  python scripts/generate_jwt.py --app-name myapp --ttl 315360000  # 10 年有效
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--app-name", required=True, help="应用名称，对应 JWT 中的 app_name")
     parser.add_argument(
         "--scopes",
@@ -50,8 +75,8 @@ def main() -> None:
     parser.add_argument(
         "--ttl",
         type=int,
-        default=3600,
-        help="令牌有效期（秒），默认 3600",
+        default=TTL_LONGTERM,
+        help=f"令牌有效期（秒），默认 {TTL_LONGTERM}（10年）",
     )
 
     args = parser.parse_args()
