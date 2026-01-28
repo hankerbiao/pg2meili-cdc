@@ -6,7 +6,6 @@ import { ResponseArea } from './components/ResponseArea';
 import { CreateTestCase } from './components/CreateTestCase';
 import { UpdateTestCase } from './components/UpdateTestCase';
 import { DeleteTestCase } from './components/DeleteTestCase';
-import { MeiliEndpoint } from './components/MeiliEndpoint';
 import { MeiliSearchTool } from './components/MeiliSearchTool';
 import { AppProvider } from './context/AppContext';
 
@@ -31,11 +30,6 @@ const AppContent: React.FC = () => {
       key: 'delete',
       label: '删除测试用例',
       children: <DeleteTestCase />,
-    },
-    {
-      key: 'endpoint',
-      label: '获取 Meili 地址',
-      children: <MeiliEndpoint />,
     },
   ];
 

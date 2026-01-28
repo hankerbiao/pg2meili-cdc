@@ -27,13 +27,12 @@ class TestCaseRepository:
             payload_data = {}
 
         now = datetime.utcnow()
-        is_delete = bool(payload_data.get("is_delete", False))
+
         if existing:
             existing.payload = payload_data
-            existing.is_delete = is_delete
             existing.updated_at = now
         else:
-            obj = TestCase(id=id, payload=payload_data, is_delete=is_delete, updated_at=now)
+            obj = TestCase(id=id, payload=payload_data, updated_at=now)
             db.add(obj)
 
         await db.flush()

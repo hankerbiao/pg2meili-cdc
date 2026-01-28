@@ -30,7 +30,4 @@ export const api = {
   deleteTestCase: async (client: any, id: string, indexUid: string) => {
     return client.delete(`/api/v1/testcases/${id}?index_uid=${indexUid}`);
   },
-  getMeiliSearchEndpoint: async (client: any, appName: string) => {
-    return client.get(`/api/v1/testcases/meilisearch/endpoint?app_name=${appName}`);
-  },
 };

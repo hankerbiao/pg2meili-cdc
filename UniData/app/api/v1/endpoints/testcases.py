@@ -7,7 +7,6 @@ from app.core.auth import AppIdentity, get_current_app
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.schemas.testcase import TestCaseResponse, MeiliEndpointResponse
-from app.services.index_service import index_service
 from app.services.testcase_service import testcase_service
 
 router = APIRouter()
@@ -29,7 +28,7 @@ async def create_test_case(
     body_bytes = await request.body()
 
     try:
-        json.loads(body_bytes)
+        payload = json.loads(body_bytes or b"{}")
     except json.JSONDecodeError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -41,15 +40,16 @@ async def create_test_case(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="缺少 'index_uid' 参数",
         )
+    payload["app_name"] = current_app.app_name
+    try:
+        encoded_body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="无法编码为合法的 JSON",
+        )
 
-    await index_service.create_index(
-        db,
-        app_name=current_app.app_name,
-        index_uid=index_uid,
-        description=None,
-    )
-
-    id_value = await testcase_service.create_test_case(db, body_bytes)
+    id_value = await testcase_service.create_test_case(db, encoded_body)
 
     return TestCaseResponse(status="success", id=id_value)
 
@@ -90,14 +90,8 @@ async def update_test_case(
             detail="缺少 'index_uid' 参数",
         )
 
-    await index_service.create_index(
-        db,
-        app_name=current_app.app_name,
-        index_uid=index_uid,
-        description=None,
-    )
-
     payload["id"] = id
+    payload["app_name"] = current_app.app_name
 
     try:
         encoded_body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -167,13 +161,6 @@ async def delete_test_case(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="缺少 'index_uid' 参数",
         )
-
-    await index_service.create_index(
-        db,
-        app_name=current_app.app_name,
-        index_uid=index_uid,
-        description=None,
-    )
 
     deleted_id = await testcase_service.delete_test_case(db, id)
 

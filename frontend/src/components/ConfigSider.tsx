@@ -29,14 +29,6 @@ export const ConfigSider: React.FC = () => {
         <Form.Item label="索引标识 (Index UID)" name="indexUid">
           <Input placeholder="test_index" />
         </Form.Item>
-        
-        <Divider>MeiliSearch 配置</Divider>
-        <Form.Item label="服务地址 (MeiliSearch URL)" name="meiliUrl">
-          <Input placeholder="http://localhost:7700" />
-        </Form.Item>
-        <Form.Item label="访问密钥 (MeiliSearch Key)" name="meiliKey">
-          <Input.Password placeholder="Master Key or API Key" />
-        </Form.Item>
       </Form>
       <Divider />
       <Text type="secondary" style={{ fontSize: '12px' }}>

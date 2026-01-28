@@ -13,6 +13,7 @@ class TestCase(Base):
     __tablename__ = "test_cases"
 
     id = Column(String, primary_key=True, nullable=False)
+    app_name = Column(String, nullable=True)
     payload = Column(JSONB, nullable=True)
     is_delete = Column(Boolean, nullable=False, default=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
