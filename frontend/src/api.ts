@@ -22,15 +22,15 @@ export const createClient = (config: ApiConfig) => {
 // API Functions
 export const api = {
   createTestCase: async (client: any, indexUid: string, data: any) => {
-    return client.post(`/testcases?index_uid=${indexUid}`, data);
+    return client.post(`/api/v1/testcases?index_uid=${indexUid}`, data);
   },
   updateTestCase: async (client: any, id: string, indexUid: string, data: any) => {
-    return client.put(`/testcases/${id}?index_uid=${indexUid}`, data);
+    return client.put(`/api/v1/testcases/${id}?index_uid=${indexUid}`, data);
   },
   deleteTestCase: async (client: any, id: string, indexUid: string) => {
-    return client.delete(`/testcases/${id}?index_uid=${indexUid}`);
+    return client.delete(`/api/v1/testcases/${id}?index_uid=${indexUid}`);
   },
   getMeiliSearchEndpoint: async (client: any, appName: string) => {
-    return client.get(`/testcases/meilisearch/endpoint?app_name=${appName}`);
+    return client.get(`/api/v1/testcases/meilisearch/endpoint?app_name=${appName}`);
   },
 };

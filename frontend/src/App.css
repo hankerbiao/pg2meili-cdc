@@ -28,10 +28,10 @@
   border-radius: 6px;
   font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
-  min-height: 200px;
-  max-height: 500px;
+  height: 100%;
   overflow: auto;
   white-space: pre-wrap;
+  border: 1px solid #333;
 }
 
 .section-title {

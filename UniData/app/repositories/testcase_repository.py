@@ -27,38 +27,23 @@ class TestCaseRepository:
             payload_data = {}
 
         now = datetime.utcnow()
+        is_delete = bool(payload_data.get("is_delete", False))
         if existing:
             existing.payload = payload_data
+            existing.is_delete = is_delete
             existing.updated_at = now
         else:
-            obj = TestCase(id=id, payload=payload_data, updated_at=now)
+            obj = TestCase(id=id, payload=payload_data, is_delete=is_delete, updated_at=now)
             db.add(obj)
 
         await db.flush()
 
     @staticmethod
     async def soft_delete_test_case(db: AsyncSession, id: str) -> None:
-        """
-        软删除测试用例（ORM 方式，将 payload 中 is_delete 置为 true）。
-        """
         obj: Optional[TestCase] = await db.get(TestCase, id)
         if not obj:
             return
-
-        raw_payload = obj.payload
-
-        if isinstance(raw_payload, dict):
-            data = dict(raw_payload)
-        elif isinstance(raw_payload, str):
-            try:
-                data = json.loads(raw_payload) if raw_payload else {}
-            except json.JSONDecodeError:
-                data = {}
-        else:
-            data = {}
-
-        data["is_delete"] = True
-        obj.payload = data
+        obj.is_delete = True
         obj.updated_at = datetime.utcnow()
 
         await db.flush()

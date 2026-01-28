@@ -145,11 +145,20 @@ func run(ctx context.Context, client *kgo.Client, meiliClient meilisearch.Servic
 			switch op {
 			case "c", "r", "u":
 				indexName := resolveIndex(baseIndex, cfg.MeiliIndexField, doc)
-				_, err := meiliClient.Index(indexName).AddDocuments([]map[string]interface{}{doc}, nil)
-				if err != nil {
-					log.Printf("meilisearch upsert error id=%s error=%v", id, err)
+				if isDeleted(doc) {
+					_, err := meiliClient.Index(indexName).DeleteDocument(id, nil)
+					if err != nil {
+						log.Printf("meilisearch soft-delete error id=%s error=%v", id, err)
+					} else {
+						log.Printf("[soft-delete] meilisearch index=%s id=%s", indexName, id)
+					}
 				} else {
-					log.Printf("[upsert] meilisearch index=%s id=%s", indexName, id)
+					_, err := meiliClient.Index(indexName).AddDocuments([]map[string]interface{}{doc}, nil)
+					if err != nil {
+						log.Printf("meilisearch upsert error id=%s error=%v", id, err)
+					} else {
+						log.Printf("[upsert] meilisearch index=%s id=%s", indexName, id)
+					}
 				}
 			case "d":
 				indexName := resolveIndex(baseIndex, cfg.MeiliIndexField, doc)
@@ -210,6 +219,20 @@ func processDebeziumMessage(value []byte) (string, string, map[string]interface{
 	default:
 		return "", "", nil, "", fmt.Errorf("unknown op %q", payload.Op)
 	}
+}
+
+func isDeleted(doc map[string]interface{}) bool {
+	if doc == nil {
+		return false
+	}
+	if v, ok := doc["is_delete"]; ok {
+		if b, ok := v.(bool); ok {
+			return b
+		}
+		s := fmt.Sprint(v)
+		return s == "true" || s == "1"
+	}
+	return false
 }
 
 func resolveIndex(base, field string, doc map[string]interface{}) string {
@@ -284,6 +307,11 @@ func extractDocument(p DebeziumPayload) (map[string]interface{}, string, error) 
 	// 确保最终写入 Meilisearch 的 doc 中一定包含 id 字段
 	if id != "" {
 		doc["id"] = id
+	}
+
+	// 将外层的 is_delete 合并进业务文档，方便统一判断软删除
+	if v, ok := base["is_delete"]; ok {
+		doc["is_delete"] = v
 	}
 
 	return doc, id, nil

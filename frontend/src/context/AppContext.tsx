@@ -24,12 +24,12 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [config, setConfig] = useState<AppState>({
-    baseUrl: 'http://localhost:8000',
-    token: '',
+    baseUrl: 'http://localhost:8080',
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6Im15YXBwIiwic2NvcGVzIjpbXSwiZXhwIjoyMDg0OTI3MzAwfQ.XeQ_PTo1WqIRBn6jY3vqxETD61PwJUUAHpsTfSHH_Ok',
     appName: '',
     indexUid: 'test_index',
-    meiliUrl: '',
-    meiliKey: '',
+    meiliUrl: 'http://10.17.154.252:7700/',
+    meiliKey: 'fa6593611630cec2eb3c41b9d3a73af8',
   });
 
   const [response, setResponse] = useState<string>('准备就绪，等待发送请求...');

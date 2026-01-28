@@ -19,9 +19,8 @@ class TestCaseService:
         创建或更新测试用例。
 
         1. 解析请求体以提取 id 字段
-        2. 确保 payload 中的 is_delete 为 false
-        3. 插入/更新到 test_cases 表
-        4. 返回 id
+        2. 插入/更新到 test_cases 表
+        3. 返回 id
         """
         # 解析请求体以提取 id 字段
         try:
@@ -40,10 +39,6 @@ class TestCaseService:
             )
 
         id_value = payload["id"]
-
-        # 确保 is_delete 为 false 且 id 存在
-        if "is_delete" not in payload:
-            payload["is_delete"] = False
         payload["id"] = id_value
 
         # 重新编码 payload 为字节

@@ -1,6 +1,6 @@
 """测试用例的数据库模型模块。"""
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Text
+from sqlalchemy import Column, String, DateTime, Boolean
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import declarative_base
 
@@ -14,6 +14,7 @@ class TestCase(Base):
 
     id = Column(String, primary_key=True, nullable=False)
     payload = Column(JSONB, nullable=True)
+    is_delete = Column(Boolean, nullable=False, default=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self) -> str:
