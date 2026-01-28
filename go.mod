@@ -3,8 +3,6 @@ module distributed-search
 go 1.25.4
 
 require (
-	github.com/gin-gonic/gin v1.11.0
-	github.com/jackc/pgx/v5 v5.8.0
 	github.com/joho/godotenv v1.5.1
 	github.com/meilisearch/meilisearch-go v0.35.1
 	github.com/twmb/franz-go v1.20.6

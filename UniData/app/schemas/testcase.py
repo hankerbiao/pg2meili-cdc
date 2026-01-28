@@ -1,12 +1,5 @@
 """测试用例的 Pydantic 模式定义模块。"""
-from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
-
-
-class TestCaseCreate(BaseModel):
-    """创建测试用例的模式。"""
-
-    id: str = Field(..., description="测试用例 ID（必填）")
 
 
 class TestCaseResponse(BaseModel):
@@ -14,12 +7,6 @@ class TestCaseResponse(BaseModel):
 
     status: str = "success"
     id: str
-
-
-class ErrorResponse(BaseModel):
-    """错误响应的模式。"""
-
-    error: str
 
 
 class MeiliEndpointResponse(BaseModel):

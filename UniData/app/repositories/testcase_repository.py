@@ -45,13 +45,20 @@ class TestCaseRepository:
         if not obj:
             return
 
-        try:
-            data = json.loads(obj.payload) if obj.payload else {}
-        except json.JSONDecodeError:
+        raw_payload = obj.payload
+
+        if isinstance(raw_payload, dict):
+            data = dict(raw_payload)
+        elif isinstance(raw_payload, str):
+            try:
+                data = json.loads(raw_payload) if raw_payload else {}
+            except json.JSONDecodeError:
+                data = {}
+        else:
             data = {}
 
         data["is_delete"] = True
-        obj.payload = json.dumps(data, ensure_ascii=False)
+        obj.payload = data
         obj.updated_at = datetime.utcnow()
 
         await db.flush()

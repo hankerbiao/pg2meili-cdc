@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     """从环境变量和 .env 文件加载的应用配置。"""
 
     # PostgreSQL 连接字符串
-    pg_conn_string: str = "postgres://postgres:kk123123@10.17.154.252:5432/postgres"
+    pg_conn_string: str = "postgres://postgres:password@localhost:5432/postgres"
 
     # 服务端口
     server_port: str = ":8080"
@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     meili_default_api_key: Optional[str] = ""
 
     # JWT 签名秘钥（HS256）
-    jwt_secret: str = "change-me-in-prod"
+    jwt_secret: str = "please-change-me-in-prod"
 
     model_config = SettingsConfigDict(
         env_file=".env",

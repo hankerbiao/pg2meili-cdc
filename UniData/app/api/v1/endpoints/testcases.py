@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AppIdentity, get_current_app
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.schemas.testcase import TestCaseResponse, ErrorResponse, MeiliEndpointResponse
+from app.schemas.testcase import TestCaseResponse, MeiliEndpointResponse
 from app.services.index_service import index_service
 from app.services.testcase_service import testcase_service
 
@@ -17,10 +17,6 @@ router = APIRouter()
     "",
     response_model=TestCaseResponse,
     status_code=status.HTTP_200_OK,
-    responses={
-        400: {"model": ErrorResponse, "description": "错误请求"},
-        500: {"model": ErrorResponse, "description": "内部服务器错误"},
-    },
     summary="创建测试用例",
     description="创建新的测试用例。请求体必须包含 'id' 字段，其他字段作为 JSONB payload 存储。",
 )
@@ -62,10 +58,6 @@ async def create_test_case(
     "/{id}",
     response_model=TestCaseResponse,
     status_code=status.HTTP_200_OK,
-    responses={
-        400: {"model": ErrorResponse, "description": "错误请求"},
-        500: {"model": ErrorResponse, "description": "内部服务器错误"},
-    },
     summary="更新测试用例",
     description="根据路径参数 id 更新测试用例，其他字段作为 JSONB payload 存储。",
 )
@@ -124,10 +116,6 @@ async def update_test_case(
     "/meilisearch/endpoint",
     response_model=MeiliEndpointResponse,
     status_code=status.HTTP_200_OK,
-    responses={
-        400: {"model": ErrorResponse, "description": "错误请求"},
-        501: {"model": ErrorResponse, "description": "尚未配置 Meilisearch 端点"},
-    },
     summary="获取 Meilisearch 地址",
     description="根据应用名称返回就近的 Meilisearch 服务地址和对应的 API 密钥。",
 )
@@ -159,10 +147,6 @@ async def get_meilisearch_endpoint(
 @router.delete(
     "/{id}",
     response_model=TestCaseResponse,
-    responses={
-        400: {"model": ErrorResponse, "description": "错误请求"},
-        500: {"model": ErrorResponse, "description": "内部服务器错误"},
-    },
     summary="删除测试用例",
     description="通过在 payload 中设置 is_delete 为 true 来软删除测试用例。",
 )
