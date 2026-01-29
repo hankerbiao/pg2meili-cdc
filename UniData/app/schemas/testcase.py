@@ -1,5 +1,20 @@
 """测试用例的 Pydantic 模式定义模块。"""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+
+
+class TestCaseBase(BaseModel):
+    """测试用例请求的基础字段。"""
+
+    id: str = Field(..., description="测试用例唯一标识")
+    model_config = ConfigDict(extra="allow")
+
+
+class TestCaseCreateRequest(TestCaseBase):
+    """创建测试用例的请求模型。"""
+
+
+class TestCaseUpdateRequest(TestCaseBase):
+    """更新测试用例的请求模型。"""
 
 
 class TestCaseResponse(BaseModel):

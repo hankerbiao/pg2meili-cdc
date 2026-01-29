@@ -1,19 +1,17 @@
 package handler
 
 import (
-	"encoding/json"
+	"bytes"
+	"io"
 	"log"
 	"net/http"
 	"strings"
 
 	"distributed-search/meilisearch-sync-service/internal/auth"
 	"distributed-search/meilisearch-sync-service/internal/config"
-	"distributed-search/meilisearch-sync-service/internal/model"
-
-	"github.com/meilisearch/meilisearch-go"
 )
 
-func NewSearchHandler(meiliClient meilisearch.ServiceManager, cfg config.AppConfig) http.HandlerFunc {
+func NewSearchHandler(cfg config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
@@ -33,54 +31,51 @@ func NewSearchHandler(meiliClient meilisearch.ServiceManager, cfg config.AppConf
 			return
 		}
 
-		defer r.Body.Close()
-		var req model.SearchProxyRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "请求体不是有效 JSON", http.StatusBadRequest)
-			return
-		}
-		if req.Q == "" {
-			http.Error(w, "缺少 q 字段", http.StatusBadRequest)
-			return
-		}
-
 		expectedIndex := cfg.MeiliIndex
 		if identity.AppName != "" {
 			expectedIndex = identity.AppName + "_" + cfg.MeiliIndex
 		}
 
-		indexUID := req.IndexUID
-		if indexUID == "" {
-			indexUID = expectedIndex
-		} else if indexUID != expectedIndex {
-			http.Error(w, "无权访问该索引", http.StatusForbidden)
+		indexUID := expectedIndex
+
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "读取请求体失败", http.StatusBadRequest)
 			return
 		}
+		defer r.Body.Close()
 
-		searchReq := &meilisearch.SearchRequest{}
-		if req.Offset != nil {
-			searchReq.Offset = *req.Offset
+		meiliURL := strings.TrimRight(cfg.MeiliHost, "/") + "/indexes/" + indexUID + "/search"
+		if cfg.Debug {
+			log.Printf("Meilisearch 请求 index=%s app=%s url=%s body=%s", indexUID, identity.AppName, meiliURL, string(bodyBytes))
 		}
-		if req.Limit != nil {
-			searchReq.Limit = *req.Limit
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, meiliURL, bytes.NewReader(bodyBytes))
+		if err != nil {
+			log.Printf("构造 Meilisearch 请求失败 index=%s app=%s 错误=%v", indexUID, identity.AppName, err)
+			http.Error(w, "搜索失败", http.StatusInternalServerError)
+			return
 		}
-		if req.Filter != nil {
-			searchReq.Filter = req.Filter
-		}
-		if len(req.Sort) > 0 {
-			searchReq.Sort = req.Sort
+		req.Header.Set("Content-Type", "application/json")
+		if cfg.MeiliAPIKey != "" {
+			req.Header.Set("Authorization", "Bearer "+cfg.MeiliAPIKey)
 		}
 
-		resp, err := meiliClient.Index(indexUID).Search(req.Q, searchReq)
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			log.Printf("执行 Meilisearch 搜索失败 index=%s app=%s 错误=%v", indexUID, identity.AppName, err)
 			http.Error(w, "搜索失败", http.StatusInternalServerError)
 			return
 		}
+		defer resp.Body.Close()
 
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			log.Printf("编码搜索响应失败: %v", err)
+		for k, vv := range resp.Header {
+			for _, v := range vv {
+				w.Header().Add(k, v)
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+		if _, err := io.Copy(w, resp.Body); err != nil {
+			log.Printf("转发 Meilisearch 响应失败: %v", err)
 		}
 	}
 }

@@ -20,24 +20,67 @@ const buildCurl = (baseUrl: string, token: string, body: string): string => {
   ].join('\n')
 }
 
+const parseCurlCommand = (cmd: string) => {
+  // URL
+  const urlMatch = cmd.match(/curl.*?["'](http.*?)["']/) || cmd.match(/\s(http\S+)/)
+  const fullUrl = urlMatch ? urlMatch[1] : null
+  let baseUrl = null
+  if (fullUrl) {
+    try {
+      const urlObj = new URL(fullUrl)
+      baseUrl = urlObj.origin
+    } catch {}
+  }
+
+  // Token
+  const tokenMatch = cmd.match(/Authorization: Bearer\s+([^\s"']+)/)
+  const token = tokenMatch ? tokenMatch[1] : null
+
+  // Body
+  let body = '{}'
+  const dataMarkers = ['--data-raw \'', '--data \'', '-d \'']
+  for (const marker of dataMarkers) {
+      const idx = cmd.indexOf(marker)
+      if (idx !== -1) {
+          let rawBody = cmd.slice(idx + marker.length)
+          const lastQuote = rawBody.lastIndexOf("'")
+          if (lastQuote !== -1) {
+              rawBody = rawBody.slice(0, lastQuote)
+          }
+          // Restore single quotes
+          body = rawBody.replace(/'"'"'/g, "'")
+          break
+      }
+  }
+  
+  return { baseUrl, token, body }
+}
+
 const SearchTester: React.FC = () => {
-  const [baseUrl, setBaseUrl] = useState('http://localhost:8091')
+  const [baseUrl, setBaseUrl] = useState('http://10.2.48.121:8091')
   const [token, setToken] = useState(DEFAULT_TOKEN)
   const [selectedScenario, setSelectedScenario] = useState<number>(0)
   const [customRequest, setCustomRequest] = useState<string>(
     JSON.stringify(PRESET_SCENARIOS[0].request, null, 2)
   )
+  const [curlText, setCurlText] = useState('')
   const [response, setResponse] = useState<SearchResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [showRequestDetail, setShowRequestDetail] = useState(false)
 
-  const executeSearch = async (request: SearchRequest) => {
+  // Sync curlText when dependencies change
+  React.useEffect(() => {
+    setCurlText(buildCurl(baseUrl, token, customRequest))
+  }, [baseUrl, token, customRequest])
+
+  const executeSearch = async (request: SearchRequest, overrideBaseUrl?: string, overrideToken?: string) => {
     setLoading(true)
     setError(null)
 
     try {
-      const result = await search(baseUrl, token, request)
+      const targetBaseUrl = overrideBaseUrl || baseUrl
+      const targetToken = overrideToken || token
+      const result = await search(targetBaseUrl, targetToken, request)
       setResponse(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : '未知错误')
@@ -55,8 +98,17 @@ const SearchTester: React.FC = () => {
   }
 
   const handleManualSearch = () => {
-    const request: SearchRequest = JSON.parse(customRequest)
-    executeSearch(request)
+    try {
+      const parsed = parseCurlCommand(curlText)
+      // Update state controls if parsed
+      if (parsed.baseUrl) setBaseUrl(parsed.baseUrl)
+      if (parsed.token) setToken(parsed.token)
+      
+      const request = JSON.parse(parsed.body)
+      executeSearch(request, parsed.baseUrl || baseUrl, parsed.token || token)
+    } catch (e) {
+      setError('解析 CURL 失败: ' + (e instanceof Error ? e.message : String(e)))
+    }
   }
 
   const handleLoadMore = async () => {
@@ -211,36 +263,31 @@ const SearchTester: React.FC = () => {
           <section className="request-section">
             <div className="section-header">
               <h2>请求参数</h2>
-              <button
-                className="toggle-btn"
-                onClick={() => setShowRequestDetail(!showRequestDetail)}
-              >
-                {showRequestDetail ? '隐藏详情' : '显示详情'}
-              </button>
             </div>
-            {showRequestDetail && (
-              <div className="request-detail">
-                <pre className="request-info">
-                  <strong>POST</strong> {baseUrl}/search
-                  {'\n'}
-                  <strong>Headers:</strong>
-                  {'\n'}  Authorization: Bearer [token]
-                  {'\n'}  Content-Type: application/json
-                </pre>
-                <div className="curl-preview">
-                  <div className="curl-title">curl 示例</div>
-                  <pre className="curl-code">
-                    {buildCurl(baseUrl, token, customRequest)}
+            
+            <div className="request-body-container">
+              <div className="request-detail-panel">
+                <div className="request-detail">
+                  <pre className="request-info">
+                    <strong>POST</strong> {baseUrl}/search
+                    {'\n'}
+                    <strong>Headers:</strong>
+                    {'\n'}  Authorization: Bearer [token]
+                    {'\n'}  Content-Type: application/json
                   </pre>
+                  <div className="curl-preview">
+                    <div className="curl-title">curl 命令 (可编辑)</div>
+                    <textarea 
+                      className="curl-editor"
+                      value={curlText}
+                      onChange={(e) => setCurlText(e.target.value)}
+                      spellCheck={false}
+                    />
+                  </div>
                 </div>
               </div>
-            )}
-            <textarea
-              className="request-editor"
-              value={customRequest}
-              onChange={(e) => setCustomRequest(e.target.value)}
-              rows={6}
-            />
+            </div>
+
             <button
               className="execute-btn"
               onClick={handleManualSearch}

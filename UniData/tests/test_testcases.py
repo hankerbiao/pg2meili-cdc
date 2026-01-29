@@ -42,3 +42,42 @@ class TestAPIRoutes:
             if "/testcases" in r.path and hasattr(r, "methods") and "POST" in r.methods
         ]
         assert len(post_routes) > 0, "POST /testcases 端点应该接受 POST 方法"
+
+
+class TestTestCasesEndpoints:
+    """testcases 端点行为测试类。"""
+
+    async def test_create_test_case_success(self, client: AsyncClient):
+        """创建测试用例成功时返回 201 和 success 状态。"""
+        payload = {"id": "case-1", "name": "用例1"}
+        response = await client.post(
+            "/api/v1/testcases?index_uid=default",
+            json=payload,
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["id"] == "case-1"
+
+    async def test_create_test_case_missing_index_uid(self, client: AsyncClient):
+        """缺少 index_uid 时返回 400。"""
+        payload = {"id": "case-2"}
+        response = await client.post("/api/v1/testcases", json=payload)
+        assert response.status_code == 400
+
+    async def test_update_test_case_success(self, client: AsyncClient):
+        """更新测试用例成功时返回 200 和 success 状态。"""
+        payload = {"id": "case-3", "name": "用例3-更新"}
+        response = await client.put(
+            "/api/v1/testcases/case-3?index_uid=default",
+            json=payload,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["id"] == "case-3"
+
+    async def test_delete_test_case_missing_index_uid(self, client: AsyncClient):
+        """删除测试用例时缺少 index_uid 返回 400。"""
+        response = await client.delete("/api/v1/testcases/case-4")
+        assert response.status_code == 400

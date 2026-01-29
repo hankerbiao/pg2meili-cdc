@@ -101,6 +101,5 @@ if __name__ == "__main__":
         print("请求成功！")
         # 尝试解析 JSON 返回值
         datas = response.json()['data']
-        for data in tqdm(datas[:10]):
+        for data in tqdm(datas):
             create_test_case(args.url, args.index, data)
-            time.sleep(1)

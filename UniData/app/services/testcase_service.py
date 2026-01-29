@@ -2,6 +2,7 @@
 import json
 import logging
 from typing import Any, Dict
+
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,24 +15,14 @@ class TestCaseService:
     """测试用例的业务逻辑类。"""
 
     @staticmethod
-    async def create_test_case(db: AsyncSession, body_bytes: bytes) -> str:
+    async def create_test_case(db: AsyncSession, payload: Dict[str, Any]) -> str:
         """
         创建或更新测试用例。
 
-        1. 解析请求体以提取 id 字段
+        1. 校验 payload 中的 id 字段
         2. 插入/更新到 test_cases 表
         3. 返回 id
         """
-        # 解析请求体以提取 id 字段
-        try:
-            payload = json.loads(body_bytes)
-        except json.JSONDecodeError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="无效的 JSON 格式",
-            )
-
-        # 检查必需的 id 字段
         if "id" not in payload or not payload["id"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -39,9 +30,7 @@ class TestCaseService:
             )
 
         id_value = payload["id"]
-        payload["id"] = id_value
 
-        # 重新编码 payload 为字节
         try:
             body_bytes = json.dumps(payload).encode("utf-8")
         except (TypeError, ValueError) as e:
@@ -51,7 +40,6 @@ class TestCaseService:
                 detail="内部服务器错误",
             )
 
-        # 插入数据库
         try:
             await testcase_repository.insert_test_case(db, id_value, body_bytes)
         except Exception as e:

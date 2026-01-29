@@ -199,22 +199,24 @@ body {
   color: #333;
 }
 
-.toggle-btn {
-  padding: 4px 10px;
-  font-size: 12px;
-  color: #667eea;
-  background: #f0f3ff;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
+/* 移除 toggle-btn 样式，因为不再需要 */
+
+.request-body-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 12px;
 }
 
-.toggle-btn:hover {
-  background: #e0e5ff;
+.request-detail-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .request-detail {
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 
 .request-info {
@@ -226,21 +228,45 @@ body {
   overflow-x: auto;
 }
 
-.request-editor {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #e0e0e0;
+.curl-preview {
+  background: #2d2d2d;
   border-radius: 6px;
-  font-family: 'Monaco', 'Menlo', monospace;
-  font-size: 13px;
-  line-height: 1.5;
-  resize: vertical;
-  transition: border-color 0.2s;
+  overflow: hidden;
 }
 
-.request-editor:focus {
+.curl-title {
+  padding: 6px 12px;
+  background: #1e1e1e;
+  color: #888;
+  font-size: 11px;
+  border-bottom: 1px solid #333;
+}
+
+.curl-code {
+  padding: 12px;
+  color: #f8f8f2;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 11px;
+  overflow-x: auto;
+  margin: 0;
+  white-space: pre;
+}
+
+.curl-editor {
+  width: 100%;
+  min-height: 200px;
+  background: transparent;
+  color: #f8f8f2;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
+  border: none;
+  padding: 12px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.curl-editor:focus {
   outline: none;
-  border-color: #667eea;
 }
 
 .execute-btn {
@@ -703,6 +729,33 @@ body {
 .load-more-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.browser-text-btn {
+  background: none;
+  border: none;
+  color: #5f6368;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.browser-text-btn:hover {
+  background-color: #f1f3f4;
+  color: #1a73e8;
+}
+
+.browser-curl-box {
+  background: #2d2d2d;
+  color: #f8f8f2;
+  padding: 16px;
+  margin: 0 24px;
+  border-radius: 8px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
+  overflow-x: auto;
+  line-height: 1.5;
 }
 
 /* 响应式 */
