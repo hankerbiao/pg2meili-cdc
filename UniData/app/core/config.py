@@ -18,7 +18,10 @@ class Settings(BaseSettings):
     meili_default_api_key: Optional[str] = ""
 
     # JWT 签名秘钥（HS256）
-    jwt_secret: str = "please-change-me-in-prod"
+    jwt_secret: str = "dYAj4kPbhIdCM35XhcDW9HJX53xT3iux"
+
+    gquan_base_url: Optional[str] = "http://10.32.129.1/springboard_v3"
+    gquan_app_name: Optional[str] = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

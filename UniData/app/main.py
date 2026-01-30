@@ -89,6 +89,11 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         html_path = project_root / "app_token_register.html"
         return FileResponse(html_path)
 
+    @app.get("/app/review", include_in_schema=False)
+    async def app_review_page():
+        html_path = project_root / "app_token_review.html"
+        return FileResponse(html_path)
+
     # 简单的健康检查端点，方便 K8s/监控系统探测服务状态
     @app.get("/health", tags=["health"])
     async def health_check():

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Token 审核</title>
+    <link rel="stylesheet" href="/libs/layui/css/layui.css">
+</head>
+<body class="layui-layout-body">
+<div class="layui-container" style="margin-top:40px;">
+    <div class="layui-row">
+        <div class="layui-col-md10 layui-col-md-offset1">
+            <div class="layui-card">
+                <div class="layui-card-header">待审核 Token</div>
+                <div class="layui-card-body">
+                    <table class="layui-table">
+                        <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>应用名称</th>
+                            <th>接收 itcode</th>
+                            <th>失效时间</th>
+                            <th>创建时间</th>
+                            <th>操作</th>
+                        </tr>
+                        </thead>
+                        <tbody id="tokenTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="/libs/layui/layui.js"></script>
+<script>
+layui.use(['layer'], function () {
+    var layer = layui.layer;
+
+    function formatDate(s) {
+        if (!s) return '';
+        return s.replace('T', ' ').replace('Z', '');
+    }
+
+    function loadTokens() {
+        fetch('/api/v1/auth/tokens/pending')
+            .then(function (resp) {
+                return resp.json().then(function (json) {
+                    return {ok: resp.ok, json: json};
+                });
+            })
+            .then(function (res) {
+                if (!res.ok) {
+                    var msg = res.json.detail || res.json.message || JSON.stringify(res.json);
+                    layer.msg('加载失败: ' + msg, {icon: 2});
+                    return;
+                }
+                var tbody = document.getElementById('tokenTableBody');
+                tbody.innerHTML = '';
+                if (!Array.isArray(res.json) || res.json.length === 0) {
+                    var tr = document.createElement('tr');
+                    var td = document.createElement('td');
+                    td.colSpan = 6;
+                    td.innerText = '暂无待审核记录';
+                    tr.appendChild(td);
+                    tbody.appendChild(tr);
+                    return;
+                }
+                res.json.forEach(function (item) {
+                    var tr = document.createElement('tr');
+
+                    var tdId = document.createElement('td');
+                    tdId.innerText = item.id;
+                    tr.appendChild(tdId);
+
+                    var tdApp = document.createElement('td');
+                    tdApp.innerText = item.app_name;
+                    tr.appendChild(tdApp);
+
+                    var tdIt = document.createElement('td');
+                    tdIt.innerText = item.itcode;
+                    tr.appendChild(tdIt);
+
+                    var tdExpire = document.createElement('td');
+                    tdExpire.innerText = formatDate(item.expires_at);
+                    tr.appendChild(tdExpire);
+
+                    var tdCreated = document.createElement('td');
+                    tdCreated.innerText = formatDate(item.created_at);
+                    tr.appendChild(tdCreated);
+
+                    var tdOp = document.createElement('td');
+                    var btn = document.createElement('button');
+                    btn.className = 'layui-btn layui-btn-sm';
+                    btn.innerText = '审核通过';
+                    btn.onclick = function () {
+                        approveToken(item.id);
+                    };
+                    tdOp.appendChild(btn);
+                    tr.appendChild(tdOp);
+
+                    tbody.appendChild(tr);
+                });
+            })
+            .catch(function (err) {
+                layer.msg('网络错误: ' + err, {icon: 2});
+            });
+    }
+
+    function approveToken(id) {
+        layer.confirm('确认审核通过该 Token 吗？', function (index) {
+            layer.close(index);
+            fetch('/api/v1/auth/tokens/' + encodeURIComponent(id) + '/approve', {
+                method: 'POST'
+            }).then(function (resp) {
+                return resp.json().then(function (json) {
+                    return {ok: resp.ok, json: json};
+                });
+            }).then(function (res) {
+                if (!res.ok) {
+                    var msg = res.json.detail || res.json.message || JSON.stringify(res.json);
+                    layer.msg('审核失败: ' + msg, {icon: 2});
+                    return;
+                }
+                layer.msg('审核通过并已发送消息', {icon: 1});
+                loadTokens();
+            }).catch(function (err) {
+                layer.msg('网络错误: ' + err, {icon: 2});
+            });
+        });
+    }
+
+    loadTokens();
+});
+</script>
+</body>
+</html>
+
