@@ -42,7 +42,7 @@ func LoadConfig() AppConfig {
 		MeiliAPIKey: getenv("MEILI_API_KEY", ""),
 		MeiliIndex:  getenv("MEILI_INDEX", "testcases"),
 		Debug:       debug,
-		JWTSecret:   getenv("JWT_SECRET", "please-change-me-in-prod"),
+		JWTSecret:   getenv("JWT_SECRET", "dYAj4kPbhIdCM35XhcDW9HJX53xT3iux"),
 		HTTPAddr:    getenv("HTTP_ADDR", ":8091"),
 	}
 }

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { search, PRESET_SCENARIOS, SearchRequest, SearchResponse, SearchHit } from '../api'
 
-const DEFAULT_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6Im15YXBwIiwic2NvcGVzIjpbXSwiZXhwIjoyMDg0OTI3MzAwfQ.XeQ_PTo1WqIRBn6jY3vqxETD61PwJUUAHpsTfSHH_Ok'
+const DEFAULT_TOKEN = ''
 
 const buildCurl = (baseUrl: string, token: string, body: string): string => {
   const url = `${baseUrl}/search`

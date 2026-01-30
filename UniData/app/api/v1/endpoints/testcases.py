@@ -26,16 +26,6 @@ from app.services.testcase_service import testcase_service
 router = APIRouter()
 
 
-def _validate_index_uid(index_uid: str) -> None:
-    # 统一校验 index_uid 查询参数，避免在每个端点手动复制 400 逻辑。
-    # 如果未来索引路由策略变化，只需在这里集中调整。
-    if not index_uid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="缺少 'index_uid' 参数",
-        )
-
-
 @router.post(
     "",
     response_model=TestCaseResponse,
@@ -47,13 +37,11 @@ async def create_test_case(
         body: TestCaseCreateRequest,
         db: AsyncSession = Depends(get_db),
         current_app: AppIdentity = Depends(get_current_app),
-        index_uid: str = "",
 ) -> TestCaseResponse:
     # 约定：
     # - body 由 TestCaseCreateRequest 解析，至少包含 id 字段；
     # - 允许携带任意额外字段，这些字段将作为 JSONB payload 写入数据库；
     # - app_name 由当前应用身份注入，用于多应用隔离。
-    _validate_index_uid(index_uid)
 
     payload = body.model_dump()
     payload["app_name"] = current_app.app_name
@@ -75,7 +63,6 @@ async def update_test_case(
         body: TestCaseUpdateRequest,
         db: AsyncSession = Depends(get_db),
         current_app: AppIdentity = Depends(get_current_app),
-        index_uid: str = "",
 ) -> TestCaseResponse:
     # 注意：路径参数 id 为「最终权威」，如果 body 中也携带 id，则这里会覆盖。
     # 这样可以保证 URL 清晰表达「要更新哪条用例」，而 body 更像是该用例的字段快照。
@@ -85,8 +72,6 @@ async def update_test_case(
             detail="缺少 'id' 参数",
         )
 
-    _validate_index_uid(index_uid)
-
     payload = body.model_dump()
     payload["id"] = id
     payload["app_name"] = current_app.app_name
@@ -94,6 +79,32 @@ async def update_test_case(
     id_value = await testcase_service.create_test_case(db, payload)
 
     return TestCaseResponse(status="success", id=id_value)
+
+
+@router.delete(
+    "/{id}",
+    response_model=TestCaseResponse,
+    status_code=status.HTTP_200_OK,
+    summary="删除测试用例",
+    description="根据路径参数 id 软删除测试用例。",
+)
+async def delete_test_case(
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_app: AppIdentity = Depends(get_current_app),
+) -> TestCaseResponse:
+    if not id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="缺少 'id' 参数",
+        )
+
+    # 调用 service 层执行软删除
+    # 注意：service 层只根据 ID 操作，意味着拥有 ID 即可删除，
+    # 实际生产中可能需要校验 app_name 是否匹配，或者 ID 是否属于该 App。
+    await testcase_service.delete_test_case(db, id)
+
+    return TestCaseResponse(status="success", id=id)
 
 
 @router.get(

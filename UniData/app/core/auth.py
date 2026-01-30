@@ -40,7 +40,7 @@ def _base64url_encode(data: bytes) -> str:
 def generate_jwt(app_name: str, scopes: List[str], ttl_seconds: int) -> str:
     settings = get_settings()
     secret = settings.jwt_secret
-
+    print(secret)
     header = {"alg": "HS256", "typ": "JWT"}
     payload = {
         "app_name": app_name,

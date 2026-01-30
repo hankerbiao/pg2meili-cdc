@@ -20,7 +20,7 @@ dml_headers = {
 }
 
 payload_dict = {
-    "path_id": "658836d04ec87c06c038de03",
+    "path_id": "658836d44ec87c06c038e930",
     "view_active": True,
     "view_inactive": False,
     "text": "",
@@ -51,7 +51,7 @@ except ImportError:
 def create_test_case(base_url, index_uid, test_case_data):
     """通过 API 创建测试用例"""
     # 1. 生成 Token
-    token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6Im15YXBwIiwic2NvcGVzIjpbXSwiZXhwIjoyMDg0OTI3MzAwfQ.XeQ_PTo1WqIRBn6jY3vqxETD61PwJUUAHpsTfSHH_Ok"
+    token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6IjEyMzEyMyIsInNjb3BlcyI6W10sImV4cCI6MTc2OTg3NTE5OH0.f8YQTGnu7xMe67-MIENyg2DDKVR5mUWIeUweCq4qkRk"
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -60,14 +60,12 @@ def create_test_case(base_url, index_uid, test_case_data):
 
     # 2. 发送请求
     url = f"{base_url}/api/v1/testcases"
-    params = {"index_uid": index_uid}
 
     print(f"发送 POST 请求到: {url}")
-    print(f"请求参数: {params}")
     print(f"请求体: {json.dumps(test_case_data, indent=2, ensure_ascii=False)}")
 
     try:
-        response = requests.post(url, params=params, json=test_case_data, headers=headers)
+        response = requests.post(url, json=test_case_data, headers=headers)
 
         print(f"\n响应状态码: {response.status_code}")
         try:
@@ -75,11 +73,6 @@ def create_test_case(base_url, index_uid, test_case_data):
             print(json.dumps(response.json(), indent=2, ensure_ascii=False))
         except ValueError:
             print(response.text)
-
-        if response.status_code == 200:
-            print("\n✅ 测试用例创建成功！")
-        else:
-            print("\n❌ 创建测试用例失败。")
 
     except requests.exceptions.ConnectionError:
         print(f"\n❌ 错误: 无法连接到 {base_url}，请确认服务是否正在运行。")
@@ -101,5 +94,6 @@ if __name__ == "__main__":
         print("请求成功！")
         # 尝试解析 JSON 返回值
         datas = response.json()['data']
-        for data in tqdm(datas):
+        for data in tqdm(datas[30:40]):
+            print(data)
             create_test_case(args.url, args.index, data)
