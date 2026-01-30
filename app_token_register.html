@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>注册应用并获取 Token</title>
+    <link rel="stylesheet" href="/libs/layui/css/layui.css">
+</head>
+<body class="layui-layout-body">
+<div class="layui-container" style="margin-top:40px;">
+    <div class="layui-row">
+        <div class="layui-col-md8 layui-col-md-offset2">
+            <div class="layui-card">
+                <div class="layui-card-header">注册应用并获取 Token</div>
+                <div class="layui-card-body">
+                    <form class="layui-form" lay-filter="tokenForm" id="tokenForm">
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">应用名称</label>
+                            <div class="layui-input-block">
+                                <input type="text" name="app_name" lay-verify="required" placeholder="如：myapp" autocomplete="off" class="layui-input">
+                            </div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">失效日期</label>
+                            <div class="layui-input-block">
+                                <input type="text" id="expireDate" name="expire_date" lay-verify="required" placeholder="请选择失效日期" autocomplete="off" class="layui-input">
+                            </div>
+                        </div>
+                        <div class="layui-form-item">
+                            <div class="layui-input-block">
+                                <button class="layui-btn" lay-submit lay-filter="submitToken">生成 Token</button>
+                                <button type="reset" class="layui-btn layui-btn-primary">重置</button>
+                            </div>
+                        </div>
+                    </form>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">Token</label>
+                        <div class="layui-input-block">
+                            <textarea id="tokenOutput" class="layui-textarea" readonly style="height:100px;"></textarea>
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">完整响应</label>
+                        <div class="layui-input-block">
+                            <textarea id="responseOutput" class="layui-textarea" readonly style="height:180px;"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="/libs/layui/layui.js"></script>
+<script>
+layui.use(['form', 'layer', 'laydate'], function () {
+    var form = layui.form;
+    var layer = layui.layer;
+    var laydate = layui.laydate;
+
+    laydate.render({
+        elem: '#expireDate',
+        type: 'date',
+        min: 0
+    });
+
+    form.on('submit(submitToken)', function (data) {
+        var value = data.field;
+        if (!value.expire_date) {
+            layer.msg('请选择失效日期', {icon: 2});
+            return false;
+        }
+        var now = new Date();
+        var parts = value.expire_date.split('-');
+        if (parts.length !== 3) {
+            layer.msg('失效日期格式不正确', {icon: 2});
+            return false;
+        }
+        var year = parseInt(parts[0], 10);
+        var month = parseInt(parts[1], 10) - 1;
+        var day = parseInt(parts[2], 10);
+        var expireDate = new Date(year, month, day, 23, 59, 59);
+        if (isNaN(expireDate.getTime()) || expireDate <= now) {
+            layer.msg('失效日期必须大于当前时间', {icon: 2});
+            return false;
+        }
+        var ttl = Math.floor((expireDate.getTime() - now.getTime()) / 1000);
+        var payload = {
+            app_name: value.app_name,
+            scopes: [],
+            ttl: ttl
+        };
+        fetch('/api/v1/auth/token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        }).then(function (resp) {
+            return resp.json().then(function (json) {
+                return {ok: resp.ok, json: json};
+            });
+        }).then(function (res) {
+            if (!res.ok) {
+                var msg = res.json.detail || res.json.message || JSON.stringify(res.json);
+                layer.msg('请求失败: ' + msg, {icon: 2});
+                document.getElementById('tokenOutput').value = '';
+                document.getElementById('responseOutput').value = JSON.stringify(res.json, null, 2);
+                return;
+            }
+            document.getElementById('tokenOutput').value = res.json.token || '';
+            document.getElementById('responseOutput').value = JSON.stringify(res.json, null, 2);
+            layer.msg('Token 生成成功', {icon: 1});
+        }).catch(function (err) {
+            layer.msg('网络错误: ' + err, {icon: 2});
+        });
+        return false;
+    });
+});
+</script>
+</body>
+</html>

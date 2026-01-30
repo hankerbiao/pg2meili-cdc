@@ -10,10 +10,13 @@ UniData 生产者服务入口。
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import Settings, get_settings
 from app.core.database import close_db
@@ -75,6 +78,16 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     # 挂载 API v1 的所有业务路由到统一前缀 /api/v1
     app.include_router(api_router, prefix="/api/v1")
+
+    project_root = Path(__file__).resolve().parents[2]
+    libs_dir = project_root / "libs"
+    if libs_dir.exists():
+        app.mount("/libs", StaticFiles(directory=libs_dir), name="libs")
+
+    @app.get("/app/register", include_in_schema=False)
+    async def app_register_page():
+        html_path = project_root / "app_token_register.html"
+        return FileResponse(html_path)
 
     # 简单的健康检查端点，方便 K8s/监控系统探测服务状态
     @app.get("/health", tags=["health"])

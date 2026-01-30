@@ -1,11 +1,8 @@
 """应用身份校验模块（基于 JWT）。
 
-该模块的职责是：
 1. 从 HTTP 请求头中提取并解析 JWT；
 2. 使用配置中的 jwt_secret 对令牌进行 HS256 验签与过期检查；
 3. 从令牌中解析出 app_name 和 scopes，封装为 AppIdentity 返回给业务层。
-
-这样所有需要鉴权的接口只需依赖 get_current_app，就可以拿到统一的应用身份信息。
 """
 
 import base64
@@ -23,12 +20,6 @@ from app.core.config import get_settings
 
 @dataclass
 class AppIdentity:
-    """表示当前请求对应的应用身份。
-
-    - app_name: 应用名称，来自 JWT 中的 app_name 或 sub
-    - scopes: 权限范围列表，用于控制调用方可以访问哪些能力
-    """
-
     app_name: str
     scopes: List[str]
 
@@ -43,8 +34,32 @@ def _base64url_decode(data: str) -> bytes:
 
 
 def _base64url_encode(data: bytes) -> str:
-    """对数据进行 base64url 编码。"""
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def generate_jwt(app_name: str, scopes: List[str], ttl_seconds: int) -> str:
+    settings = get_settings()
+    secret = settings.jwt_secret
+
+    header = {"alg": "HS256", "typ": "JWT"}
+    payload = {
+        "app_name": app_name,
+        "scopes": scopes,
+        "exp": int(time.time()) + ttl_seconds,
+    }
+
+    header_b64 = _base64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+    payload_b64 = _base64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
+
+    signature = hmac.new(
+        key=secret.encode("utf-8"),
+        msg=signing_input,
+        digestmod=hashlib.sha256,
+    ).digest()
+    signature_b64 = _base64url_encode(signature)
+
+    return f"{header_b64}.{payload_b64}.{signature_b64}"
 
 
 def _decode_jwt(token: str, secret: str, algorithms: Optional[List[str]] = None) -> dict:
