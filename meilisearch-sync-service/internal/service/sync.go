@@ -48,23 +48,38 @@ func Run(ctx context.Context, client *kgo.Client, meiliClient meilisearch.Servic
 
 			logger.DebugLogf("收到消息 topic=%s partition=%d offset=%d op=%s id=%s delID=%s", record.Topic, record.Partition, record.Offset, op, id, delID)
 
-			baseIndex := cfg.MeiliIndex
-			if len(cfg.Topics) > 1 {
-				baseIndex = getBaseIndex(record.Topic, cfg.MeiliIndex)
-			}
-
 			switch op {
 			case "c", "r", "u":
-				indexName := ResolveIndex(baseIndex, doc)
+				indexName := ResolveIndex(doc)
+				if indexName == "" {
+					appNameVal := ""
+					collectionVal := ""
+					if doc != nil {
+						if v, ok := doc["app_name"]; ok {
+							appNameVal = fmt.Sprint(v)
+						}
+						if v, ok := doc["collection"]; ok {
+							collectionVal = fmt.Sprint(v)
+						}
+					}
+					log.Printf("跳过写入: app_name 或 collection 为空 topic=%s partition=%d offset=%d app_name=%s collection=%s doc=%v", record.Topic, record.Partition, record.Offset, appNameVal, collectionVal, doc)
+					continue
+				}
+
 				if isDeleted(doc) {
-					logger.DebugLogf("执行软删除 index=%s id=%s doc=%v", indexName, id, doc)
+					logger.DebugLogf("执行标记删除触发物理删除 index=%s id=%s doc=%v", indexName, id, doc)
 					_, err := meiliClient.Index(indexName).DeleteDocument(id, nil)
 					if err != nil {
-						log.Printf("Meilisearch 软删除失败 index=%s id=%s 错误=%v", indexName, id, err)
+						log.Printf("Meilisearch 标记删除物理删除失败 index=%s id=%s 错误=%v", indexName, id, err)
 					} else {
-						log.Printf("[soft-delete] Meilisearch 索引=%s id=%s", indexName, id)
+						log.Printf("[delete-by-flag] Meilisearch 索引=%s id=%s", indexName, id)
 					}
 				} else {
+					if doc != nil {
+						delete(doc, "app_name")
+						delete(doc, "collection")
+						delete(doc, "is_delete")
+					}
 					logger.DebugLogf("执行插入/更新 index=%s id=%s doc=%v", indexName, id, doc)
 					_, err := meiliClient.Index(indexName).AddDocuments([]map[string]interface{}{doc}, nil)
 					if err != nil {
@@ -74,7 +89,21 @@ func Run(ctx context.Context, client *kgo.Client, meiliClient meilisearch.Servic
 					}
 				}
 			case "d":
-				indexName := ResolveIndex(baseIndex, doc)
+				indexName := ResolveIndex(doc)
+				if indexName == "" {
+					appNameVal := ""
+					collectionVal := ""
+					if doc != nil {
+						if v, ok := doc["app_name"]; ok {
+							appNameVal = fmt.Sprint(v)
+						}
+						if v, ok := doc["collection"]; ok {
+							collectionVal = fmt.Sprint(v)
+						}
+					}
+					log.Printf("跳过删除: app_name 或 collection 为空 topic=%s partition=%d offset=%d app_name=%s collection=%s doc=%v", record.Topic, record.Partition, record.Offset, appNameVal, collectionVal, doc)
+					continue
+				}
 				logger.DebugLogf("执行硬删除 index=%s id=%s doc=%v", indexName, delID, doc)
 				_, err := meiliClient.Index(indexName).DeleteDocument(delID, nil)
 				if err != nil {
@@ -144,30 +173,26 @@ func isDeleted(doc map[string]interface{}) bool {
 	return false
 }
 
-func ResolveIndex(base string, doc map[string]interface{}) string {
-	field := "app_name"
+func ResolveIndex(doc map[string]interface{}) string {
 	if doc == nil {
-		return base
+		return ""
 	}
 
-	if v, ok := doc[field]; ok {
-		s := fmt.Sprint(v)
-		if s != "" {
-			return s + "_" + base
-		}
+	appName := ""
+	if v, ok := doc["app_name"]; ok {
+		appName = fmt.Sprint(v)
 	}
-	return base
-}
 
-func getBaseIndex(topic, defaultIndex string) string {
-	switch topic {
-	case "test_case.public.test_cases":
-		return defaultIndex
-	case "test_case.public.bug_info":
-		return "bug_info"
-	default:
-		return defaultIndex
+	collection := ""
+	if v, ok := doc["collection"]; ok {
+		collection = fmt.Sprint(v)
 	}
+
+	if appName == "" || collection == "" {
+		return ""
+	}
+
+	return appName + "_" + collection
 }
 
 func extractDocument(p model.DebeziumPayload) (map[string]interface{}, string, error) {
@@ -211,6 +236,12 @@ func extractDocument(p model.DebeziumPayload) (map[string]interface{}, string, e
 
 	if v, ok := base["is_delete"]; ok {
 		doc["is_delete"] = v
+	}
+	if v, ok := base["app_name"]; ok {
+		doc["app_name"] = v
+	}
+	if v, ok := base["collection"]; ok {
+		doc["collection"] = v
 	}
 
 	return doc, id, nil

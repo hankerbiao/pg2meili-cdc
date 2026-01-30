@@ -31,12 +31,17 @@ func NewSearchHandler(cfg config.AppConfig) http.HandlerFunc {
 			return
 		}
 
-		expectedIndex := cfg.MeiliIndex
-		if identity.AppName != "" {
-			expectedIndex = identity.AppName + "_" + cfg.MeiliIndex
+		collection := r.URL.Query().Get("collection")
+		if collection == "" {
+			http.Error(w, "缺少 collection 参数", http.StatusBadRequest)
+			return
+		}
+		if strings.Contains(collection, " ") {
+			http.Error(w, "collection 不能包含空格", http.StatusBadRequest)
+			return
 		}
 
-		indexUID := expectedIndex
+		indexUID := identity.AppName + "_" + collection
 
 		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {

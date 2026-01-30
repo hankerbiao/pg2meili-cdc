@@ -53,14 +53,15 @@ PostgreSQL → Debezium CDC → Kafka → meilisearch-sync-service → Meilisear
 - `d` (delete) - `DeleteDocument`
 - Soft delete via `is_delete` field in document
 
-### Topic-to-Index Mapping
+### Index Naming
 
-| Topic | Meilisearch Index |
-|-------|-------------------|
-| `test_case.public.test_cases` | `testcases` or `{app_name}_testcases` |
-| `test_case.public.bug_info` | `bug_info` or `{app_name}_bug_info` |
+- Index name is derived from the document's `app_name` and `collection` fields:
 
-Index name can be dynamically generated via `app_name` field in document.
+```text
+{app_name}_{collection}
+```
+
+- This ensures per-app, per-collection isolation on the Meilisearch side.
 
 ## Key Configuration (Environment Variables)
 
@@ -71,7 +72,7 @@ Index name can be dynamically generated via `app_name` field in document.
 | `KAFKA_GROUP_ID` | Consumer group ID | `meilisearch-sync-service` |
 | `MEILI_HOST` | Meilisearch URL | `http://10.17.154.252:7700` |
 | `MEILI_API_KEY` | Meilisearch API key | (empty) |
-| `MEILI_INDEX` | Default index name | `testcases` |
+| `MEILI_INDEX` | Default index name (deprecated) | `testcases` |
 | `JWT_SECRET` | JWT signing secret | `please-change-me-in-prod` |
 | `HTTP_ADDR` | HTTP server address | `:8091` |
 | `DEBUG` | Enable debug logging | `false` |

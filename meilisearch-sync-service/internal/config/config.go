@@ -13,7 +13,6 @@ type AppConfig struct {
 	GroupID     string   // Kafka 消费者组 ID，同一组内的消费者会协同消费分区
 	MeiliHost   string   // Meilisearch 服务地址，格式如 http://localhost:7700
 	MeiliAPIKey string   // Meilisearch API 密钥，为空时表示无需认证
-	MeiliIndex  string   // 基础索引名称，实际索引名可能根据配置动态生成
 	Debug       bool
 	JWTSecret   string
 	HTTPAddr    string
@@ -40,7 +39,6 @@ func LoadConfig() AppConfig {
 		GroupID:     getenv("KAFKA_GROUP_ID", "meilisearch-sync-service"),
 		MeiliHost:   getenv("MEILI_HOST", "http://10.17.154.252:7700"),
 		MeiliAPIKey: getenv("MEILI_API_KEY", ""),
-		MeiliIndex:  getenv("MEILI_INDEX", "testcases"),
 		Debug:       debug,
 		JWTSecret:   getenv("JWT_SECRET", "dYAj4kPbhIdCM35XhcDW9HJX53xT3iux"),
 		HTTPAddr:    getenv("HTTP_ADDR", ":8091"),

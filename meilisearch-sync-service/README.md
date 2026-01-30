@@ -39,8 +39,6 @@ cp .env.example .env
 | `KAFKA_GROUP_ID` | 消费者组 ID | `meilisearch-sync-service` |
 | `MEILI_HOST` | Meilisearch 服务地址 | `http://10.17.154.252:7700` |
 | `MEILI_API_KEY` | Meilisearch API 密钥 | 空 |
-| `MEILI_INDEX` | 默认索引名称 | `testcases` |
-| `MEILI_INDEX_FIELD` | 用于动态索引命名的字段名 | 空 |
 
 ### 运行
 
@@ -68,16 +66,16 @@ CGO_ENABLED=0 go build -a -ldflags "-s -w" -o meilisearch-sync-service main.go
 nohup ./meilisearch-sync-service > app.log 2>&1 &
 ```
 
-## Topic 与索引映射
+## 索引命名规则
 
-当前已支持的 Topic 映射：
+当前索引名由文档中的应用名和集合名共同决定：
 
-| Topic | Meilisearch Index |
-|-------|------------------|
-| `test_case.public.test_cases` | `testcases` (或自定义索引名) |
-| `test_case.public.bug_info` | `bug_info` |
+```text
+{app_name}_{collection}
+```
 
-当配置多个 Topic 时，可以使用 `MEILI_INDEX_FIELD` 环境变量，根据文档中的特定字段值动态生成索引名（格式：`{baseIndex}_{fieldValue}`）。
+- `app_name` 来自上游应用的 JWT 与写入 payload；
+- `collection` 来自上游写入 UniData 时指定的集合名称。
 
 ## 工作流程
 

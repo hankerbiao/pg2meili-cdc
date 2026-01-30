@@ -1,6 +1,13 @@
 """简单的 JWT 生成脚本，和 app.core.auth 使用相同的 HS256 签名方式。"""
 import argparse
+import os
+import sys
 from typing import List
+
+# 确保可以从项目根目录导入 app 包
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
 from app.core.auth import generate_jwt
 

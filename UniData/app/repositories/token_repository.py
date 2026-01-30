@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,7 +40,7 @@ class TokenRepository:
         return list(result.scalars().all())
 
     @staticmethod
-    async def get_token(db: AsyncSession, token_id: str) -> AppToken | None:
+    async def get_token(db: AsyncSession, token_id: str) -> Optional[AppToken]:
         return await db.get(AppToken, token_id)
 
     @staticmethod

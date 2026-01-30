@@ -10,6 +10,8 @@ if ROOT_DIR not in sys.path:
 
 from app.core.database import engine
 from app.models.testcase import Base
+from app.models.document import Document  # Register Document model
+from app.models.token import AppToken     # Register AppToken model
 
 
 async def _create_all() -> None:
