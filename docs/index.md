@@ -27,3 +27,11 @@ features:
     details: "内置 CDC (Change Data Capture) 机制，数据库变更实时流转至搜索引擎。"
     icon: 🔄
 ---
+
+## 线上环境地址
+
+- 搜索服务（Search Service）：
+  - 天津环境：`http://10.17.154.252:8091`
+  - 北京环境：`http://10.32.129.188:8091`
+- 文档写入服务（Producer / UniData API）：
+  - 北京环境：`http://10.32.129.188:8080/api/v1/data/`

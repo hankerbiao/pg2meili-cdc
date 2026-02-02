@@ -5,6 +5,7 @@ export interface SearchRequest {
   filter?: string | string[]
   attributesToHighlight?: string[]
   collection?: string
+  showRankingScore?: boolean
 }
 
 export interface SearchHit {
@@ -69,7 +70,11 @@ export async function search(
   token: string,
   request: SearchRequest
 ): Promise<SearchResponse> {
-  const { collection, ...payload } = request
+  const { collection, showRankingScore, ...rest } = request
+  const payload: any = {
+    ...rest,
+    showRankingScore: typeof showRankingScore === 'boolean' ? showRankingScore : true,
+  }
   let url = `${baseUrl.replace(/\/$/, '')}/search`
   if (collection && collection.trim()) {
     const encoded = encodeURIComponent(collection.trim())

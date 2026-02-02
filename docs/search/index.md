@@ -84,7 +84,10 @@ curl -X DELETE "http://localhost:8080/api/v1/data/indexes/requirements" \
 ### 2.1 接口概览
 
 - **接口地址**：`POST /search`
-- **基础域名**：`http://<gateway-host>:8091`（示例使用 `http://localhost:8091`）
+- **基础域名**：
+  - 天津环境：`http://10.17.154.252:8091`
+  - 北京环境：`http://10.32.129.188:8091`
+  - 本地示例：`http://localhost:8091`
 - **协议**：HTTPS/HTTP
 - **鉴权方式**：`Authorization: Bearer <JWT>`（应用级访问令牌）
 - **数据格式**：`Content-Type: application/json`

@@ -10,9 +10,14 @@ const buildCurl = (baseUrl: string, token: string, body: string): string => {
   let collection: string | undefined
   try {
     const parsed = JSON.parse(body)
-    if (parsed && typeof parsed === 'object' && parsed.collection) {
-      collection = String(parsed.collection)
-      delete parsed.collection
+    if (parsed && typeof parsed === 'object') {
+      if ((parsed as any).collection) {
+        collection = String((parsed as any).collection)
+        delete (parsed as any).collection
+      }
+      if ((parsed as any).showRankingScore === undefined) {
+        ;(parsed as any).showRankingScore = true
+      }
     }
     prettyBody = JSON.stringify(parsed, null, 2)
   } catch {

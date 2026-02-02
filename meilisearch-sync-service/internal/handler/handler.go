@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
@@ -49,6 +50,18 @@ func NewSearchHandler(cfg config.AppConfig) http.HandlerFunc {
 			return
 		}
 		defer r.Body.Close()
+
+		if len(bodyBytes) == 0 {
+			bodyBytes, _ = json.Marshal(map[string]interface{}{"showRankingScore": true})
+		} else {
+			var obj map[string]interface{}
+			if err := json.Unmarshal(bodyBytes, &obj); err == nil {
+				if _, ok := obj["showRankingScore"]; !ok {
+					obj["showRankingScore"] = true
+					bodyBytes, _ = json.Marshal(obj)
+				}
+			}
+		}
 
 		meiliURL := strings.TrimRight(cfg.MeiliHost, "/") + "/indexes/" + indexUID + "/search"
 		if cfg.Debug {
