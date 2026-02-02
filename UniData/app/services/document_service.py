@@ -100,5 +100,19 @@ class DocumentService:
         docs = await document_repository.list_documents(db, collection, app_name, limit, offset)
         return [doc.payload for doc in docs if doc.payload]
 
+    @staticmethod
+    async def list_collections_for_app(
+        db: AsyncSession,
+        app_name: str,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[str]:
+        return await document_repository.list_collections_by_app(
+            db=db,
+            app_name=app_name,
+            limit=limit,
+            offset=offset,
+        )
+
 
 document_service = DocumentService()

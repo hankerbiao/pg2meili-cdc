@@ -1,8 +1,57 @@
 # 搜索接口 (Search API)
 
-本模块说明 UniData Search Service 提供的搜索接口，直接对接 Meilisearch 搜索引擎。
+本模块说明与搜索相关的 HTTP 接口，包括：
 
-## 接口概览
+- UniData Search Service 的 `/search` 搜索接口；
+- UniData Producer Service 提供的“索引（collection）列表”接口。
+
+---
+
+## 1. 索引列表接口（Producer）
+
+索引列表接口由 UniData Producer Service 暴露，用于查询某个应用在 UniData 中已写入过哪些集合（collection），便于前端或网关决定可用的业务索引。
+
+### 1.1 获取当前应用下的索引列表
+
+- **方法**：`GET`
+- **路径**：`/api/v1/data/indexes`
+- **说明**：返回当前 JWT 所属应用在 UniData 中已使用的 collection 名称列表。
+- **鉴权方式**：`Authorization: Bearer <JWT>`
+
+请求参数：
+
+| 名称 | 位置 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- | :--- |
+| `limit` | query | integer | 否 | 每次返回的最大条数，默认 `100`，最大 `500` |
+| `offset` | query | integer | 否 | 起始偏移量，默认 `0` |
+
+响应体：
+
+- 类型：`string[]`
+- 内容：去重后的 collection 名称数组，例如：
+
+```json
+[
+  "requirements",
+  "testcases",
+  "bugs"
+]
+```
+
+示例请求（curl）：
+
+```bash
+curl -X GET "http://localhost:8080/api/v1/data/indexes?limit=100" \
+  -H "Authorization: Bearer <YOUR_JWT>"
+```
+
+---
+
+## 2. 搜索接口（Search Service）
+
+本小节说明 UniData Search Service 暴露的 `/search` 接口，该接口直接对接 Meilisearch 搜索引擎。
+
+### 2.1 接口概览
 
 - **接口地址**：`POST /search`
 - **基础域名**：`http://<gateway-host>:8091`（示例使用 `http://localhost:8091`）
@@ -10,12 +59,12 @@
 - **鉴权方式**：`Authorization: Bearer <JWT>`（应用级访问令牌）
 - **数据格式**：`Content-Type: application/json`
 
-## 公共请求头
+### 2.2 公共请求头
 
 - `Authorization`：必填，格式 `Bearer <JWT>`，用于标识调用方应用（`app_name`）
 - `Content-Type`：必填，`application/json`
 
-## 请求体参数
+### 2.3 请求体参数
 
 请求体为原样透传到 Meilisearch `POST /indexes/{index}/search` 的 JSON 对象，常用字段如下：
 
@@ -27,9 +76,9 @@
 | `filter` | string/array | 否 | 过滤条件 | `tags = "BMC"` |
 | `attributesToHighlight` | array | 否 | 需要高亮的字段列表 | `["*"]` |
 
-> **说明**：索引名称由后端根据 JWT 中的 `app_name` 和配置的基础索引名自动拼接，客户端无需在请求体中指定索引。
+说明：索引名称由后端根据 JWT 中的 `app_name` 和配置的基础索引名自动拼接，客户端无需在请求体中指定索引。
 
-## 响应结果
+### 2.4 响应结果
 
 接口返回 Meilisearch 原始搜索结果，主要字段包括：
 
@@ -45,11 +94,11 @@
 
 ---
 
-## 使用示例
+## 3. 搜索使用示例
 
-### 1. 简单关键字搜索
+### 3.1 简单关键字搜索
 
-**请求示例（curl）**
+请求示例（curl）：
 
 ```bash
 curl -X POST "http://localhost:8091/search" \
@@ -60,7 +109,7 @@ curl -X POST "http://localhost:8091/search" \
   }'
 ```
 
-**请求示例（JavaScript，fetch）**
+请求示例（JavaScript，fetch）：
 
 ```js
 const BASE_URL = "http://localhost:8091";
@@ -85,9 +134,9 @@ async function searchSimple() {
 }
 ```
 
-### 2. 高亮搜索
+### 3.2 高亮搜索
 
-**请求示例（curl）**
+请求示例（curl）：
 
 ```bash
 curl -X POST "http://localhost:8091/search" \
@@ -99,7 +148,7 @@ curl -X POST "http://localhost:8091/search" \
   }'
 ```
 
-**请求示例（JavaScript，fetch）**
+请求示例（JavaScript，fetch）：
 
 ```js
 async function searchWithHighlight() {
@@ -128,9 +177,9 @@ async function searchWithHighlight() {
 }
 ```
 
-### 3. 按标签过滤搜索
+### 3.3 按标签过滤搜索
 
-**请求示例（curl）**
+请求示例（curl）：
 
 ```bash
 curl -X POST "http://localhost:8091/search" \
@@ -142,7 +191,7 @@ curl -X POST "http://localhost:8091/search" \
   }'
 ```
 
-**请求示例（JavaScript，fetch）**
+请求示例（JavaScript，fetch）：
 
 ```js
 async function searchFilterByTag() {
@@ -162,9 +211,9 @@ async function searchFilterByTag() {
 }
 ```
 
-### 4. 分页搜索
+### 3.4 分页搜索
 
-**请求示例（curl）**
+请求示例（curl）：
 
 ```bash
 curl -X POST "http://localhost:8091/search" \
@@ -177,7 +226,7 @@ curl -X POST "http://localhost:8091/search" \
   }'
 ```
 
-**请求示例（JavaScript，fetch）**
+请求示例（JavaScript，fetch）：
 
 ```js
 async function searchWithPagination(page = 1, pageSize = 5) {

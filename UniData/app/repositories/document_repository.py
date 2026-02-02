@@ -95,5 +95,24 @@ class DocumentRepository:
         result = await db.execute(query)
         return result.scalars().all()
 
+    @staticmethod
+    async def list_collections_by_app(
+        db: AsyncSession,
+        app_name: str,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[str]:
+        query = (
+            select(Document.collection)
+            .where(Document.app_name == app_name, Document.is_delete == False)
+            .group_by(Document.collection)
+            .order_by(Document.collection.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await db.execute(query)
+        rows = result.all()
+        return [row[0] for row in rows]
+
 
 document_repository = DocumentRepository()

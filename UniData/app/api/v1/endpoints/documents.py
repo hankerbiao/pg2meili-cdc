@@ -98,7 +98,6 @@ async def list_documents(
     db: AsyncSession = Depends(get_db),
     current_app: AppIdentity = Depends(get_current_app),
 ) -> List[Dict[str, Any]]:
-    # 这里默认只看自己应用的文档，如果需要跨应用查看，需要更高权限
     docs = await document_service.list_documents(
         db, 
         collection=collection, 
@@ -107,3 +106,25 @@ async def list_documents(
         offset=offset
     )
     return docs
+
+
+@router.get(
+    "/indexes",
+    response_model=List[str],
+    status_code=status.HTTP_200_OK,
+    summary="获取当前应用下的索引列表",
+    description="返回当前应用在 UniData 中已使用的 collection 名称列表。",
+)
+async def list_app_indexes(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    current_app: AppIdentity = Depends(get_current_app),
+) -> List[str]:
+    collections = await document_service.list_collections_for_app(
+        db=db,
+        app_name=current_app.app_name,
+        limit=limit,
+        offset=offset,
+    )
+    return collections
