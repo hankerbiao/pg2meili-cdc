@@ -9,17 +9,14 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from app.core.database import engine
-from app.models.testcase import Base
-from app.models.document import Document  # Register Document model
-from app.models.token import AppToken     # Register AppToken model
+from app.models.base import Base
+from app.models.document import Document
+from app.models.token import AppToken
 
 
 async def _create_all() -> None:
     """
     初始化数据库中所有由 SQLAlchemy Base 管理的表。
-
-    包含：
-    - test_cases（测试用例表）
     """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

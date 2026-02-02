@@ -17,6 +17,6 @@ export GOARCH=amd64
 
 # 4. 编译
 echo "Building meilisearch-sync-service ..."
-go build -a -ldflags "-s -w" -o meilisearch-sync-service main.go
+go build -a -ldflags "-s -w" -o meilisearch-sync-service_go main.go
 
-echo "Build done. Binary: $APP_DIR/meilisearch-sync-service"
+echo "Build done. Binary: $APP_DIR/meilisearch-sync-service_go"

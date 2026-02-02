@@ -33,6 +33,11 @@ start() {
     echo "正在启动 $SERVICE_NAME ..."
     cd "$WORK_DIR"
     
+    # 激活虚拟环境
+    if [ -f ".venv/bin/activate" ]; then
+        source .venv/bin/activate
+    fi
+    
     # 尝试从 .env 读取端口 (简单读取，不做复杂解析)
     if [ -f .env ]; then
         ENV_PORT=$(grep "^SERVER_PORT=" .env | cut -d '=' -f2 | tr -d '"' | tr -d "'" | tr -d ':')
