@@ -22,7 +22,7 @@ localhost:8083/connectors/ -d '{
     "topic.prefix": "search_sync",
     "table.include.list": "public.payload", 
     "plugin.name": "pgoutput",
-    "column.include.list": "public.payload.(id,title,content,category)"
+    "column.include.list": "public.payload.(id,title,content,category,is_delete)"
   }
 }'
 ```

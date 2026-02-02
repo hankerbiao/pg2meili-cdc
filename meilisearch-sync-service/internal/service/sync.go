@@ -81,7 +81,10 @@ func Run(ctx context.Context, client *kgo.Client, meiliClient meilisearch.Servic
 						delete(doc, "is_delete")
 					}
 					logger.DebugLogf("执行插入/更新 index=%s id=%s doc=%v", indexName, id, doc)
-					_, err := meiliClient.Index(indexName).AddDocuments([]map[string]interface{}{doc}, nil)
+					_, err := meiliClient.Index(indexName).AddDocuments(
+						[]map[string]interface{}{doc},
+						&meilisearch.DocumentOptions{PrimaryKey: meilisearch.StringPtr("id")},
+					)
 					if err != nil {
 						log.Printf("Meilisearch 插入/更新失败 index=%s id=%s 错误=%v", indexName, id, err)
 					} else {

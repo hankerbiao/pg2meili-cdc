@@ -38,6 +38,11 @@ async def upsert_document(
         )
 
     payload = body.model_dump()
+    if "id" not in payload or not payload["id"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="请求体必须包含非空的 'id' 字段",
+        )
     
     # 执行业务逻辑
     id_value = await document_service.upsert_document(
@@ -106,4 +111,3 @@ async def list_documents(
         offset=offset
     )
     return docs
-
