@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # 配置部分
-SERVICE_NAME="meilisearch-sync-service"
-BINARY_NAME="meilisearch-sync-service"
+SERVICE_NAME="meilisearch-sync-service_go"
+BINARY_NAME="meilisearch-sync-service_go"
 
 # 获取脚本所在目录的绝对路径
 WORK_DIR=$(cd "$(dirname "$0")" && pwd)
