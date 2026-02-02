@@ -51,7 +51,7 @@ except ImportError:
 def create_test_case(base_url, index_uid, test_case_data):
     """通过 API 创建测试用例"""
     # 1. 生成 Token
-    token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6ImxpYmlhb190ZXN0Iiwic2NvcGVzIjpbXSwiZXhwIjoxODMwMzU1MTk4fQ.HKsX8kU5UHpZfWbw-bxivup21jnON2k6zXw6LpHNtoY"
+    token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6ImxpYmlhbyIsInNjb3BlcyI6W10sImV4cCI6MTgwMTc1Njc5OH0.gZ_rtjMYxBandxUXkSPIstDJJWTyPeGrIWe_CtqOs88"
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -94,6 +94,6 @@ if __name__ == "__main__":
         print("请求成功！")
         # 尝试解析 JSON 返回值
         datas = response.json()['data']
-        for data in tqdm(datas[30:40]):
+        for data in tqdm(datas[40:100]):
             print(data)
             create_test_case(args.url, args.index, data)
