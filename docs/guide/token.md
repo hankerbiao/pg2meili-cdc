@@ -122,8 +122,6 @@ FastAPI 路由可以通过依赖 `get_current_app` 获取当前调用方应用�
 
 ## 五、自助申请 Token (Web UI)
 
-除了使用命令行脚本手动生成 Token 外，项目还提供了一个可视化的申请页面 `app_token_register.html`，方便业务方自助接入。
-
 ### 1. 页面功能
 
 该页面是一个纯静态 HTML 文件，基于 Layui 构建，提供了以下功能：
