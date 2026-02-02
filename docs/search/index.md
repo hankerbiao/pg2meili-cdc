@@ -3,18 +3,18 @@
 本模块说明与搜索相关的 HTTP 接口，包括：
 
 - UniData Search Service 的 `/search` 搜索接口；
-- UniData Producer Service 提供的“索引（collection）列表”接口。
+- UniData Producer Service 提供的“索引（collection）管理”接口。
 
 ---
 
-## 1. 索引列表接口（Producer）
+## 1. 索引管理接口（Producer）
 
-索引列表接口由 UniData Producer Service 暴露，用于查询某个应用在 UniData 中已写入过哪些集合（collection），便于前端或网关决定可用的业务索引。
+索引管理接口由 UniData Producer Service 暴露，用于查询和删除某个应用在 UniData 中已写入过哪些集合（collection），便于前端或网关决定可用的业务索引。
 
 ### 1.1 获取当前应用下的索引列表
 
 - **方法**：`GET`
-- **路径**：`/api/v1/data/indexes`
+- **路径**：`/api/v1/index/indexes`
 - **说明**：返回当前 JWT 所属应用在 UniData 中已使用的 collection 名称列表。
 - **鉴权方式**：`Authorization: Bearer <JWT>`
 
@@ -48,7 +48,7 @@ curl -X GET "http://localhost:8080/api/v1/data/indexes?limit=100" \
 ### 1.2 删除索引（逻辑删除集合内所有文档）
 
 - **方法**：`DELETE`
-- **路径**：`/api/v1/data/indexes/{collection}`
+- **路径**：`/api/v1/index/indexes/{collection}`
 - **说明**：删除当前应用下指定 collection 对应的索引，将该集合内所有文档的 `is_delete` 标记为 `true`。
 - **鉴权方式**：`Authorization: Bearer <JWT>`
 

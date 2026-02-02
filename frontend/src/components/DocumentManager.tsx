@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react'
-import { 
-  listDocuments, 
-  createDocument, 
-  updateDocument, 
-  deleteDocument, 
-  getDocument 
+import {
+  listDocuments,
+  createDocument,
+  updateDocument,
+  deleteDocument,
+  getDocument,
+  listIndexes,
+  deleteIndex
 } from '../api'
 
 const DEFAULT_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6ImxpYmlhb190ZXN0Iiwic2NvcGVzIjpbXSwiZXhwIjoxODMwMzU1MTk4fQ.HKsX8kU5UHpZfWbw-bxivup21jnON2k6zXw6LpHNtoY'
@@ -13,12 +15,14 @@ const DocumentManager: React.FC = () => {
   const [baseUrl, setBaseUrl] = useState('http://localhost:8080')
   const [token, setToken] = useState(DEFAULT_TOKEN)
   const [collection, setCollection] = useState('testcases')
-  const [activeTab, setActiveTab] = useState<'list' | 'create' | 'edit'>('list')
-  
+  const [activeTab, setActiveTab] = useState<'list' | 'create' | 'edit' | 'indexes'>('list')
+
   const [documents, setDocuments] = useState<any[]>([])
+  const [indexes, setIndexes] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [deletedIndexCount, setDeletedIndexCount] = useState<number | null>(null)
 
   // Editor state
   const [editorContent, setEditorContent] = useState('{\n  "id": "new-doc-001",\n  "name": "示例数据"\n}')
@@ -27,11 +31,52 @@ const DocumentManager: React.FC = () => {
   const fetchDocuments = async () => {
     setLoading(true)
     setError(null)
+    setSuccessMsg(null)
     try {
       const docs = await listDocuments(baseUrl, token, collection, 100, 0)
       setDocuments(docs)
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载文档失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchIndexes = async () => {
+    setLoading(true)
+    setError(null)
+    setSuccessMsg(null)
+    setDeletedIndexCount(null)
+    try {
+      const items = await listIndexes(baseUrl, token, 100, 0)
+      setIndexes(items)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载索引失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteIndex = async (targetCollection: string) => {
+    const name = targetCollection || collection
+    if (!name) {
+      setError('请先填写要删除索引的集合名称')
+      return
+    }
+    if (!window.confirm(`确定要删除索引 ${name} 吗？该集合下的文档将被逻辑删除。`)) {
+      return
+    }
+    setLoading(true)
+    setError(null)
+    setSuccessMsg(null)
+    setDeletedIndexCount(null)
+    try {
+      const res = await deleteIndex(baseUrl, token, name)
+      setDeletedIndexCount(res.deleted_count)
+      setSuccessMsg(`索引 ${res.collection} 删除成功，逻辑删除文档数量：${res.deleted_count}`)
+      await fetchIndexes()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '删除索引失败')
     } finally {
       setLoading(false)
     }
@@ -149,6 +194,20 @@ const DocumentManager: React.FC = () => {
               <div className="scenario-name">新建文档</div>
               <div className="scenario-desc">创建新的 JSON 文档</div>
             </div>
+            <div
+              className={`scenario-item ${activeTab === 'indexes' ? 'active' : ''}`}
+              style={{ backgroundColor: activeTab === 'indexes' ? '#e6fffa' : 'transparent' }}
+              onClick={() => {
+                setActiveTab('indexes')
+                setSuccessMsg(null)
+                setError(null)
+                setDeletedIndexCount(null)
+                fetchIndexes()
+              }}
+            >
+              <div className="scenario-name">索引管理</div>
+              <div className="scenario-desc">查看索引列表并删除集合索引</div>
+            </div>
           </div>
           
           <div className="sidebar-title" style={{ marginTop: '20px' }}>配置</div>
@@ -193,6 +252,73 @@ const DocumentManager: React.FC = () => {
           {successMsg && (
             <div style={{ padding: '12px', background: '#d1fae5', color: '#047857', borderRadius: '6px', marginBottom: '16px' }}>
               {successMsg}
+            </div>
+          )}
+
+          {activeTab === 'indexes' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: 600 }}>索引管理</h2>
+                <button
+                  onClick={fetchIndexes}
+                  disabled={loading}
+                  style={{ padding: '6px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                  {loading ? '加载中...' : '刷新索引列表'}
+                </button>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '8px' }}>
+                  使用当前集合名称快速删除索引
+                </label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    style={{ flex: 1, padding: '6px', borderRadius: '4px', border: '1px solid #ddd' }}
+                    value={collection}
+                    onChange={e => setCollection(e.target.value)}
+                  />
+                  <button
+                    onClick={() => handleDeleteIndex(collection)}
+                    disabled={loading}
+                    style={{ padding: '6px 12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: loading ? 0.7 : 1 }}
+                  >
+                    {loading ? '删除中...' : '删除该索引'}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }}>当前应用索引列表</h3>
+                {loading && indexes.length === 0 ? (
+                  <div>加载中...</div>
+                ) : indexes.length === 0 ? (
+                  <div style={{ color: '#666', fontStyle: 'italic' }}>暂无索引</div>
+                ) : (
+                  <div style={{ display: 'grid', gap: '8px' }}>
+                    {indexes.map(name => (
+                      <div
+                        key={name}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e5e7eb', background: '#f9fafb' }}
+                      >
+                        <span>{name}</span>
+                        <button
+                          onClick={() => handleDeleteIndex(name)}
+                          disabled={loading}
+                          style={{ padding: '4px 10px', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: loading ? 0.7 : 1 }}
+                        >
+                          删除索引
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {deletedIndexCount !== null && (
+                  <div style={{ marginTop: '12px', color: '#047857' }}>
+                    最近一次删除操作逻辑删除文档数量：{deletedIndexCount}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

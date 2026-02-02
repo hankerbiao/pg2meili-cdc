@@ -4,7 +4,7 @@ export interface SearchRequest {
   limit?: number
   filter?: string | string[]
   attributesToHighlight?: string[]
-   collection?: string
+  collection?: string
 }
 
 export interface SearchHit {
@@ -186,6 +186,55 @@ export async function listDocuments(
 ): Promise<any[]> {
   const response = await fetch(`${baseUrl}/api/v1/data/${collection}?limit=${limit}&offset=${offset}`, {
     method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`HTTP ${response.status}: ${errorText}`)
+  }
+
+  return response.json()
+}
+
+export async function listIndexes(
+  baseUrl: string,
+  token: string,
+  limit: number = 100,
+  offset: number = 0
+): Promise<string[]> {
+  const normalizedBase = baseUrl.replace(/\/$/, '')
+  const response = await fetch(`${normalizedBase}/api/v1/index/indexes?limit=${limit}&offset=${offset}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`HTTP ${response.status}: ${errorText}`)
+  }
+
+  return response.json()
+}
+
+export interface DeleteIndexResponse {
+  status: string
+  collection: string
+  deleted_count: number
+}
+
+export async function deleteIndex(
+  baseUrl: string,
+  token: string,
+  collection: string
+): Promise<DeleteIndexResponse> {
+  const normalizedBase = baseUrl.replace(/\/$/, '')
+  const response = await fetch(`${normalizedBase}/api/v1/index/indexes/${encodeURIComponent(collection)}`, {
+    method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
     },
