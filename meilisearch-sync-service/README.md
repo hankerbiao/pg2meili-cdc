@@ -56,6 +56,53 @@ go build -o meilisearch-sync-service .
 go run main.go
 ```
 
+## API 接口
+
+服务提供了一个 HTTP 代理接口，用于安全地访问 Meilisearch。该接口会自动根据 JWT Token 中的应用标识（App Name）和请求参数中的集合名称（Collection）路由到正确的 Meilisearch 索引。
+
+### 搜索代理接口
+
+**Endpoint:** `POST /search`
+
+**端口:** 默认为 `8091` (可通过 `HTTP_ADDR` 环境变量配置)
+
+**请求头 (Headers):**
+
+| Header | 说明 | 示例 |
+|--------|------|------|
+| `Authorization` | **必填**。格式为 `Bearer <JWT Token>`。Token 必须包含有效的 `app_name` 字段。 | `Bearer eyJhbGciOiJIUzI1...` |
+| `Content-Type` | **必填**。 | `application/json` |
+
+**查询参数 (Query Parameters):**
+
+| 参数名 | 说明 | 示例 |
+|--------|------|------|
+| `collection` | **必填**。数据集合名称。将与 Token 中的 AppName 组合成索引名 `{AppName}_{collection}`。 | `cases` |
+
+**请求体 (Body):**
+
+标准的 Meilisearch 搜索请求体。
+
+```json
+{
+  "q": "搜索关键词",
+  "limit": 10,
+  "offset": 0,
+  "filter": ["status = 'active'"]
+}
+```
+
+**响应:**
+
+返回 Meilisearch 的标准搜索结果。
+
+**工作原理:**
+
+1. 解析 `Authorization` 头中的 JWT Token，验证签名并提取 `app_name` (例如 `my_app`)。
+2. 获取 `collection` 参数 (例如 `cases`)。
+3. 拼接目标索引名称: `my_app_cases`。
+4. 将请求转发至 Meilisearch: `POST /indexes/my_app_cases/search`。
+
 ## 部署
 
 ```bash
