@@ -86,6 +86,111 @@ export async function search(
   return response.json()
 }
 
+// 通用文档管理接口
+
+export interface DocumentResponse {
+  status: string
+  id: string
+  collection: string
+}
+
+export async function createDocument(
+  baseUrl: string,
+  token: string,
+  collection: string,
+  payload: any
+): Promise<DocumentResponse> {
+  const response = await fetch(`${baseUrl}/api/v1/data/${collection}`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`HTTP ${response.status}: ${errorText}`)
+  }
+
+  return response.json()
+}
+
+export async function updateDocument(
+  baseUrl: string,
+  token: string,
+  collection: string,
+  payload: any
+): Promise<DocumentResponse> {
+  // Update is the same as create for upsert logic, but semantically separate for UI
+  return createDocument(baseUrl, token, collection, payload)
+}
+
+export async function getDocument(
+  baseUrl: string,
+  token: string,
+  collection: string,
+  id: string
+): Promise<any> {
+  const response = await fetch(`${baseUrl}/api/v1/data/${collection}/${id}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`HTTP ${response.status}: ${errorText}`)
+  }
+
+  return response.json()
+}
+
+export async function deleteDocument(
+  baseUrl: string,
+  token: string,
+  collection: string,
+  id: string
+): Promise<DocumentResponse> {
+  const response = await fetch(`${baseUrl}/api/v1/data/${collection}/${id}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`HTTP ${response.status}: ${errorText}`)
+  }
+
+  return response.json()
+}
+
+export async function listDocuments(
+  baseUrl: string,
+  token: string,
+  collection: string,
+  limit: number = 20,
+  offset: number = 0
+): Promise<any[]> {
+  const response = await fetch(`${baseUrl}/api/v1/data/${collection}?limit=${limit}&offset=${offset}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`HTTP ${response.status}: ${errorText}`)
+  }
+
+  return response.json()
+}
+
 // 高亮文本渲染
 export function renderHighlightedText(
   text: string | undefined,

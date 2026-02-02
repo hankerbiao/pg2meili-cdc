@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import Column, String, DateTime, Boolean, Index
 from sqlalchemy.dialects.postgresql import JSONB
 
-from app.models.testcase import Base
+from app.models.base import Base
 
 
 class Document(Base):

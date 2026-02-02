@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import (
 from app.main import app
 from app.core.config import get_settings
 from app.core.database import _make_async_conn_string, get_db
-from app.models.testcase import Base
+from app.core.auth import get_current_app, AppIdentity
+from app.models import Base
 
 
 @pytest.fixture(scope="session")
@@ -54,12 +55,16 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 @pytest.fixture
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
-    """创建带有数据库会话覆盖和重定向跟随的测试客户端。"""
+    """创建带有数据库会话覆盖和鉴权覆盖的测试客户端。"""
 
     async def override_get_db():
         yield db_session
 
+    async def override_get_current_app():
+        return AppIdentity(app_name="test-app", scopes=["read", "write"])
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_app] = override_get_current_app
 
     async with AsyncClient(
         transport=ASGITransport(app=app),

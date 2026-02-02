@@ -3,7 +3,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth_router, testcases_router, documents_router
+from app.api.v1.endpoints import auth_router, documents_router
 
 api_router = APIRouter()
 
@@ -13,16 +13,7 @@ api_router.include_router(
     tags=["auth"],
 )
 
-api_router.include_router(
-    testcases_router,
-    prefix="/testcases",
-    tags=["testcases"],
-)
-
-# 注册通用文档路由，挂载到根路径或 /documents 下？
-# 既然是 /{collection}，直接挂载到 /resources 或者 /documents 可能比较好。
-# 如果直接挂载到 /，可能会冲突。
-# 建议挂载到 /data 或者 /resources
+# 注册通用文档路由，挂载到 /data 前缀下，统一管理各类业务集合
 api_router.include_router(
     documents_router,
     prefix="/data",

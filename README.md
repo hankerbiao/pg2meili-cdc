@@ -152,7 +152,7 @@ go run main.go
 #### 创建/更新测试用例
 
 ```http
-POST /api/v1/testcases
+POST /api/v1/data/testcases
 Content-Type: application/json
 
 {
@@ -168,7 +168,7 @@ Content-Type: application/json
 #### 根据 ID 更新
 
 ```http
-PUT /api/v1/testcases/{id}
+PUT /api/v1/data/testcases/{id}
 Content-Type: application/json
 
 {
@@ -181,13 +181,13 @@ Content-Type: application/json
 #### 软删除
 
 ```http
-DELETE /api/v1/testcases/{id}
+DELETE /api/v1/data/testcases/{id}
 ```
 
 #### 获取 Meilisearch 配置
 
 ```http
-GET /api/v1/testcases/meilisearch/endpoint
+GET /api/v1/data/testcases/meilisearch/endpoint
 ```
 
 #### 健康检查

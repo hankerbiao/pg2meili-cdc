@@ -1,11 +1,14 @@
 # UniData Producer Service
 
 基于 FastAPI 的异地分布式搜索“生产端”服务。  
-它负责把来自业务侧的结构化/半结构化数据写入 PostgreSQL 中的 `test_cases` 表，  
+它负责把来自业务侧的结构化/半结构化数据写入 PostgreSQL，  
 后续通过 Debezium + Kafka 的 CDC 链路，将这些变更实时推送到各地的 Meilisearch 节点，实现“写入集中、搜索就近”的架构。
 
 > 可以简单理解为：UniData 把“需要被搜索的数据”标准化写入数据库，  
 > 后面的 Debezium 与 Go 消费者负责把这些数据安全地送到各区域的搜索引擎。
+
+目前数据统一通过通用文档接口 `/api/v1/data/{collection}` 写入，  
+不再单独提供 testcases 专用接口。
 
 ---
 
@@ -29,7 +32,8 @@ UniData 处于这条链路的“入口”位置，主要职责是：
 
 - 提供统一的 HTTP API，让上层业务以标准 JSON 格式写入数据；
 - 对输入数据做基础校验与补全（例如确保 `id` 存在、`is_delete` 字段正确）；
-- 将数据写入 PostgreSQL 的 `test_cases` 表，作为 CDC 的源表。
+- 将数据写入 PostgreSQL 的 `test_cases` 表或通用 `documents` 表，作为 CDC 的源表；
+- 对外暴露应用级 JWT 认证能力，控制谁可以写入数据。
 
 关于 Debezium + Kafka + Meilisearch 的完整部署与 CDC 流程，可参考仓库根目录下的文档：
 
@@ -48,16 +52,16 @@ UniData 处于这条链路的“入口”位置，主要职责是：
   使用 FastAPI 实现，负责：
   - 接收 HTTP 请求；
   - 校验并组装 JSON payload；
-  - 调用业务 Service 与 Repository，将数据写入 PostgreSQL。
+  - 调用业务 Service 与 Repository，将数据写入 PostgreSQL；
+  - 根据 JWT 中的应用身份，将数据归属到对应 app。
 
 - **PostgreSQL**  
-  存储表 `test_cases`，字段包括：
-  - `id`: 主键标识；
-  - `payload`: 文本形式存储完整的 JSON 字符串；
-  - `updated_at`: 更新时间戳，用于审计与排序。
+  存储测试用例与通用文档数据，例如：
+  - `test_cases`：测试用例；
+  - `documents`：通用集合 + app 维度的文档。
 
 - **Debezium + Kafka**  
-  监听 PostgreSQL 的 WAL 日志，把 `test_cases` 表的变更转成标准 CDC 事件推入 Kafka 主题。
+  监听 PostgreSQL 的 WAL 日志，把表的变更转成标准 CDC 事件推入 Kafka 主题。
 
 - **Go 消费者 + Meilisearch**  
   每个区域运行一个 Go 程序，订阅 Kafka 中的 CDC 事件：
@@ -67,13 +71,13 @@ UniData 处于这条链路的“入口”位置，主要职责是：
 ### 2.2 写入与同步数据流（从业务到搜索）
 
 1. 上游业务构造包含 `id` 字段的 JSON 对象（可以携带任意业务字段）；
-2. 调用 UniData 的 `/api/v1/testcases` 接口写入数据；
+2. 调用 UniData 的 `/api/v1/data/{collection}` 接口写入数据；
 3. UniData：
    - 校验 JSON 格式；
    - 解析/填充业务字段（如 `is_delete`）；
-   - 将完整 JSON 序列化后写入 `test_cases.payload`；
+   - 将完整 JSON 序列化后写入 PostgreSQL；
 4. PostgreSQL 按常规方式持久化写入；
-5. Debezium 监听到 `test_cases` 表的变更，生成 CDC 事件；
+5. Debezium 监听到相关表的变更，生成 CDC 事件；
 6. Kafka 分发事件到各区域；
 7. Go 消费者在各区域消费事件，并据此更新 Meilisearch；
 8. 各地前端/服务直接查询本地 Meilisearch，实现高性能搜索。
@@ -88,185 +92,231 @@ UniData 处于这条链路的“入口”位置，主要职责是：
 
 ## 3. 领域模型与表设计
 
-### 3.1 TestCase 模型
+### 3.1 通用 Document 模型
 
-Python 模型定义见：
+Pydantic 模型见：
 
-- [app/models/testcase.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/models/testcase.py#L1-L19)
-
-核心字段：
-
-- `id: str`  
-  主键，表示该条数据的唯一标识。对上游业务而言可以是业务 ID，也可以是搜索文档 ID。
-
-- `payload: Text`  
-  原始 JSON 字符串，包含业务侧提交的完整数据，例如：
-  ```json
-  {
-    "id": "case-123",
-    "title": "支付接口回归测试",
-    "type": "regression",
-    "is_delete": false,
-    "project": "payment",
-    "owner": "qa-team"
-  }
-  ```
-
-- `updated_at: datetime`  
-  更新时间，配合 CDC 和搜索端，可以实现增量同步和排序。
-
-### 3.2 Repository 层：PostgreSQL 写入方式
-
-具体 SQL 在：
-
-- [app/repositories/testcase_repository.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/repositories/testcase_repository.py#L10-L61)
+- [app/schemas/document.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/schemas/document.py)
 
 特点：
 
-- 写入使用 `INSERT ... ON CONFLICT (id) DO UPDATE`，实现幂等的“写入即更新”语义；
-- 软删除使用 `jsonb_set` 将 `payload` 中的 `is_delete` 字段置为 `true`；
-- 适配 PostgreSQL 的 JSONB 能力，方便后续 CDC 及搜索端按字段过滤。
+- 所有通用文档共享一个基础字段：
+  - `id: str`：文档唯一标识；
+  - 其他字段通过 `extra = "allow"` 自由扩展；
+- 通过 `collection` + `app_name` 维度划分不同业务的文档空间；
+- 适合管理测试用例、需求、缺陷、配置等多种类型的异构数据。
 
 ---
 
-## 4. HTTP 接口设计
+## 4. HTTP 接口概览
 
-当前版本提供两类与 `test_cases` 表相关的接口，均挂在 `/api/v1/testcases` 之下。  
+所有业务接口都挂载在 `/api/v1` 之下，由 [app/api/v1/router.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/api/v1/router.py) 统一注册：
+
+- `/api/v1/auth`：令牌申请与审核；
+- `/api/v1/data/{collection}`：通用文档接口（包括测试用例在内的所有业务数据统一通过此接口写入）。
+
+健康检查接口：
+
+- `GET /health`：基础探活，返回 `{ "status": "healthy" }`。
+
+下面分块说明核心接口。
+
+---
+
+## 5. 通用文档接口 `/api/v1/data/{collection}`
+
 路由定义见：
 
-- [app/api/v1/endpoints/testcases.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/api/v1/endpoints/testcases.py#L1-L85)
+- [app/api/v1/endpoints/documents.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/api/v1/endpoints/documents.py)
 
-### 4.1 创建/更新 Test Case
+该模块提供一套可复用的通用文档 CRUD 能力，用于管理任意集合（包括测试用例在内）：
 
-- **URL**: `POST /api/v1/testcases`
-- **请求体**: 任意合法 JSON，但必须包含字段 `id`。
-- **返回**: 标准响应包：
-  ```json
-  {
-    "status": "success",
-    "id": "your-id"
-  }
-  ```
+### 6.1 创建/更新文档
 
-业务规则：
-
-- 请求体必须是合法 JSON，否则返回 `400 Invalid JSON format`；
-- `id` 为必填字段，缺失或为空则返回 `400 Missing 'id' field`；
-- 如果请求体中未显式传 `is_delete`，服务会自动补充为 `false`；
-- 每次写入都视为“新版本”，通过 ON CONFLICT 语义更新 `payload` 与 `updated_at`。
-
-一个典型请求示例：
+- `POST /api/v1/data/{collection}`
+- 请求体：必须包含 `id`，其他字段自由扩展；
+- 示例：
 
 ```bash
-curl -X POST "http://localhost:8080/api/v1/testcases" \
+curl -X POST "http://localhost:8080/api/v1/data/requirements" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <jwt>" \
   -d '{
-    "id": "case-001",
-    "title": "登录功能测试",
-    "module": "auth",
-    "priority": "P1"
+    "id": "REQ-001",
+    "title": "支付重构需求",
+    "owner": "alice",
+    "status": "open"
   }'
 ```
 
-### 4.2 软删除 Test Case
+约束：
 
-- **URL**: `DELETE /api/v1/testcases/{id}`
-- **路径参数**:
-  - `id`: 要删除的 Test Case 标识
-- **返回**:
-  ```json
-  {
-    "status": "success",
-    "id": "case-001"
-  }
-  ```
+- `collection` 不允许包含空格；
+- 实际写入会携带当前应用名 `app_name`，保证不同应用之间的文档隔离。
 
-业务规则：
+### 6.2 获取文档详情
 
-- 不直接删除行，而是更新 `payload` 中的 `is_delete` 字段为 `true`；
-- 删除操作同样会被 Debezium 观察到，并通过 CDC 事件告诉下游“该文档应该被从索引中移除或标记为已删除”；
-- 如果 `id` 为空，返回 `400 Missing 'id' param`。
+- `GET /api/v1/data/{collection}/{id}`  
+- 返回完整 payload 内容（Dict[str, Any]）。
 
-对应 CDC 流程中，Go 消费者会根据 `is_delete` 或操作类型，在 Meilisearch 侧删除该文档。
+### 6.3 删除文档
 
-### 4.3 健康检查
+- `DELETE /api/v1/data/{collection}/{id}`  
+- 进行软删除，更新内部标记，配合 CDC 通知搜索端。
 
-- **URL**: `GET /health`
-- **返回**:
-  ```json
-  {
-    "status": "healthy"
-  }
-  ```
+### 6.4 列出集合文档
 
-用于基础探活，可以配置在负载均衡或 K8s liveness/readiness 探针中。
+- `GET /api/v1/data/{collection}?limit=20&offset=0`
+- 默认仅返回“当前应用”的文档；
+- 如需跨应用查看，需要在服务中扩展更高权限的逻辑。
 
 ---
 
-## 5. 应用架构与代码结构
+## 7. 认证与 Token 机制
+
+认证模块位于：
+
+- [app/core/auth.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/core/auth.py)
+- [app/api/v1/endpoints/auth.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/api/v1/endpoints/auth.py)
+
+### 7.1 JWT 结构
+
+使用 HS256 对称加密，秘钥来自配置：
+
+- `Settings.jwt_secret`（见 [config.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/core/config.py)）
+
+载荷中包含：
+
+- `app_name`: 应用名称；
+- `scopes`: 权限列表（字符串数组或空格分隔字符串）；
+- `exp`: 过期时间戳（秒）。
+
+### 7.2 令牌签发接口
+
+- `POST /api/v1/auth/token`
+- 请求体：
+
+```json
+{
+  "app_name": "my-app",
+  "itcode": "alice",
+  "scopes": ["write:testcases", "write:documents"],
+  "ttl": 315360000
+}
+```
+
+- 返回：
+
+```json
+{
+  "app_name": "my-app",
+  "itcode": "alice",
+  "expires_at": 1893456000
+}
+```
+
+说明：
+
+- 实际生成的 JWT 会存入数据库，并通过内部的消息渠道（如工权消息）发送给 `itcode` 对应的用户；
+- 审核流程由 `token_service` 负责，可通过内部系统或页面完成。
+
+### 7.3 Token 审核与查询
+
+- `GET /api/v1/auth/tokens/pending`：获取待审核 token 列表；
+- `GET /api/v1/auth/tokens/approved`：获取已审核 token 列表；
+- `POST /api/v1/auth/tokens/{token_id}/approve`：审核通过指定 token，并发送通知。
+
+### 7.4 请求中的身份解析
+
+业务接口（如 `/api/v1/data/...` 等）通过依赖注入获取当前应用：
+
+- Header 要求：
+  - `Authorization: Bearer <jwt>`
+  - 可选 `X-App-Name: <app_name>`，用于与 JWT 内部 `app_name` 做交叉校验。
+
+`get_current_app` 会完成：
+
+- Bearer Token 格式校验；
+- 签名验证与过期检查；
+- 从 payload 中解析 `app_name` 与 `scopes`；
+- 返回 `AppIdentity(app_name, scopes)` 给业务层使用。
+
+---
+
+## 8. 应用架构与代码结构
 
 本项目采用典型的 FastAPI 分层结构：
 
 - `app/main.py`  
-  - 应用工厂：`create_app(settings: Optional[Settings]) -> FastAPI`  
-  - 创建 FastAPI 实例、注册路由和中间件、配置生命周期管理；
-  - 提供 `main()` 启动函数，方便通过脚本或命令行启动服务。
+  - 应用工厂：`create_app(settings: Optional[Settings]) -> FastAPI`；  
+  - 注册路由和中间件，挂载 `/api/v1` 路由前缀；  
+  - 提供 `main()` 启动函数，方便通过命令行启动服务。
 
 - `app/api/v1`  
-  - `endpoints/`: 具体业务路由，例如 `testcases.py`；
+  - `endpoints/`: 具体业务路由（auth、testcases、documents）；  
   - `router.py`: 聚合 v1 版本下所有路由，并挂载在 `/api/v1`。
 
 - `app/core`  
-  - `config.py`: 使用 `pydantic-settings` 读取 `.env` 中的配置，如 PostgreSQL 连接串、服务端口等；
-  - `database.py`: 管理 SQLAlchemy AsyncEngine 和 AsyncSession，提供 `get_db` 依赖和 `close_db` 生命周期钩子。
+  - `config.py`: 使用 `pydantic-settings` 读取 `.env` 中的配置，如 PostgreSQL 连接串、服务端口、JWT 秘钥等；  
+  - `database.py`: 管理 SQLAlchemy AsyncEngine 和 AsyncSession，提供 `get_db` 依赖和 `close_db` 生命周期钩子；  
+  - `auth.py`: 实现 JWT 生成与解析。
 
 - `app/models`  
-  - ORM 模型层（当前只有 `TestCase`）。
+  - ORM 模型层（测试用例、通用文档、令牌记录等）。
 
 - `app/repositories`  
-  - 直接与数据库交互的 SQL 封装，例如 `testcase_repository`。
+  - 直接与数据库交互的 SQL 封装，如 `testcase_repository`、`document_repository`、`token_repository`。
 
 - `app/services`  
-  - 业务逻辑层，例如 `TestCaseService`，负责校验、补全字段、调用 Repository。
+  - 业务逻辑层，如 `TestCaseService`、`DocumentService`、`TokenService`，负责校验、补全字段、调用 Repository。
 
 - `tests`  
-  - 使用 `pytest` + `pytest-asyncio`；
-  - `conftest.py` 提供统一的 async 测试客户端和数据库会话 fixture；
-  - `test_testcases.py` 校验路由注册和健康检查。
-
-这种分层方式的好处：
-
-- 路由层只关心“接口协议”，业务逻辑集中在 Service；
-- Service 与 Repository 解耦，方便重构和单元测试；
-- Database 相关细节集中在 core/database，有利于未来扩展读写分离或多数据源。
+  - 使用 `pytest` + `pytest-asyncio`；  
+  - `conftest.py` 提供统一的 async 测试客户端和数据库会话 fixture。
 
 ---
 
-## 6. 环境配置与运行
+## 9. 环境配置与运行
 
-### 6.1 配置项
+### 9.1 配置项
 
 配置通过环境变量或 `.env` 文件加载，定义在：
 
-- [app/core/config.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/core/config.py#L7-L20)
+- [app/core/config.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/core/config.py)
 
 主要字段：
 
-- `pg_conn_string`  
-  PostgreSQL 连接串，例如：
+- `pg_conn_string`：PostgreSQL 连接串，例如：
+
   ```text
   postgres://user:password@host:5432/unidata?sslmode=disable
   ```
 
-- `server_port`  
-  服务端口，形如 `:8080`，启动时会自动去掉前缀冒号。
+- `server_port`：服务端口，形如 `:8080`，启动时会自动去掉前缀冒号；
+- `meili_default_url` / `meili_default_api_key`：默认 Meilisearch 端点与密钥；
+- `jwt_secret`：JWT 签名秘钥（HS256）；
+- `gquan_base_url` / `gquan_app_name`：用于发送 token 审核通知的内部系统配置。
 
-### 6.2 本地启动
+### 9.2 本地启动
 
-在仓库根目录：
+推荐使用 [uv](https://github.com/astral-sh/uv) 管理 Python 环境与依赖：
 
 ```bash
 cd UniData
+
+# 1. 创建虚拟环境
+uv venv
+
+# 2. 激活虚拟环境
+source .venv/bin/activate
+
+# 3. 安装依赖
+uv pip install -e .
+```
+
+启动服务：
+
+```bash
 python main.py
 ```
 
@@ -277,11 +327,10 @@ python main.py
 也可以使用 uvicorn 直接启动：
 
 ```bash
-cd UniData
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
 ```
 
-### 6.3 运行测试
+### 9.3 运行测试
 
 确保 Python 依赖已安装（推荐使用虚拟环境）：
 
@@ -293,14 +342,14 @@ pytest
 ```
 
 测试会使用 `Settings.pg_conn_string` 指向的 PostgreSQL，  
-并在测试会话中自动创建 `test_cases` 表进行验证。
+并在测试会话中自动创建相关表进行验证。
 
 > 建议为测试准备一个单独的数据库（例如 `unidata_test`），  
 > 以避免测试数据污染生产库。
 
 ---
 
-## 7. 与 Debezium / Meilisearch 的衔接
+## 10. 与 Debezium / Meilisearch 的衔接
 
 本项目只负责将数据稳定、规范地写入 PostgreSQL。  
 CDC 与搜索同步的部分在仓库其他目录中实现：
@@ -320,11 +369,11 @@ CDC 与搜索同步的部分在仓库其他目录中实现：
 
 ---
 
-## 8. 后续可以扩展的方向
+## 11. 后续可以扩展的方向
 
 - 增加更多业务字段的校验与枚举约束（如类型、状态、所属项目等）；
-- 为 `/api/v1/testcases` 增加查询接口，支持按条件直接读取 PostgreSQL 中的数据；
-- 加入鉴权机制，限制谁可以写入或删除 Test Case；
-- 引入 OpenAPI 文档示例与前后端协作规范。
+- 为 `/api/v1/data` 增加查询/统计接口，支持按条件直接读取 PostgreSQL 中的数据；
+- 细化 scopes 与权限模型，限制不同应用/角色可以操作的集合与字段；
+- 引入更完整的 OpenAPI 示例与前后端协作规范。
 
-当前版本已经可以在真实 PostgreSQL 环境下稳定运行，并与 Debezium + Meilisearch 架构顺畅对接，适合作为异地搜索架构中的“写入入口服务”。
+当前版本已经可以在真实 PostgreSQL 环境下稳定运行，并与 Debezium + Meilisearch 架构顺畅对接，适合作为异地搜索架构中的“写入入口服务”与“应用级凭证中心”。

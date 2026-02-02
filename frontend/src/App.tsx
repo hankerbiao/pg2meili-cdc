@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
 import SearchTester from './components/SearchTester'
 import BrowserSearchPage from './components/BrowserSearchPage'
+import DocumentManager from './components/DocumentManager'
 
-type ViewMode = 'tester' | 'browser'
+type ViewMode = 'tester' | 'browser' | 'manager'
 
 function App() {
   const [mode, setMode] = useState<ViewMode>('tester')
@@ -22,8 +23,16 @@ function App() {
         >
           浏览器模式
         </button>
+        <button
+          className={mode === 'manager' ? 'top-nav-btn active' : 'top-nav-btn'}
+          onClick={() => setMode('manager')}
+        >
+          文档管理
+        </button>
       </div>
-      {mode === 'tester' ? <SearchTester /> : <BrowserSearchPage />}
+      {mode === 'tester' && <SearchTester />}
+      {mode === 'browser' && <BrowserSearchPage />}
+      {mode === 'manager' && <DocumentManager />}
     </div>
   )
 }

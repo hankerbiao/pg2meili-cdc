@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { search, PRESET_SCENARIOS, SearchRequest, SearchResponse, SearchHit } from '../api'
 
-const DEFAULT_TOKEN = ''
+const DEFAULT_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6ImxpYmlhb190ZXN0Iiwic2NvcGVzIjpbXSwiZXhwIjoxODMwMzU1MTk4fQ.HKsX8kU5UHpZfWbw-bxivup21jnON2k6zXw6LpHNtoY'
 
 const buildCurl = (baseUrl: string, token: string, body: string): string => {
   const url = `${baseUrl}/search`
@@ -57,7 +57,7 @@ const parseCurlCommand = (cmd: string) => {
 }
 
 const SearchTester: React.FC = () => {
-  const [baseUrl, setBaseUrl] = useState('http://10.2.48.121:8091')
+  const [baseUrl, setBaseUrl] = useState('http://10.32.129.188:8091')
   const [token, setToken] = useState(DEFAULT_TOKEN)
   const [selectedScenario, setSelectedScenario] = useState<number>(0)
   const [customRequest, setCustomRequest] = useState<string>(
