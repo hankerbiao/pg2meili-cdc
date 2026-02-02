@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"distributed-search/meilisearch-sync-service/internal/config"
-	"distributed-search/meilisearch-sync-service/internal/handler"
-	"distributed-search/meilisearch-sync-service/internal/logger"
-	"distributed-search/meilisearch-sync-service/internal/service"
+	"meilisearch-sync-service/internal/config"
+	"meilisearch-sync-service/internal/handler"
+	"meilisearch-sync-service/internal/logger"
+	"meilisearch-sync-service/internal/service"
 
 	"github.com/joho/godotenv"
 	"github.com/meilisearch/meilisearch-go"

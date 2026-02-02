@@ -86,12 +86,15 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     @app.get("/app/register", include_in_schema=False)
     async def app_register_page():
-        html_path = project_root / "app_token_register.html"
+        # HTML 模板文件位于 app/templates 目录下
+        templates_dir = Path(__file__).resolve().parent / "templates"
+        html_path = templates_dir / "app_token_register.html"
         return FileResponse(html_path)
 
     @app.get("/app/review", include_in_schema=False)
     async def app_review_page():
-        html_path = project_root / "app_token_review.html"
+        templates_dir = Path(__file__).resolve().parent / "templates"
+        html_path = templates_dir / "app_token_review.html"
         return FileResponse(html_path)
 
     # 简单的健康检查端点，方便 K8s/监控系统探测服务状态

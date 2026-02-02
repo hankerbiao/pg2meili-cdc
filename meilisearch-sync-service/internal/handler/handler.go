@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"distributed-search/meilisearch-sync-service/internal/auth"
-	"distributed-search/meilisearch-sync-service/internal/config"
+	"meilisearch-sync-service/internal/auth"
+	"meilisearch-sync-service/internal/config"
 )
 
 func NewSearchHandler(cfg config.AppConfig) http.HandlerFunc {

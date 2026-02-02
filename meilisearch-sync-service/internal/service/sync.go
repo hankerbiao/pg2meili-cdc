@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"log"
 
-	"distributed-search/meilisearch-sync-service/internal/config"
-	"distributed-search/meilisearch-sync-service/internal/logger"
-	"distributed-search/meilisearch-sync-service/internal/model"
+	"meilisearch-sync-service/internal/config"
+	"meilisearch-sync-service/internal/logger"
+	"meilisearch-sync-service/internal/model"
 
 	"github.com/meilisearch/meilisearch-go"
 	"github.com/twmb/franz-go/pkg/kgo"

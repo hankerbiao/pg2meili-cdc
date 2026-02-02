@@ -1,4 +1,4 @@
-module distributed-search
+module meilisearch-sync-service
 
 go 1.25.4
 

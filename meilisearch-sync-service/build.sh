@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 1. 切换到 meilisearch-sync-service 目录
+# 1. 切换到脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_DIR="$SCRIPT_DIR/meilisearch-sync-service"
+APP_DIR="$SCRIPT_DIR"
 
 cd "$APP_DIR"
 
