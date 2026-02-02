@@ -10,21 +10,30 @@ const BrowserSearchPage: React.FC = () => {
   const [query, setQuery] = useState('电源')
   const [filter, setFilter] = useState('')
   const [highlight, setHighlight] = useState(false)
+  const [collection, setCollection] = useState('testcases')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [response, setResponse] = useState<SearchResponse | null>(null)
   const [showCurl, setShowCurl] = useState(false)
 
   const buildCurl = (): string => {
-    const url = `${baseUrl}/search`
+    let url = `${baseUrl.replace(/\/$/, '')}/search`
     const displayToken = token.trim() || '<YOUR_JWT>'
     
     const req: SearchRequest = {}
     if (query.trim()) req.q = query.trim()
     if (highlight) req.attributesToHighlight = ['*']
     if (filter.trim()) req.filter = [filter.trim()]
+    if (collection.trim()) req.collection = collection.trim()
 
-    let prettyBody = JSON.stringify(req, null, 2)
+    const { collection: coll, ...body } = req
+    if (coll) {
+      const encoded = encodeURIComponent(coll)
+      const sep = url.includes('?') ? '&' : '?'
+      url = `${url}${sep}collection=${encoded}`
+    }
+
+    let prettyBody = JSON.stringify(body, null, 2)
     const safeBody = prettyBody.replace(/'/g, `'\"'\"'`)
     
     return [
@@ -48,6 +57,9 @@ const BrowserSearchPage: React.FC = () => {
       }
       if (filter.trim()) {
         req.filter = [filter.trim()]
+      }
+      if (collection.trim()) {
+        req.collection = collection.trim()
       }
       const result = await search(baseUrl, token, req)
       setResponse(result)
@@ -163,6 +175,16 @@ const BrowserSearchPage: React.FC = () => {
         </button>
       </div>
       <div className="browser-subbar">
+        <div className="browser-subfield">
+          <span>Collection</span>
+          <input
+            className="browser-sub-input"
+            placeholder='例如：testcases'
+            value={collection}
+            onChange={(e) => setCollection(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+        </div>
         <div className="browser-subfield">
           <span>过滤条件</span>
           <input

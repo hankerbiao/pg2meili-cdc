@@ -1,10 +1,10 @@
-// 搜索 API 类型定义
 export interface SearchRequest {
   q?: string
   offset?: number
   limit?: number
   filter?: string | string[]
   attributesToHighlight?: string[]
+   collection?: string
 }
 
 export interface SearchHit {
@@ -39,27 +39,27 @@ export const PRESET_SCENARIOS: PresetScenario[] = [
   {
     name: '简单关键字搜索',
     description: '使用基础关键字进行搜索，查找包含"电源"的测试用例',
-    request: { q: '电源' }
+    request: { q: '电源', collection: 'testcases' }
   },
   {
     name: '高亮搜索',
     description: '搜索并返回高亮结果，突出显示匹配的关键字',
-    request: { q: '电源', attributesToHighlight: ['*'] }
+    request: { q: '电源', attributesToHighlight: ['*'], collection: 'testcases' }
   },
   {
     name: '分页搜索',
     description: '分页获取搜索结果，每页5条',
-    request: { q: '电源', offset: 0, limit: 5 }
+    request: { q: '电源', offset: 0, limit: 5, collection: 'testcases' }
   },
   {
     name: '多标签过滤',
     description: '搜索包含"关机"的用例，过滤标签为"AMD"或"Intel"',
-    request: { q: '关机', filter: ['tags = "AMD" OR tags = "Intel"'] }
+    request: { q: '关机', filter: ['tags = "AMD" OR tags = "Intel"'], collection: 'testcases' }
   },
   {
     name: '空搜索获取全部',
     description: '不指定关键字，获取最近的测试用例',
-    request: { limit: 10 }
+    request: { limit: 10, collection: 'testcases' }
   }
 ]
 
@@ -69,13 +69,21 @@ export async function search(
   token: string,
   request: SearchRequest
 ): Promise<SearchResponse> {
-  const response = await fetch(`${baseUrl}/search`, {
+  const { collection, ...payload } = request
+  let url = `${baseUrl.replace(/\/$/, '')}/search`
+  if (collection && collection.trim()) {
+    const encoded = encodeURIComponent(collection.trim())
+    const sep = url.includes('?') ? '&' : '?'
+    url = `${url}${sep}collection=${encoded}`
+  }
+
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(request),
+    body: JSON.stringify(payload),
   })
 
   if (!response.ok) {

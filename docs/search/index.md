@@ -45,6 +45,36 @@ curl -X GET "http://localhost:8080/api/v1/data/indexes?limit=100" \
   -H "Authorization: Bearer <YOUR_JWT>"
 ```
 
+### 1.2 删除索引（逻辑删除集合内所有文档）
+
+- **方法**：`DELETE`
+- **路径**：`/api/v1/data/indexes/{collection}`
+- **说明**：删除当前应用下指定 collection 对应的索引，将该集合内所有文档的 `is_delete` 标记为 `true`。
+- **鉴权方式**：`Authorization: Bearer <JWT>`
+
+请求参数：
+
+| 名称 | 位置 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- | :--- |
+| `collection` | path | string | 是 | 要删除的集合名称，例如 `requirements`、`testcases` |
+
+响应体示例：
+
+```json
+{
+  "status": "success",
+  "collection": "requirements",
+  "deleted_count": 128
+}
+```
+
+示例请求（curl）：
+
+```bash
+curl -X DELETE "http://localhost:8080/api/v1/data/indexes/requirements" \
+  -H "Authorization: Bearer <YOUR_JWT>"
+```
+
 ---
 
 ## 2. 搜索接口（Search Service）

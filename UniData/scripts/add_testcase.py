@@ -51,7 +51,7 @@ except ImportError:
 def create_test_case(base_url, index_uid, test_case_data):
     """通过 API 创建测试用例"""
     # 1. 生成 Token
-    token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6IjEyMzEyMyIsInNjb3BlcyI6W10sImV4cCI6MTc2OTg3NTE5OH0.f8YQTGnu7xMe67-MIENyg2DDKVR5mUWIeUweCq4qkRk"
+    token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6ImxpYmlhb190ZXN0Iiwic2NvcGVzIjpbXSwiZXhwIjoxODMwMzU1MTk4fQ.HKsX8kU5UHpZfWbw-bxivup21jnON2k6zXw6LpHNtoY"
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -59,7 +59,7 @@ def create_test_case(base_url, index_uid, test_case_data):
     }
 
     # 2. 发送请求
-    url = f"{base_url}/api/v1/testcases"
+    url = f"{base_url}/api/v1/data/testcases"
 
     print(f"发送 POST 请求到: {url}")
     print(f"请求体: {json.dumps(test_case_data, indent=2, ensure_ascii=False)}")

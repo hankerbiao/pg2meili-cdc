@@ -114,5 +114,29 @@ class DocumentRepository:
         rows = result.all()
         return [row[0] for row in rows]
 
+    @staticmethod
+    async def soft_delete_collection_for_app(
+        db: AsyncSession,
+        collection: str,
+        app_name: str,
+    ) -> int:
+        query = select(Document).where(
+            Document.collection == collection,
+            Document.app_name == app_name,
+            Document.is_delete == False,
+        )
+        result = await db.execute(query)
+        docs = result.scalars().all()
+        if not docs:
+            return 0
+
+        now = datetime.utcnow()
+        for doc in docs:
+            doc.is_delete = True
+            doc.updated_at = now
+
+        await db.flush()
+        return len(docs)
+
 
 document_repository = DocumentRepository()

@@ -114,5 +114,32 @@ class DocumentService:
             offset=offset,
         )
 
+    @staticmethod
+    async def delete_collection_for_app(
+        db: AsyncSession,
+        collection: str,
+        app_name: str,
+    ) -> int:
+        try:
+            deleted_count = await document_repository.soft_delete_collection_for_app(
+                db=db,
+                collection=collection,
+                app_name=app_name,
+            )
+            if deleted_count == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="集合不存在或已为空",
+                )
+            return deleted_count
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"删除集合失败 collection={collection} app_name={app_name}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="数据库错误",
+            )
+
 
 document_service = DocumentService()
