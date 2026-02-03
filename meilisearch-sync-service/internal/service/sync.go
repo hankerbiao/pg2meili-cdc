@@ -22,6 +22,7 @@ func Run(ctx context.Context, client *kgo.Client, meiliClient meilisearch.Servic
 			return ctx.Err()
 		}
 
+		// 从 Kafka 拉取一批消息，如果有错误先记录日志再继续下一轮
 		fetches := client.PollFetches(ctx)
 		if errs := fetches.Errors(); len(errs) > 0 {
 			if ctx.Err() != nil {
@@ -33,6 +34,7 @@ func Run(ctx context.Context, client *kgo.Client, meiliClient meilisearch.Servic
 			continue
 		}
 
+		// 遍历本批次消息，同时累积记录用于后续提交 offset
 		iter := fetches.RecordIter()
 		var records []*kgo.Record
 
@@ -40,6 +42,7 @@ func Run(ctx context.Context, client *kgo.Client, meiliClient meilisearch.Servic
 			record := iter.Next()
 			records = append(records, record)
 
+			// 将 Debezium 原始消息解析为操作类型、文档内容和 id
 			op, id, doc, delID, err := processDebeziumMessage(record.Value)
 			if err != nil {
 				log.Printf("处理消息出错: %v", err)
@@ -48,6 +51,7 @@ func Run(ctx context.Context, client *kgo.Client, meiliClient meilisearch.Servic
 
 			logger.DebugLogf("收到消息 topic=%s partition=%d offset=%d op=%s id=%s delID=%s", record.Topic, record.Partition, record.Offset, op, id, delID)
 
+			// 根据 Debezium 的操作类型执行 upsert 或删除
 			switch op {
 			case "c", "r", "u":
 				indexName := ResolveIndex(doc)
@@ -66,6 +70,7 @@ func Run(ctx context.Context, client *kgo.Client, meiliClient meilisearch.Servic
 					continue
 				}
 
+				// 如果文档被标记为删除，则触发物理删除
 				if isDeleted(doc) {
 					logger.DebugLogf("执行标记删除触发物理删除 index=%s id=%s doc=%v", indexName, id, doc)
 					_, err := meiliClient.Index(indexName).DeleteDocument(id, nil)
@@ -75,12 +80,14 @@ func Run(ctx context.Context, client *kgo.Client, meiliClient meilisearch.Servic
 						log.Printf("[delete-by-flag] Meilisearch 索引=%s id=%s", indexName, id)
 					}
 				} else {
+					// 写入前移除路由相关字段，避免污染索引 schema
 					if doc != nil {
 						delete(doc, "app_name")
 						delete(doc, "collection")
 						delete(doc, "is_delete")
 					}
 					logger.DebugLogf("执行插入/更新 index=%s id=%s doc=%v", indexName, id, doc)
+					// 使用主键 id 做 upsert，确保同一文档主键一致
 					_, err := meiliClient.Index(indexName).AddDocuments(
 						[]map[string]interface{}{doc},
 						&meilisearch.DocumentOptions{PrimaryKey: meilisearch.StringPtr("id")},
@@ -107,6 +114,7 @@ func Run(ctx context.Context, client *kgo.Client, meiliClient meilisearch.Servic
 					log.Printf("跳过删除: app_name 或 collection 为空 topic=%s partition=%d offset=%d app_name=%s collection=%s doc=%v", record.Topic, record.Partition, record.Offset, appNameVal, collectionVal, doc)
 					continue
 				}
+				// 删除事件使用 before 中的 id 执行硬删除
 				logger.DebugLogf("执行硬删除 index=%s id=%s doc=%v", indexName, delID, doc)
 				_, err := meiliClient.Index(indexName).DeleteDocument(delID, nil)
 				if err != nil {
@@ -123,7 +131,9 @@ func Run(ctx context.Context, client *kgo.Client, meiliClient meilisearch.Servic
 	}
 }
 
+// processDebeziumMessage 解析 Debezium 消息，抽取操作类型、文档内容和主键 id
 func processDebeziumMessage(value []byte) (string, string, map[string]interface{}, string, error) {
+	// Debezium 可能发送空消息或 "null"，表示该偏移无有效数据
 	trimmed := bytes.TrimSpace(value)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return "", "", nil, "", nil
@@ -136,6 +146,8 @@ func processDebeziumMessage(value []byte) (string, string, map[string]interface{
 
 	payload := msg.Payload
 
+	// 根据 Debezium 的 op 字段进行分支：
+	// c: create, r: read(快照), u: update, d: delete
 	switch payload.Op {
 	case "c", "r", "u":
 		doc, id, err := extractDocument(payload)
@@ -147,6 +159,7 @@ func processDebeziumMessage(value []byte) (string, string, map[string]interface{
 		}
 		return payload.Op, id, doc, "", nil
 	case "d":
+		// 删除操作从 before 中取 id 作为主键
 		if payload.Before == nil {
 			return "", "", nil, "", fmt.Errorf("删除操作缺少 before 字段")
 		}
@@ -162,6 +175,7 @@ func processDebeziumMessage(value []byte) (string, string, map[string]interface{
 	}
 }
 
+// isDeleted 根据 is_delete 字段判断文档是否被标记删除，兼容多种类型
 func isDeleted(doc map[string]interface{}) bool {
 	if doc == nil {
 		return false
@@ -176,6 +190,7 @@ func isDeleted(doc map[string]interface{}) bool {
 	return false
 }
 
+// ResolveIndex 根据文档中的 app_name 和 collection 计算索引名称
 func ResolveIndex(doc map[string]interface{}) string {
 	if doc == nil {
 		return ""
@@ -198,6 +213,7 @@ func ResolveIndex(doc map[string]interface{}) string {
 	return appName + "_" + collection
 }
 
+// extractDocument 从 DebeziumPayload 中抽取实际业务文档和主键 id
 func extractDocument(p model.DebeziumPayload) (map[string]interface{}, string, error) {
 	if p.After == nil {
 		return nil, "", fmt.Errorf("After 字段为空")
@@ -207,6 +223,7 @@ func extractDocument(p model.DebeziumPayload) (map[string]interface{}, string, e
 
 	var doc map[string]interface{}
 
+	// 支持 payload 嵌套字段：payload 可以是字符串（再包一层 JSON）或对象
 	if raw, ok := base["payload"]; ok {
 		switch v := raw.(type) {
 		case string:
@@ -219,6 +236,7 @@ func extractDocument(p model.DebeziumPayload) (map[string]interface{}, string, e
 			doc = map[string]interface{}{}
 		}
 	} else {
+		// 兼容 doc 字段或直接使用 After 作为文档
 		if inner, ok := base["doc"].(map[string]interface{}); ok {
 			doc = inner
 		} else {
@@ -233,10 +251,12 @@ func extractDocument(p model.DebeziumPayload) (map[string]interface{}, string, e
 		id = fmt.Sprint(v)
 	}
 
+	// 确保最终文档中一定带有 id 字段
 	if id != "" {
 		doc["id"] = id
 	}
 
+	// 保留路由与删除标记字段，供上层逻辑判断和路由
 	if v, ok := base["is_delete"]; ok {
 		doc["is_delete"] = v
 	}
