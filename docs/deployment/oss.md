@@ -19,9 +19,13 @@ max_wal_senders = 5
 
 ### 1.2 修改访问权限 (`pg_hba.conf`)
 
+注意：以下示例仅适用于测试环境。生产环境请改为内网网段或指定应用主机 IP。
+
 ```text
-# 允许 Docker 网段访问
-host    all             all             0.0.0.0/0               scram-sha-256
+# 允许内网网段访问（示例）
+host    all             all             10.0.0.0/8              scram-sha-256
+# 或者指定应用主机（示例）
+# host  all             all             10.12.34.56/32          scram-sha-256
 ```
 
 ### 1.3 重启验证
@@ -34,6 +38,8 @@ psql -U postgres -c "SHOW wal_level;" # 结果应为 logical
 ## 2. Kafka & Debezium (消息中间件)
 
 使用 Docker Compose 部署 Zookeeper、Kafka 和 Debezium Connect。
+
+建议固定版本以保证环境可复现（示例使用 Debezium 2.4 组合）。
 
 ### 2.1 `docker-compose.yml`
 
@@ -75,13 +81,15 @@ docker-compose up -d
 
 部署 Meilisearch 服务端及其管理控制台。
 
+建议固定版本以保证环境可复现（示例使用 `getmeili/meilisearch:v1.8`）。
+
 ### 3.1 启动服务端
 
 ```bash
 docker run -d -p 7700:7700 \
   -v $(pwd)/meili_data:/meili_data \
   --name meilisearch \
-  getmeili/meilisearch:latest \
+  getmeili/meilisearch:v1.8 \
   meilisearch --master-key="my_master_key"
 ```
 

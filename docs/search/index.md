@@ -38,12 +38,16 @@
 ]
 ```
 
-示例请求（curl）：
+示例请求：
 
-```bash
-curl -X GET "http://localhost:8080/api/v1/data/indexes?limit=100" \
+::: code-group
+
+```bash [curl]
+curl -X GET "http://localhost:8080/api/v1/index/indexes?limit=100" \
   -H "Authorization: Bearer <YOUR_JWT>"
 ```
+
+:::
 
 ### 1.2 删除索引（逻辑删除集合内所有文档）
 
@@ -68,12 +72,16 @@ curl -X GET "http://localhost:8080/api/v1/data/indexes?limit=100" \
 }
 ```
 
-示例请求（curl）：
+示例请求：
 
-```bash
-curl -X DELETE "http://localhost:8080/api/v1/data/indexes/requirements" \
+::: code-group
+
+```bash [curl]
+curl -X DELETE "http://localhost:8080/api/v1/index/indexes/requirements" \
   -H "Authorization: Bearer <YOUR_JWT>"
 ```
+
+:::
 
 ---
 
@@ -83,7 +91,7 @@ curl -X DELETE "http://localhost:8080/api/v1/data/indexes/requirements" \
 
 ### 2.1 接口概览
 
-- **接口地址**：`POST /search`
+- **接口地址**：`POST /search?collection={collection}`
 - **基础域名**：
   - 天津环境：`http://10.17.154.252:8091`
   - 北京环境：`http://10.32.129.188:8091`
@@ -108,8 +116,21 @@ curl -X DELETE "http://localhost:8080/api/v1/data/indexes/requirements" \
 | `limit` | integer | 否 | 返回条数 | `20` |
 | `filter` | string/array | 否 | 过滤条件 | `tags = "BMC"` |
 | `attributesToHighlight` | array | 否 | 需要高亮的字段列表 | `["*"]` |
+| `attributesToRetrieve` | array | 否 | 指定返回字段白名单 | `["id", "name", "summary"]` |
 
-说明：索引名称由后端根据 JWT 中的 `app_name` 和配置的基础索引名自动拼接，客户端无需在请求体中指定索引。
+### 2.4 查询参数
+
+| 参数 | 位置 | 类型 | 必填 | 说明 | 示例 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `collection` | query | string | 是 | 集合名称，用于定位索引 | `testcases` |
+
+### 2.5 代理行为说明
+
+说明：
+
+- `collection` 为必填查询参数，用于指定集合名称。
+- 真实索引名由后端按 `indexUID = <app_name>_<collection>` 规则拼接。
+- 请求体会透传给 Meilisearch，但服务端会自动补充 `showRankingScore: true`（如未显式提供）。
 
 ### 2.4 响应结果
 
@@ -131,10 +152,12 @@ curl -X DELETE "http://localhost:8080/api/v1/data/indexes/requirements" \
 
 ### 3.1 简单关键字搜索
 
-请求示例（curl）：
+请求示例：
 
-```bash
-curl -X POST "http://localhost:8091/search" \
+::: code-group
+
+```bash [curl]
+curl -X POST "http://localhost:8091/search?collection=testcases" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <YOUR_JWT>" \
   --data-raw '{
@@ -142,14 +165,12 @@ curl -X POST "http://localhost:8091/search" \
   }'
 ```
 
-请求示例（JavaScript，fetch）：
-
-```js
+```js [JavaScript]
 const BASE_URL = "http://localhost:8091";
 const token = "<YOUR_JWT>";
 
 async function searchSimple() {
-  const resp = await fetch(`${BASE_URL}/search`, {
+  const resp = await fetch(`${BASE_URL}/search?collection=testcases`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -167,12 +188,16 @@ async function searchSimple() {
 }
 ```
 
+:::
+
 ### 3.2 高亮搜索
 
-请求示例（curl）：
+请求示例：
 
-```bash
-curl -X POST "http://localhost:8091/search" \
+::: code-group
+
+```bash [curl]
+curl -X POST "http://localhost:8091/search?collection=testcases" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <YOUR_JWT>" \
   --data-raw '{
@@ -181,11 +206,21 @@ curl -X POST "http://localhost:8091/search" \
   }'
 ```
 
-请求示例（JavaScript，fetch）：
+```bash [curl (自定义高亮标签)]
+curl -X POST "http://localhost:8091/search?collection=testcases" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <YOUR_JWT>" \
+  --data-raw '{
+    "q": "电源",
+    "attributesToHighlight": ["*"],
+    "highlightPreTag": "<mark class=\"hit\">",
+    "highlightPostTag": "</mark>"
+  }'
+```
 
-```js
+```js [JavaScript]
 async function searchWithHighlight() {
-  const resp = await fetch(`${BASE_URL}/search`, {
+  const resp = await fetch(`${BASE_URL}/search?collection=testcases`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -210,12 +245,16 @@ async function searchWithHighlight() {
 }
 ```
 
+:::
+
 ### 3.3 按标签过滤搜索
 
-请求示例（curl）：
+请求示例：
 
-```bash
-curl -X POST "http://localhost:8091/search" \
+::: code-group
+
+```bash [curl]
+curl -X POST "http://localhost:8091/search?collection=testcases" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <YOUR_JWT>" \
   --data-raw '{
@@ -224,11 +263,9 @@ curl -X POST "http://localhost:8091/search" \
   }'
 ```
 
-请求示例（JavaScript，fetch）：
-
-```js
+```js [JavaScript]
 async function searchFilterByTag() {
-  const resp = await fetch(`${BASE_URL}/search`, {
+  const resp = await fetch(`${BASE_URL}/search?collection=testcases`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -244,12 +281,16 @@ async function searchFilterByTag() {
 }
 ```
 
+:::
+
 ### 3.4 分页搜索
 
-请求示例（curl）：
+请求示例：
 
-```bash
-curl -X POST "http://localhost:8091/search" \
+::: code-group
+
+```bash [curl]
+curl -X POST "http://localhost:8091/search?collection=testcases" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <YOUR_JWT>" \
   --data-raw '{
@@ -259,12 +300,10 @@ curl -X POST "http://localhost:8091/search" \
   }'
 ```
 
-请求示例（JavaScript，fetch）：
-
-```js
+```js [JavaScript]
 async function searchWithPagination(page = 1, pageSize = 5) {
   const offset = (page - 1) * pageSize;
-  const resp = await fetch(`${BASE_URL}/search`, {
+  const resp = await fetch(`${BASE_URL}/search?collection=testcases`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -280,3 +319,156 @@ async function searchWithPagination(page = 1, pageSize = 5) {
   console.log(`page=${page} hits:`, data.hits);
 }
 ```
+
+:::
+
+### 3.5 排序搜索
+
+请求示例：
+
+::: code-group
+
+```bash [curl]
+curl -X POST "http://localhost:8091/search?collection=testcases" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <YOUR_JWT>" \
+  --data-raw '{
+    "q": "电源",
+    "sort": ["updated_at:desc"]
+  }'
+```
+
+```js [JavaScript]
+async function searchWithSort() {
+  const resp = await fetch(`${BASE_URL}/search?collection=testcases`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      q: "电源",
+      sort: ["updated_at:desc"],
+    }),
+  });
+  const data = await resp.json();
+  console.log("hits:", data.hits);
+}
+```
+
+:::
+
+### 3.6 多条件过滤搜索
+
+请求示例：
+
+::: code-group
+
+```bash [curl]
+curl -X POST "http://localhost:8091/search?collection=testcases" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <YOUR_JWT>" \
+  --data-raw '{
+    "q": "电源",
+    "filter": [
+      "tags = \"BMC\"",
+      "status = \"open\""
+    ]
+  }'
+```
+
+```js [JavaScript]
+async function searchWithMultiFilter() {
+  const resp = await fetch(`${BASE_URL}/search?collection=testcases`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      q: "电源",
+      filter: ['tags = "BMC"', 'status = "open"'],
+    }),
+  });
+  const data = await resp.json();
+  console.log("hits:", data.hits);
+}
+```
+
+:::
+
+### 3.7 返回字段与摘要裁剪
+
+请求示例：
+
+::: code-group
+
+```bash [curl]
+curl -X POST "http://localhost:8091/search?collection=testcases" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <YOUR_JWT>" \
+  --data-raw '{
+    "q": "电源",
+    "attributesToRetrieve": ["id", "name", "summary", "tags"],
+    "attributesToCrop": ["summary"],
+    "cropLength": 60
+  }'
+```
+
+```js [JavaScript]
+async function searchWithRetrieveAndCrop() {
+  const resp = await fetch(`${BASE_URL}/search?collection=testcases`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      q: "电源",
+      attributesToRetrieve: ["id", "name", "summary", "tags"],
+      attributesToCrop: ["summary"],
+      cropLength: 60,
+    }),
+  });
+  const data = await resp.json();
+  console.log("hits:", data.hits);
+}
+```
+
+:::
+
+### 3.8 分面统计（Facets）
+
+请求示例：
+
+::: code-group
+
+```bash [curl]
+curl -X POST "http://localhost:8091/search?collection=testcases" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <YOUR_JWT>" \
+  --data-raw '{
+    "q": "电源",
+    "facets": ["tags", "status"]
+  }'
+```
+
+```js [JavaScript]
+async function searchWithFacets() {
+  const resp = await fetch(`${BASE_URL}/search?collection=testcases`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      q: "电源",
+      facets: ["tags", "status"],
+    }),
+  });
+  const data = await resp.json();
+  console.log("facetDistribution:", data.facetDistribution);
+}
+```
+
+:::

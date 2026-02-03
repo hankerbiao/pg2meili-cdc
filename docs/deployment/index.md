@@ -30,9 +30,11 @@ UniData 的异地分布式部署涉及多个组件的协同工作。为了方便
 ```mermaid
 graph LR
     User[Client] -->|HTTP| Uni[UniData]
+    User -->|Search| Proxy[Search Proxy]
     Uni -->|Write| PG[PostgreSQL]
     PG -->|CDC| Deb[Debezium]
     Deb -->|Msg| Kafka[Kafka]
     Kafka -->|Consume| Sync[Go Sync Service]
     Sync -->|Write| Meili[Meilisearch]
+    Proxy -->|Query| Meili
 ```

@@ -110,11 +110,13 @@ const BrowserSearchPage: React.FC = () => {
   }
 
   const renderHit = (hit: SearchHit) => {
-    const name = hit._formatted?.name || hit.name
-    const summary = hit._formatted?.summary || hit.summary
-    const url = hit.ext_id
+    const name = hit._formatted?.name || hit.name || ''
+    const summary = hit._formatted?.summary || hit.summary || ''
+    const rawUrl = typeof hit.ext_id === 'string' ? hit.ext_id : ''
     // Mocking a domain for visual purpose if ext_id is just a path or ID
-    const displayUrl = url.startsWith('http') ? url : `test-case-repository > ${url}`
+    const displayUrl = rawUrl && rawUrl.startsWith('http')
+      ? rawUrl
+      : `test-case-repository > ${rawUrl || hit.id}`
     
     return (
       <div key={hit.id} className="browser-hit">

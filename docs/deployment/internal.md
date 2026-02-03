@@ -38,7 +38,17 @@ curl -s localhost:8083/connectors/meili-connector/status
 
 部署在各地区边缘节点的同步程序，负责消费 Kafka 消息并写入本地 Meilisearch。
 
-### 2.1 核心逻辑 (Golang)
+### 2.1 部署流程
+
+请使用实际服务代码进行部署与运行，入口见：
+
+- `meilisearch-sync-service/main.go`
+
+如需配置参数，请参考该服务的配置文件与环境变量说明。
+
+### 2.2 核心逻辑示例（参考）
+
+以下为逻辑示意，便于理解 CDC 消息处理流程（不代表完整可运行代码）。
 
 ```go
 package main

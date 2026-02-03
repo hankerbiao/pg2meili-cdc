@@ -17,7 +17,7 @@ UniData 是基于 FastAPI 的异地分布式搜索“生产端”服务，负责
 | 变量名 | 说明 | 示例值 |
 | :--- | :--- | :--- |
 | `PG_CONN_STRING` | PostgreSQL 连接串 | `postgres://user:pass@host:5432/unidata` |
-| `SERVER_PORT` | 服务监听端口 | `:8080` |
+| `SERVER_PORT` | 服务监听端口 | `8080` |
 | `JWT_SECRET` | JWT 签名秘钥 (HS256) | `your-secret-key` |
 | `MEILI_DEFAULT_URL` | Meilisearch 地址 | `http://localhost:7700` |
 | `MEILI_DEFAULT_API_KEY` | Meilisearch 密钥 | `my_master_key` |
