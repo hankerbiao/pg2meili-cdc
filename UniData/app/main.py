@@ -8,37 +8,57 @@ UniData 生产者服务入口。
 所有业务逻辑都在其他模块中实现（api/core/services 等），这里不做任何业务处理。
 """
 
-import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from loguru import logger
 
 from app.core.config import Settings, get_settings
 from app.core.database import close_db
+from app.core.logging import init_logging
 from app.api.v1.router import api_router
+from app.web.static import mount_static, register_pages
+
+
+def parse_cors_origins(value: str) -> list[str]:
+    """解析 CORS Origins 配置，支持逗号分隔与通配符。"""
+    if value.strip() == "*" or value.strip() == "":
+        return ["*"]
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def mask_pg_conn_string(conn: str) -> str:
+    """隐藏连接串中的密码信息，避免敏感信息泄露。"""
+    try:
+        from urllib.parse import urlsplit, urlunsplit
+
+        parts = urlsplit(conn)
+        if "@" not in parts.netloc:
+            return conn
+        userinfo, hostinfo = parts.netloc.split("@", 1)
+        if ":" in userinfo:
+            user, _ = userinfo.split(":", 1)
+            userinfo = f"{user}:***"
+        return urlunsplit((parts.scheme, f"{userinfo}@{hostinfo}", parts.path, parts.query, parts.fragment))
+    except Exception:
+        return conn
 
 
 def create_app(settings: Optional[Settings] = None) -> FastAPI:
     """创建并配置 FastAPI 应用。
 
     - 读取配置（数据库连接、端口等）
-    - 配置全局日志格式
+    - 组装应用组件（中间件/路由/页面）
     - 注册生命周期钩子（启动/关闭时打印日志与释放资源）
     - 注册中间件与路由
     """
     if settings is None:
         settings = get_settings()
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-    logger = logging.getLogger(__name__)
+    # 保证在 uvicorn 直接加载 app 时也有日志输出
+    init_logging(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -47,8 +67,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         在这里打印关键信息，便于排查环境问题，同时在应用退出时
         负责关闭数据库连接等共享资源。
         """
-        logger.info(f"PostgreSQL 连接: {settings.pg_conn_string}")
-        logger.info(f"服务端口: {settings.server_port}")
+        logger.info("PostgreSQL 连接: {}", mask_pg_conn_string(settings.pg_conn_string))
+        logger.info("服务端口: {}", settings.server_port)
 
         # 应用运行期
         yield
@@ -70,7 +90,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     # 当前放开所有来源，方便本地及多环境联调，生产环境可以按需收紧
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=parse_cors_origins(settings.cors_allow_origins),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -79,23 +99,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     # 挂载 API v1 的所有业务路由到统一前缀 /api/v1
     app.include_router(api_router, prefix="/api/v1")
 
-    project_root = Path(__file__).resolve().parents[2]
-    libs_dir = project_root / "libs"
-    if libs_dir.exists():
-        app.mount("/libs", StaticFiles(directory=libs_dir), name="libs")
-
-    @app.get("/app/register", include_in_schema=False)
-    async def app_register_page():
-        # HTML 模板文件位于 app/templates 目录下
-        templates_dir = Path(__file__).resolve().parent / "templates"
-        html_path = templates_dir / "app_token_register.html"
-        return FileResponse(html_path)
-
-    @app.get("/app/review", include_in_schema=False)
-    async def app_review_page():
-        templates_dir = Path(__file__).resolve().parent / "templates"
-        html_path = templates_dir / "app_token_review.html"
-        return FileResponse(html_path)
+    mount_static(app)
+    register_pages(app)
 
     # 简单的健康检查端点，方便 K8s/监控系统探测服务状态
     @app.get("/health", tags=["health"])
@@ -117,6 +122,7 @@ def main():
     """
     import uvicorn
 
+    init_logging(get_settings())
     settings = get_settings()
 
     uvicorn.run(

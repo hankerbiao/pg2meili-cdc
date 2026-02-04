@@ -13,6 +13,18 @@ class Settings(BaseSettings):
     # 服务端口
     server_port: str = ":8080"
 
+    # CORS 配置，逗号分隔。使用 "*" 表示允许所有来源
+    cors_allow_origins: str = "*"
+
+    # 日志配置
+    log_level: str = "INFO"
+    log_dir: str = "logs"
+    log_rotation: str = "100 MB"
+    log_retention: str = "14 days"
+    log_backtrace: bool = False
+    log_diagnose: bool = False
+    log_json: bool = False
+
     # 默认 Meilisearch 端点配置（可选）
     meili_default_url: Optional[str] = ""
     meili_default_api_key: Optional[str] = ""
