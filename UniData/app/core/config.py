@@ -20,6 +20,20 @@ class Settings(BaseSettings):
     # JWT 签名秘钥（HS256）
     jwt_secret: str = "dYAj4kPbhIdCM35XhcDW9HJX53xT3iux"
 
+    # Kafka 配置
+    kafka_bootstrap_servers: str = "http://10.17.154.252:9092"  # Kafka 集群地址，格式如 "host1:9092,host2:9092"
+    kafka_client_id: str = "unidata-producer"  # 客户端标识符，用于区分不同的生产者
+    kafka_security_protocol: str = "PLAINTEXT"  # 安全协议，可选 PLAINTEXT, SASL_PLAINTEXT, SASL_SSL, SSL
+    kafka_sasl_mechanism: Optional[str] = None  # SASL 认证机制，如 PLAIN, SCRAM-SHA-256 等
+    kafka_sasl_username: Optional[str] = None  # SASL 认证用户名
+    kafka_sasl_password: Optional[str] = None  # SASL 认证密码
+    kafka_acks: str = "all"  # 消息确认机制：'0'(不等待), '1'(Leader确认), 'all'(ISR全部确认)
+    kafka_retries: int = 3  # 发送失败重试次数
+    kafka_linger_ms: int = 10  # 批量发送延迟时间(ms)，增加吞吐量但增加延迟
+    kafka_batch_size: int = 16384  # 批量发送大小(bytes)，达到此大小或 linger_ms 超时触发发送
+    kafka_request_timeout_ms: int = 30000  # 请求超时时间(ms)
+    kafka_meili_command_topic: str = "meili.commands"  # Meilisearch 指令专用 Topic
+
     gquan_base_url: Optional[str] = "http://10.32.129.1/springboard_v3"
     gquan_app_name: Optional[str] = ""
 

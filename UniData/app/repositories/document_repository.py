@@ -111,7 +111,6 @@ class DocumentRepository:
             .offset(offset)
         )
         result = await db.execute(query)
-        print(result)
         rows = result.all()
         return [row[0] for row in rows]
 

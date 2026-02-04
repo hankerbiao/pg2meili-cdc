@@ -9,9 +9,11 @@ import (
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 )
 
+// debugEnabled 控制是否输出 Debug 日志。
 var debugEnabled bool
 
 func InitLogger(debug bool) {
+	// 初始化全局日志输出（控制台 + 滚动文件）。
 	debugEnabled = debug
 
 	logDir := "logs"
@@ -32,6 +34,7 @@ func InitLogger(debug bool) {
 }
 
 func DebugLogf(format string, v ...interface{}) {
+	// 仅在 debugEnabled 时输出调试日志，避免干扰生产日志。
 	if !debugEnabled {
 		return
 	}

@@ -15,7 +15,7 @@ export default defineConfig({
     // 导航栏
     nav: [
       { text: '首页', link: '/' },
-      { text: '使用指南', link: '/guide/index' },
+      { text: '使用指南', link: '/guide/' },
       { text: '搜索接口', link: '/search/index' },
       { text: '数据管理', link: '/management/index' },
       { text: '开发环境部署', link: '/deployment/index' }
@@ -38,7 +38,7 @@ export default defineConfig({
         {
           text: '开发指南',
           items: [
-            { text: '指南概览', link: '/guide/index' },
+            { text: '指南概览', link: '/guide/' },
             { text: '用户引导手册', link: '/guide/user-manual' },
             { text: 'Token 认证', link: '/guide/token' }
           ]

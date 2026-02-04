@@ -27,6 +27,19 @@ class DocumentBatchUpsertResponse(BaseModel):
     ids: List[str]
 
 
+class IndexSettingsRequest(BaseModel):
+    """索引设置请求（可搜索/可排序字段）。"""
+    filterableAttributes: List[str] = Field(..., description="可过滤字段列表")
+    sortableAttributes: List[str] = Field(..., description="可排序字段列表")
+
+
+class IndexSettingsResponse(BaseModel):
+    """索引设置请求响应。"""
+    status: str = "success"
+    collection: str
+    index_uid: str
+
+
 class DocumentResponse(BaseModel):
     """文档响应模式。"""
     status: str = "success"

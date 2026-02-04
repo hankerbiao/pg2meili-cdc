@@ -2,6 +2,12 @@
 
 本模块说明 UniData Producer Service 提供的索引与文档管理接口，覆盖索引列表查询、索引删除，以及通用文档的增删改查。
 
+## 术语说明（统一口径）
+
+- `collection`：业务集合名称（写入与管理的数据维度）
+- `index`：搜索索引名称（通常与 collection 对应）
+- `app_name`：应用隔离维度，不同应用的数据互相隔离
+
 ## 服务信息
 
 - **服务名称**：UniData Producer Service
@@ -19,12 +25,24 @@
 http://localhost:8080/api/v1/{resource}
 ```
 
+## 通用说明
+
+- **鉴权**：本模块接口均需要携带 `Authorization: Bearer <token>`。
+- **幂等更新**：同一 `collection` 下相同 `id` 会覆盖更新。
+- **同步延迟**：写入成功后会异步同步到搜索端，存在一定延迟（与环境负载相关）。
+
+## 命名与使用约束
+
+- `collection` 不能包含空格。
+- 单次批量写入建议控制在合理规模（如 1000 条以内），避免请求体过大导致超时。
+
 ## 接口总览
 
 | 模块 | 接口 | 方法 | 描述 |
 | :--- | :--- | :--- | :--- |
 | 索引管理 | `/api/v1/indexes` | GET | 获取当前应用下的索引列表 |
 | 索引管理 | `/api/v1/indexes/{collection}` | DELETE | 删除索引并逻辑删除集合内文档 |
+| 索引管理 | `/api/v1/indexes/{collection}/settings` | POST | 设置索引可过滤/可排序字段 |
 | 通用文档管理 | `/api/v1/data/{collection}` | POST | 创建或更新文档 |
 | 通用文档管理 | `/api/v1/data/{collection}/batch` | POST | 批量创建或更新文档 |
 | 通用文档管理 | `/api/v1/data/{collection}/{id}` | GET | 获取单个文档详情 |
@@ -86,6 +104,37 @@ curl -X DELETE "http://localhost:8080/api/v1/indexes/requirements"
   "collection": "requirements",
   "deleted_count": 128
 }
+```
+
+### 3. 设置索引可过滤/可排序字段
+
+- **接口地址**：`POST /api/v1/indexes/{collection}/settings`
+- **接口说明**：设置索引的可过滤与可排序字段，服务端会通过 Kafka 同步到各地 Meilisearch。
+
+#### 请求参数
+
+| 名称 | 类型 | 位置 | 必填 | 示例值 | 说明 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `collection` | string | Path | 是 | `movies` | 集合名称 |
+| `filterableAttributes` | string[] | Body | 是 | `["genre", "director"]` | 可过滤字段 |
+| `sortableAttributes` | string[] | Body | 是 | `["release_date"]` | 可排序字段 |
+
+**请求示例**：
+
+```bash
+curl -X POST "http://localhost:8080/api/v1/indexes/testcases/settings" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <YOUR_JWT>" \
+  -d '{
+    "filterableAttributes": ["author"],
+    "sortableAttributes": ["author"]
+  }'
+```
+
+#### 返回结果
+
+```json
+{"status":"success","collection":"testcases","index_uid":"libiao_testcases"}
 ```
 
 ---
@@ -255,3 +304,27 @@ curl -X GET "http://localhost:8080/api/v1/data/testcases?limit=10&offset=0"
 #### 返回结果
 
 返回一个文档数组，每个元素与 **获取文档详情** 中返回格式类似。
+
+---
+
+## 错误处理与常见状态码
+
+### 常见 HTTP 状态码
+
+| 状态码 | 说明 | 场景示例 |
+| :--- | :--- | :--- |
+| 200 | 请求成功 | 查询类接口调用成功 |
+| 201 | 创建成功 | 创建 / 更新文档成功 |
+| 400 | 请求参数错误 | 缺少必填字段、JSON 解析失败等 |
+| 401 | 未认证或 Token 无效 | 缺少或错误的 Authorization 头 |
+| 403 | 无权限 | 当前应用无访问权限 |
+| 404 | 资源不存在 | 文档或集合不存在 |
+| 500 | 服务端错误 | 未捕获异常、数据库异常等 |
+
+### 错误返回示例
+
+```json
+{
+  "detail": "错误信息"
+}
+```

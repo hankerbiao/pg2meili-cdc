@@ -8,14 +8,16 @@ import (
 // AppConfig 定义了服务运行所需的所有配置项
 // 配置通过环境变量读取，支持默认值配置
 type AppConfig struct {
-	Brokers     []string // Kafka 集群地址列表，多个地址用逗号分隔
-	Topics      []string // 需要订阅的 Kafka Topic 列表，用于消费 Debezium CDC 消息
-	GroupID     string   // Kafka 消费者组 ID，同一组内的消费者会协同消费分区
-	MeiliHost   string   // Meilisearch 服务地址，格式如 http://localhost:7700
-	MeiliAPIKey string   // Meilisearch API 密钥，为空时表示无需认证
-	Debug       bool
-	JWTSecret   string
-	HTTPAddr    string
+	Brokers      []string // Kafka 集群地址列表，多个地址用逗号分隔
+	Topics       []string // 需要订阅的 Kafka Topic 列表（通用）
+	CommandTopic string   // Meilisearch 设置命令 topic
+	DLQTopic     string   // 失败消息 DLQ topic
+	GroupID      string   // Kafka 消费者组 ID，同一组内的消费者会协同消费分区
+	MeiliHost    string   // Meilisearch 服务地址，格式如 http://localhost:7700
+	MeiliAPIKey  string   // Meilisearch API 密钥，为空时表示无需认证
+	Debug        bool
+	JWTSecret    string
+	HTTPAddr     string
 }
 
 // getenv 安全地从环境变量读取配置值
@@ -28,19 +30,24 @@ func getenv(key, def string) string {
 
 // LoadConfig 从环境变量加载所有配置项
 func LoadConfig() AppConfig {
+	// 支持通过环境变量配置多类 Kafka topics。
 	brokersEnv := getenv("KAFKA_BROKERS", "10.17.154.252:9092")
 	topicEnv := getenv("KAFKA_TOPIC", "test_case.public.test_cases")
+	commandTopic := getenv("KAFKA_COMMAND_TOPIC", "meili.commands")
+	dlqTopic := getenv("KAFKA_DLQ_TOPIC", "meili.dlq")
 	debugEnv := getenv("DEBUG", "false")
 	debug := debugEnv == "1" || strings.EqualFold(debugEnv, "true")
 
 	return AppConfig{
-		Brokers:     strings.Split(brokersEnv, ","),
-		Topics:      strings.Split(topicEnv, ","),
-		GroupID:     getenv("KAFKA_GROUP_ID", "meilisearch-sync-service"),
-		MeiliHost:   getenv("MEILI_HOST", "http://10.17.154.252:7700"),
-		MeiliAPIKey: getenv("MEILI_API_KEY", ""),
-		Debug:       debug,
-		JWTSecret:   getenv("JWT_SECRET", "dYAj4kPbhIdCM35XhcDW9HJX53xT3iux"),
-		HTTPAddr:    getenv("HTTP_ADDR", ":8091"),
+		Brokers:      strings.Split(brokersEnv, ","),
+		Topics:       strings.Split(topicEnv, ","),
+		CommandTopic: commandTopic,
+		DLQTopic:     dlqTopic,
+		GroupID:      getenv("KAFKA_GROUP_ID", "meilisearch-sync-service"),
+		MeiliHost:    getenv("MEILI_HOST", "http://10.17.154.252:7700"),
+		MeiliAPIKey:  getenv("MEILI_API_KEY", ""),
+		Debug:        debug,
+		JWTSecret:    getenv("JWT_SECRET", "dYAj4kPbhIdCM35XhcDW9HJX53xT3iux"),
+		HTTPAddr:     getenv("HTTP_ADDR", ":8091"),
 	}
 }

@@ -3,20 +3,28 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"meilisearch-sync-service/internal/config"
-	"meilisearch-sync-service/internal/logger"
 	"meilisearch-sync-service/internal/model"
 
 	"github.com/meilisearch/meilisearch-go"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-// Run 是消息处理的主循环函数，负责持续消费 Kafka 消息并同步到 Meilisearch
-func Run(ctx context.Context, client *kgo.Client, meiliClient meilisearch.ServiceManager, cfg config.AppConfig) error {
+// Run 是消息处理的主循环函数，负责持续消费 Kafka 消息并同步到 Meilisearch。
+// handlers 由 App 层按 topic 注册，便于扩展不同类型的消息处理。
+func Run(
+	ctx context.Context,
+	client *kgo.Client,
+	meiliClient meilisearch.ServiceManager,
+	cfg config.AppConfig,
+	handlers map[string]RecordHandler,
+) error {
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -42,92 +50,73 @@ func Run(ctx context.Context, client *kgo.Client, meiliClient meilisearch.Servic
 			record := iter.Next()
 			records = append(records, record)
 
-			// 将 Debezium 原始消息解析为操作类型、文档内容和 id
-			op, id, doc, delID, err := processDebeziumMessage(record.Value)
-			if err != nil {
-				log.Printf("处理消息出错: %v", err)
+			handler := handlers[record.Topic]
+			if handler == nil {
+				log.Printf("未注册的 topic，跳过处理 topic=%s partition=%d offset=%d", record.Topic, record.Partition, record.Offset)
 				continue
 			}
-
-			logger.DebugLogf("收到消息 topic=%s partition=%d offset=%d op=%s id=%s delID=%s", record.Topic, record.Partition, record.Offset, op, id, delID)
-
-			// 根据 Debezium 的操作类型执行 upsert 或删除
-			switch op {
-			case "c", "r", "u":
-				indexName := ResolveIndex(doc)
-				if indexName == "" {
-					appNameVal := ""
-					collectionVal := ""
-					if doc != nil {
-						if v, ok := doc["app_name"]; ok {
-							appNameVal = fmt.Sprint(v)
-						}
-						if v, ok := doc["collection"]; ok {
-							collectionVal = fmt.Sprint(v)
-						}
-					}
-					log.Printf("跳过写入: app_name 或 collection 为空 topic=%s partition=%d offset=%d app_name=%s collection=%s doc=%v", record.Topic, record.Partition, record.Offset, appNameVal, collectionVal, doc)
-					continue
-				}
-
-				// 如果文档被标记为删除，则触发物理删除
-				if isDeleted(doc) {
-					logger.DebugLogf("执行标记删除触发物理删除 index=%s id=%s doc=%v", indexName, id, doc)
-					_, err := meiliClient.Index(indexName).DeleteDocument(id, nil)
-					if err != nil {
-						log.Printf("Meilisearch 标记删除物理删除失败 index=%s id=%s 错误=%v", indexName, id, err)
-					} else {
-						log.Printf("[delete-by-flag] Meilisearch 索引=%s id=%s", indexName, id)
-					}
-				} else {
-					// 写入前移除路由相关字段，避免污染索引 schema
-					if doc != nil {
-						delete(doc, "app_name")
-						delete(doc, "collection")
-						delete(doc, "is_delete")
-					}
-					logger.DebugLogf("执行插入/更新 index=%s id=%s doc=%v", indexName, id, doc)
-					// 使用主键 id 做 upsert，确保同一文档主键一致
-					_, err := meiliClient.Index(indexName).AddDocuments(
-						[]map[string]interface{}{doc},
-						&meilisearch.DocumentOptions{PrimaryKey: meilisearch.StringPtr("id")},
-					)
-					if err != nil {
-						log.Printf("Meilisearch 插入/更新失败 index=%s id=%s 错误=%v", indexName, id, err)
-					} else {
-						log.Printf("[upsert] Meilisearch 索引=%s id=%s", indexName, id)
-					}
-				}
-			case "d":
-				indexName := ResolveIndex(doc)
-				if indexName == "" {
-					appNameVal := ""
-					collectionVal := ""
-					if doc != nil {
-						if v, ok := doc["app_name"]; ok {
-							appNameVal = fmt.Sprint(v)
-						}
-						if v, ok := doc["collection"]; ok {
-							collectionVal = fmt.Sprint(v)
-						}
-					}
-					log.Printf("跳过删除: app_name 或 collection 为空 topic=%s partition=%d offset=%d app_name=%s collection=%s doc=%v", record.Topic, record.Partition, record.Offset, appNameVal, collectionVal, doc)
-					continue
-				}
-				// 删除事件使用 before 中的 id 执行硬删除
-				logger.DebugLogf("执行硬删除 index=%s id=%s doc=%v", indexName, delID, doc)
-				_, err := meiliClient.Index(indexName).DeleteDocument(delID, nil)
-				if err != nil {
-					log.Printf("Meilisearch 硬删除失败 index=%s id=%s 错误=%v", indexName, delID, err)
-				} else {
-					log.Printf("[delete] Meilisearch 索引=%s id=%s", indexName, delID)
-				}
+			if err := handler.Handle(ctx, record); err != nil {
+				log.Printf("处理消息出错: %v", err)
+				sendToDLQ(ctx, client, cfg, record, err)
+				continue
 			}
 		}
 
 		if len(records) > 0 {
 			client.CommitRecords(ctx, records...)
 		}
+	}
+}
+
+type DLQMessage struct {
+	SourceTopic     string            `json:"source_topic"`
+	SourcePartition int32             `json:"source_partition"`
+	SourceOffset    int64             `json:"source_offset"`
+	KeyBase64       string            `json:"key_base64,omitempty"`
+	ValueBase64     string            `json:"value_base64,omitempty"`
+	Error           string            `json:"error"`
+	Ts              int64             `json:"ts"`
+	Headers         map[string]string `json:"headers,omitempty"`
+}
+
+func sendToDLQ(ctx context.Context, client *kgo.Client, cfg config.AppConfig, record *kgo.Record, err error) {
+	// 仅在配置了 DLQ topic 时写入失败消息。
+	if cfg.DLQTopic == "" {
+		return
+	}
+
+	headers := make(map[string]string)
+	for _, h := range record.Headers {
+		headers[h.Key] = string(h.Value)
+	}
+
+	msg := DLQMessage{
+		SourceTopic:     record.Topic,
+		SourcePartition: record.Partition,
+		SourceOffset:    record.Offset,
+		KeyBase64:       base64.StdEncoding.EncodeToString(record.Key),
+		ValueBase64:     base64.StdEncoding.EncodeToString(record.Value),
+		Error:           err.Error(),
+		Ts:              time.Now().Unix(),
+		Headers:         headers,
+	}
+
+	payload, marshalErr := json.Marshal(msg)
+	if marshalErr != nil {
+		log.Printf("DLQ 消息序列化失败: %v", marshalErr)
+		return
+	}
+
+	ctxSend, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	res := client.ProduceSync(ctxSend, &kgo.Record{
+		Topic: cfg.DLQTopic,
+		Value: payload,
+		Key:   record.Key,
+	})
+	if res.FirstErr() != nil {
+		log.Printf("DLQ 发送失败 topic=%s err=%v", cfg.DLQTopic, res.FirstErr())
 	}
 }
 
