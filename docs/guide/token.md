@@ -1,52 +1,33 @@
 # Token / JWT 校验说明
 
-本项目中，UniData（Python 服务）与 meilisearch-sync-service（Go 服务）共用一套自实现的 **HS256 JWT** 协议，用于标识「调用方应用」并做权限隔离。
+这一节用更直白的方式说明：系统如何识别“是谁在调用”，以及为什么两个服务都能认得同一个 Token。
 
-## 一、签名算法与密钥
+## 一、基本概念
 
-- **算法**：`HS256`（HMAC-SHA256）
-- **密钥来源**：
-  - UniData：`app/core/config.py` 中的 `Settings.jwt_secret`
-  - meilisearch-sync-service：`internal/config/config.go` 中的 `AppConfig.JWTSecret`
-- **默认值**：`please-change-me-in-prod`（应在生产环境中通过环境变量覆盖）
+- **Token 就是一串通行证**：带上它，服务才能知道你是谁、能做什么。
+- **两个服务共用同一把“钥匙”**：
+  - UniData（Python 服务）
+  - meilisearch-sync-service（Go 服务）
+- **只要钥匙一致**：任一服务生成的 Token，另一端都能验证。
 
-**要求**：两个服务使用 **相同的 jwt_secret/JWT_SECRET**，这样任一服务生成的 token 都能被另一端校验。
 
-## 二、JWT 的生成脚本
+## 二、如何生成 Token
 
 脚本位置：`UniData/scripts/generate_jwt.py`
 
-### 核心逻辑
+你只需要传三个核心信息：
 
-**Header**：
+- `app_name`：你的应用名称（用于区分不同调用方）
+- `scopes`：权限范围（可选）
+- `exp`：过期时间
 
-```json
-{ "alg": "HS256", "typ": "JWT" }
-```
-
-**Payload 字段**：
-
-```json
-{
-  "app_name": "myapp",        // 应用名称，用于索引前缀
-  "scopes": ["testcases:read"], // 权限范围列表（可为空）
-  "exp": 1730000000           // 过期时间（秒级时间戳）
-}
-```
-
-**签名**：
-1. 使用 `jwt_secret` 作为 key，对 `base64url(header) + "." + base64url(payload)` 做 HMAC-SHA256。
-2. 结果再做 base64url 编码，拼为 `header.payload.signature`。
-
-### 常用 TTL 常量（秒）
+### 常用有效期（秒）
 
 - `TTL_SHORT = 3600`：1 小时
 - `TTL_DAY = 86400`：1 天
 - `TTL_WEEK = 604800`：1 周
 - `TTL_MONTH = 2592000`：30 天
 - `TTL_YEAR = 31536000`：1 年
-- `TTL_LONGTERM = 315360000`：10 年
-
 ### 命令行使用示例
 
 ```bash
@@ -64,61 +45,20 @@ python scripts/generate_jwt.py \
 
 脚本会在标准输出打印生成的 JWT，可以手动复制到配置或工具中使用，例如根目录的 `token.txt`。
 
-## 三、Python 侧（UniData）的 token 解析与校验
+## 三、服务端会做哪些校验
 
-模块位置：`UniData/app/core/auth.py`
+无论是 Python 还是 Go 服务，验证逻辑都一样：
 
-### 关键函数
+- **签名是否正确**：确保 Token 没被篡改
+- **是否过期**：过期则直接拒绝
+- **应用名是否匹配**：确保请求来自正确的应用
 
-- `_decode_jwt(token, secret, algorithms=["HS256"])`
-  - 拆分 `header.payload.signature`
-  - base64url 解码并解析 header / payload
-  - 校验 `alg` 是否在允许列表（默认仅 `HS256`）
-  - 使用 `jwt_secret` 对 `header.payload` 重新计算签名并对比
-  - 校验 `exp`（如存在），当前时间 ≥ `exp` 则视为过期
-- `get_current_app(...) -> AppIdentity`
-  - 从请求头读取：
-    - `Authorization: Bearer <jwt>`
-    - `X-App-Name`（可选）
-  - 解析并校验 token
-  - 从 payload 中提取：
-    - `app_name`（或 `sub`）
-    - `scopes` / `scope`（字符串或数组，统一为 `List[str]`）
-  - 如 `X-App-Name` 存在且与 payload 中的 `app_name` 不一致，则拒绝
-  - 返回 `AppIdentity(app_name, scopes)`
+通过校验后，服务会得到：
 
-FastAPI 路由可以通过依赖 `get_current_app` 获取当前调用方应用身份，用于业务层做权限控制。
+- `app_name`：调用方应用
+- `scopes`：权限范围
 
-## 四、Go 侧（meilisearch-sync-service）的 token 解析与校验
-
-模块位置：`meilisearch-sync-service/internal/auth/auth.go`
-
-### 关键函数
-
-- `DecodeJWT(token string, secret string) (map[string]interface{}, error)`
-  - 与 Python 逻辑对应：
-    - 拆分三段，base64url 解码 header/payload
-    - 校验 `alg == "HS256"`
-    - 使用 `secret` 对 `header.payload` 做 HMAC-SHA256，比对签名
-    - 校验 `exp` 是否过期
-- `IdentityFromToken(token string, secret string) (AppIdentity, error)`
-  - 从 payload 中解析：
-    - `app_name`（或 `sub`），映射到 `AppIdentity.AppName`
-    - `scopes` / `scope`，统一为 `[]string`，映射到 `AppIdentity.Scopes`
-  - 若缺少 `app_name`（且 `sub` 也为空），视为非法 token
-
-### 在搜索代理 handler 中的使用
-
-- 文件：`meilisearch-sync-service/internal/handler/handler.go`
-- 入口 `NewSearchHandler` 会：
-  - 从 HTTP 头读取 `Authorization: Bearer <jwt>`
-  - 调用 `IdentityFromToken(token, cfg.JWTSecret)` 验证 token
-  - 根据 `identity.AppName` 以及配置 `MeiliIndex` 计算实际索引名：
-    ```
-    indexUID = <AppName>_<MeiliIndex>   # 当 AppName 非空时
-    indexUID = MeiliIndex               # 否则
-    ```
-  - 将调用方请求体透传到 Meilisearch 对应索引的 `/indexes/{indexUID}/search` 接口
+如果校验失败，你会看到类似 “未授权 / token 无效 / token 过期” 的错误。
 
 ## 五、自助申请 Token (Web UI)
 
@@ -133,7 +73,7 @@ FastAPI 路由可以通过依赖 `get_current_app` 获取当前调用方应用�
 ### 2. 使用步骤
 
 1. **打开页面**：
-   在浏览器中打开 `app_token_register.html`（需确保能访问到后端 API，默认 `/api/v1/...`）。
+   在浏览器中打开 `/app/register`（需确保能访问到后端 API，默认 `/api/v1/...`）。
 
 2. **提交申请单**：
    - **应用名称 (`app_name`)**：唯一标识，将作为数据隔离的依据（如 `payment-service`）。

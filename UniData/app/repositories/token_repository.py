@@ -50,6 +50,14 @@ class TokenRepository:
         return await db.get(AppToken, token_id)
 
     @staticmethod
+    async def get_token_by_app_name(db: AsyncSession, app_name: str) -> Optional[AppToken]:
+        """根据 app_name 获取一条 Token 记录（用于唯一性检查）。"""
+        result = await db.execute(
+            select(AppToken).where(AppToken.app_name == app_name).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
     async def approve_token(db: AsyncSession, token_obj: AppToken) -> None:
         """将指定 Token 标记为已审批，并更新时间。"""
         token_obj.is_approved = True

@@ -15,10 +15,10 @@ export default defineConfig({
     // 导航栏
     nav: [
       { text: '首页', link: '/' },
-      { text: '部署', link: '/deployment/index' },
-      { text: '指南', link: '/guide/index' },
+      { text: '使用指南', link: '/guide/index' },
       { text: '搜索接口', link: '/search/index' },
-      { text: '管理接口', link: '/management/index' }
+      { text: '数据管理', link: '/management/index' },
+      { text: '开发环境部署', link: '/deployment/index' }
     ],
 
     // 侧边栏
@@ -56,7 +56,7 @@ export default defineConfig({
         {
           text: '数据管理',
           items: [
-            { text: '接入与认证', link: '/management/index' }
+            { text: '数据管理概览', link: '/management/index' }
           ]
         }
       ]

@@ -1,5 +1,7 @@
 # 部署指南概览
 
+本章节面向非接口使用者（如运维/部署同学），内容聚焦环境搭建与服务部署流程。
+
 UniData 的异地分布式部署涉及多个组件的协同工作。为了方便管理与维护，我们将部署流程分为 **开源基础组件** 与 **自研业务工具** 两大部分。
 
 建议您按照以下顺序进行部署：
@@ -25,16 +27,9 @@ UniData 的异地分布式部署涉及多个组件的协同工作。为了方便
 
 ---
 
-## 架构图示
+## 架构说明
 
-```mermaid
-graph LR
-    User[Client] -->|HTTP| Uni[UniData]
-    User -->|Search| Proxy[Search Proxy]
-    Uni -->|Write| PG[PostgreSQL]
-    PG -->|CDC| Deb[Debezium]
-    Deb -->|Msg| Kafka[Kafka]
-    Kafka -->|Consume| Sync[Go Sync Service]
-    Sync -->|Write| Meili[Meilisearch]
-    Proxy -->|Query| Meili
-```
+- 业务方通过 HTTP 调用 UniData 写入数据。
+- 数据先落在 PostgreSQL，再由 Debezium 监听变更并推送到 Kafka。
+- Go 同步服务消费 Kafka 消息，将数据写入 Meilisearch。
+- 查询侧通过 Search Proxy 访问 Meilisearch 获取结果。

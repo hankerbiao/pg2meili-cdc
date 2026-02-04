@@ -1,6 +1,6 @@
-# 管理接口 (Management API)
+# 数据管理
 
-本模块说明 UniData Producer Service 提供的后端管理类 HTTP 接口，格式参考阿里云 SDK 风格，方便统一管理和对接。
+本模块说明 UniData Producer Service 提供的索引与文档管理接口，覆盖索引列表查询、索引删除，以及通用文档的增删改查。
 
 ## 服务信息
 
@@ -8,9 +8,7 @@
 - **接口协议**：HTTPS / HTTP
 - **默认版本**：v1
 
-## 接入与认证概览
-
-### 1. 接入地址
+## 接入地址
 
 - **基础地址（示例）**：`http://localhost:8080`
 - **统一前缀**：`/api/v1`
@@ -21,172 +19,74 @@
 http://localhost:8080/api/v1/{resource}
 ```
 
-### 2. 认证方式（JWT）
-
-所有需要鉴权的接口都使用 Bearer Token：
-
-- **请求头**：
-  - `Authorization: Bearer <jwt>`
-  - 可选：`X-App-Name: <app_name>`，用于与 JWT 中的 `app_name` 做交叉校验
-
-JWT 由后端统一生成，内部字段包括：
-
-- `app_name`：应用名称
-- `scopes`：权限列表
-- `exp`：过期时间戳（秒）
-
-### 3. 通用返回格式
-
-**接口成功时**：
-
-- **HTTP 状态码**：`2xx`
-- **返回体**：
-  - 文档类接口：返回业务 JSON 对象
-  - 管理类接口：返回结构化 JSON（见各接口说明）
-
-**接口失败时**：
-
-- **HTTP 状态码**：`4xx` 或 `5xx`
-- **返回体**为 FastAPI 默认错误结构，例如：
-
-```json
-{
-  "detail": "错误信息"
-}
-```
-
 ## 接口总览
 
 | 模块 | 接口 | 方法 | 描述 |
 | :--- | :--- | :--- | :--- |
-| 认证与令牌管理 | `/api/v1/auth/token` | POST | 为应用生成访问令牌 |
-| 认证与令牌管理 | `/api/v1/auth/tokens/pending` | GET | 获取待审核 token 列表 |
-| 认证与令牌管理 | `/api/v1/auth/tokens/approved` | GET | 获取已审核 token 列表 |
-| 认证与令牌管理 | `/api/v1/auth/tokens/{token_id}/approve` | POST | 审核通过指定 token |
+| 索引管理 | `/api/v1/indexes` | GET | 获取当前应用下的索引列表 |
+| 索引管理 | `/api/v1/indexes/{collection}` | DELETE | 删除索引并逻辑删除集合内文档 |
 | 通用文档管理 | `/api/v1/data/{collection}` | POST | 创建或更新文档 |
+| 通用文档管理 | `/api/v1/data/{collection}/batch` | POST | 批量创建或更新文档 |
 | 通用文档管理 | `/api/v1/data/{collection}/{id}` | GET | 获取单个文档详情 |
 | 通用文档管理 | `/api/v1/data/{collection}/{id}` | DELETE | 删除（逻辑删）文档 |
 | 通用文档管理 | `/api/v1/data/{collection}` | GET | 分页列出集合内文档 |
-| 健康检查 | `/health` | GET | 服务健康检查 |
 
 ---
 
-## 认证与令牌管理接口
+## 索引管理接口
 
-### 1. 为应用生成访问令牌
+### 1. 获取索引列表
 
-- **接口地址**：`POST /api/v1/auth/token`
-- **接口说明**：根据 `app_name`、`itcode`、`scopes` 和 `ttl` 生成 JWT 令牌，并记录到数据库。真实 Token 内容通过内部渠道（如工权消息）发送给用户。
-
-#### 请求参数
-
-| 名称 | 类型 | 位置 | 必填 | 示例值 | 说明 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `app_name` | string | Body | 是 | `my-app` | 应用名称 |
-| `itcode` | string | Body | 是 | `alice` | 接收 token 的企业账号 |
-| `scopes` | string[] | Body | 否 | `["write:documents"]` | 权限列表 |
-| `ttl` | int | Body | 否 | `315360000` | 有效期（秒），默认 10 年 |
-
-**请求示例**：
-
-```http
-POST /api/v1/auth/token HTTP/1.1
-Host: localhost:8080
-Content-Type: application/json
-
-{
-  "app_name": "my-app",
-  "itcode": "alice",
-  "scopes": ["write:documents"],
-  "ttl": 315360000
-}
-```
-
-#### 返回结果
-
-返回模型：`TokenResponse`
-
-| 名称 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `app_name` | string | 应用名称 |
-| `itcode` | string | 接收 token 的账号 |
-| `expires_at` | int | 过期时间戳（秒） |
-
-**返回示例**：
-
-```json
-{
-  "app_name": "my-app",
-  "itcode": "alice",
-  "expires_at": 1893456000
-}
-```
-
-> **说明**：实际 JWT 字符串会通过内部消息系统发送，不直接在该接口返回。
-
-### 2. 获取待审核 token 列表
-
-- **接口地址**：`GET /api/v1/auth/tokens/pending`
-- **接口说明**：用于运维或管理员查询当前所有尚未审核通过的 token 记录。
-
-#### 请求参数
-
-无额外参数，仅需具备相应后端访问权限。
-
-#### 返回结果
-
-返回列表元素模型：`TokenRecord`
-
-| 名称 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `id` | string | token 记录 ID |
-| `app_name` | string | 应用名称 |
-| `itcode` | string | 申请人账号 |
-| `expires_at` | string | 过期时间（ISO8601） |
-| `created_at` | string | 创建时间（ISO8601） |
-
-**返回示例**：
-
-```json
-[
-  {
-    "id": "tok_001",
-    "app_name": "my-app",
-    "itcode": "alice",
-    "expires_at": "2030-01-01T00:00:00",
-    "created_at": "2025-01-01T10:00:00"
-  }
-]
-```
-
-### 3. 获取已审核 token 列表
-
-- **接口地址**：`GET /api/v1/auth/tokens/approved`
-- **接口说明**：查询已审核通过的 token 记录，用于审计或排查。
-
-请求参数与返回结果结构与 **获取待审核 token 列表** 一致。
-
-### 4. 审核通过指定 token
-
-- **接口地址**：`POST /api/v1/auth/tokens/{token_id}/approve`
-- **接口说明**：将指定 ID 的 token 记录标记为“已审核通过”，并触发内部消息通知，将 JWT 内容发送给申请人。
+- **接口地址**：`GET /api/v1/indexes`
+- **接口说明**：返回当前应用在 UniData 中已使用的 `collection` 名称列表。
 
 #### 请求参数
 
 | 名称 | 类型 | 位置 | 必填 | 示例值 | 说明 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `token_id` | string | Path | 是 | `tok_001` | token 记录 ID |
+| `limit` | int | Query | 否 | `100` | 返回数量，默认 100，最大 500 |
+| `offset` | int | Query | 否 | `0` | 偏移量，从 0 开始 |
 
 **请求示例**：
 
-```http
-POST /api/v1/auth/tokens/tok_001/approve HTTP/1.1
-Host: localhost:8080
+```bash
+curl -X GET "http://localhost:8080/api/v1/indexes?limit=100&offset=0"
 ```
 
 #### 返回结果
 
-返回模型同 `TokenResponse`。
+返回一个字符串列表：
+
+```json
+["testcases", "requirements", "bugs"]
+```
+
+### 2. 删除索引并逻辑删除集合内文档
+
+- **接口地址**：`DELETE /api/v1/indexes/{collection}`
+- **接口说明**：删除指定 `collection` 的索引，并将集合内文档标记为 `is_delete=true`。
+
+#### 请求参数
+
+| 名称 | 类型 | 位置 | 必填 | 示例值 | 说明 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `collection` | string | Path | 是 | `requirements` | 集合名称 |
+
+**请求示例**：
+
+```bash
+curl -X DELETE "http://localhost:8080/api/v1/indexes/requirements"
+```
+
+#### 返回结果
+
+```json
+{
+  "status": "success",
+  "collection": "requirements",
+  "deleted_count": 128
+}
+```
 
 ---
 
@@ -211,7 +111,6 @@ Host: localhost:8080
 
 ```bash
 curl -X POST "http://localhost:8080/api/v1/data/testcases" \
-  -H "Authorization: Bearer <jwt>" \
   -H "Content-Type: application/json" \
   -d '{
     "id": "tc_001",
@@ -256,8 +155,7 @@ curl -X POST "http://localhost:8080/api/v1/data/testcases" \
 **请求示例**：
 
 ```bash
-curl -X GET "http://localhost:8080/api/v1/data/testcases/tc_001" \
-  -H "Authorization: Bearer <jwt>"
+curl -X GET "http://localhost:8080/api/v1/data/testcases/tc_001"
 ```
 
 #### 返回结果
@@ -277,7 +175,43 @@ curl -X GET "http://localhost:8080/api/v1/data/testcases/tc_001" \
 
 > **说明**：`collection` 和 `app_name` 字段由服务端注入，用于 CDC 与索引路由。
 
-### 3. 删除文档（逻辑删）
+### 3. 批量创建 / 更新文档
+
+- **接口地址**：`POST /api/v1/data/{collection}/batch`
+- **接口说明**：批量写入或更新文档。请求体包含 `items` 列表，每个元素必须包含 `id`。
+
+#### 请求参数
+
+| 名称 | 类型 | 位置 | 必填 | 示例值 | 说明 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `collection` | string | Path | 是 | `testcases` | 集合名称 |
+| `items` | object[] | Body | 是 | 见示例 | 文档列表 |
+
+**请求示例**：
+
+```bash
+curl -X POST "http://localhost:8080/api/v1/data/testcases/batch" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "items": [
+      { "id": "tc_001", "title": "登录功能测试", "priority": "high" },
+      { "id": "tc_002", "title": "注册功能测试", "priority": "medium" }
+    ]
+  }'
+```
+
+#### 返回结果
+
+```json
+{
+  "status": "success",
+  "collection": "testcases",
+  "count": 2,
+  "ids": ["tc_001", "tc_002"]
+}
+```
+
+### 4. 删除文档（逻辑删）
 
 - **接口地址**：`DELETE /api/v1/data/{collection}/{id}`
 - **接口说明**：对指定文档执行软删除，后续由 CDC 同步到搜索端。
@@ -292,15 +226,14 @@ curl -X GET "http://localhost:8080/api/v1/data/testcases/tc_001" \
 **请求示例**：
 
 ```bash
-curl -X DELETE "http://localhost:8080/api/v1/data/testcases/tc_001" \
-  -H "Authorization: Bearer <jwt>"
+curl -X DELETE "http://localhost:8080/api/v1/data/testcases/tc_001"
 ```
 
 #### 返回结果
 
 返回模型同 `DocumentResponse`。
 
-### 4. 分页列出集合文档
+### 5. 分页列出集合文档
 
 - **接口地址**：`GET /api/v1/data/{collection}`
 - **接口说明**：按集合分页返回当前应用下的文档列表。
@@ -316,99 +249,9 @@ curl -X DELETE "http://localhost:8080/api/v1/data/testcases/tc_001" \
 **请求示例**：
 
 ```bash
-curl -X GET "http://localhost:8080/api/v1/data/testcases?limit=10&offset=0" \
-  -H "Authorization: Bearer <jwt>"
+curl -X GET "http://localhost:8080/api/v1/data/testcases?limit=10&offset=0"
 ```
 
 #### 返回结果
 
 返回一个文档数组，每个元素与 **获取文档详情** 中返回格式类似。
-
----
-
-## 健康检查接口
-
-健康检查接口定义在应用入口：
-
-- `GET /health`
-
-用于探活和监控，不需要鉴权。
-
-**请求示例**：
-
-```bash
-curl -X GET "http://localhost:8080/health"
-```
-
-**返回示例**：
-
-```json
-{
-  "status": "healthy"
-}
-```
-
----
-
-## 错误处理与常见状态码
-
-### 1. 常见 HTTP 状态码
-
-| 状态码 | 说明 | 场景示例 |
-| :--- | :--- | :--- |
-| 200 | 请求成功 | 查询类接口调用成功 |
-| 201 | 创建成功 | 创建 / 更新文档成功 |
-| 400 | 请求参数错误 | 缺少必填字段、JSON 解析失败等 |
-| 401 | 未认证或 Token 无效 | 缺少或错误的 Authorization 头 |
-| 403 | 无权限 | Token 作用域不足 |
-| 404 | 资源不存在 | 文档或 token 记录不存在 |
-| 500 | 服务端错误 | 未捕获异常、数据库异常等 |
-
-### 2. 错误返回示例
-
-```json
-{
-  "detail": "未找到指定的 token"
-}
-```
-
----
-
-## 调用示例（汇总）
-
-### 1. 使用 Token 写入测试用例文档
-
-```bash
-JWT="<your_jwt_token>"
-
-curl -X POST "http://localhost:8080/api/v1/data/testcases" \
-  -H "Authorization: Bearer $JWT" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "id": "tc_1001",
-    "title": "关机场景测试",
-    "priority": "P0",
-    "tags": ["Linux", "AMD"]
-  }'
-```
-
-### 2. 查询单个文档
-
-```bash
-curl -X GET "http://localhost:8080/api/v1/data/testcases/tc_1001" \
-  -H "Authorization: Bearer $JWT"
-```
-
-### 3. 分页查询文档列表
-
-```bash
-curl -X GET "http://localhost:8080/api/v1/data/testcases?limit=20&offset=0" \
-  -H "Authorization: Bearer $JWT"
-```
-
-### 4. 删除文档（逻辑删）
-
-```bash
-curl -X DELETE "http://localhost:8080/api/v1/data/testcases/tc_1001" \
-  -H "Authorization: Bearer $JWT"
-```

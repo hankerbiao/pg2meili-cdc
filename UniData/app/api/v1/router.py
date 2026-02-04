@@ -15,7 +15,7 @@ api_router.include_router(
 
 api_router.include_router(
     indexes_router,
-    prefix="/index/indexes",
+    prefix="/indexes",
     tags=["indexes"],
 )
 

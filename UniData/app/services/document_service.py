@@ -59,6 +59,53 @@ class DocumentService:
         return id_value
 
     @staticmethod
+    async def upsert_documents_bulk(
+        db: AsyncSession,
+        collection: str,
+        items: List[Dict[str, Any]],
+        app_name: str,
+    ) -> List[str]:
+        """
+        批量创建或更新文档。
+        items: 文档列表，每个元素必须包含 id
+        """
+        if not items:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="items 不能为空",
+            )
+
+        ids: List[str] = []
+        try:
+            for payload in items:
+                if "id" not in payload or not payload["id"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="items 中每个元素必须包含非空的 'id' 字段",
+                    )
+                id_value = str(payload["id"])
+                payload["collection"] = collection
+                payload["app_name"] = app_name
+                await document_repository.upsert_document(
+                    db,
+                    collection=collection,
+                    id=id_value,
+                    app_name=app_name,
+                    payload=payload,
+                )
+                ids.append(id_value)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"批量插入文档失败 collection={collection}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="数据库错误",
+            )
+
+        return ids
+
+    @staticmethod
     async def delete_document(db: AsyncSession, collection: str, id: str) -> None:
         """
         软删除文档。

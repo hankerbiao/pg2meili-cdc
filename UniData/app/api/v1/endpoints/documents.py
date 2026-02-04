@@ -11,6 +11,8 @@ from app.core.auth import AppIdentity, get_current_app
 from app.core.database import get_db
 from app.schemas.document import (
     DocumentCreateRequest,
+    DocumentBatchUpsertRequest,
+    DocumentBatchUpsertResponse,
     DocumentResponse,
 )
 from app.services.document_service import document_service
@@ -53,6 +55,41 @@ async def upsert_document(
     )
 
     return DocumentResponse(status="success", id=id_value, collection=collection)
+
+
+@router.post(
+    "/{collection}/batch",
+    response_model=DocumentBatchUpsertResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="批量创建/更新通用文档",
+    description="向指定集合（collection）中批量插入或更新文档。请求体必须包含 items 列表，且每个元素包含 'id'。",
+)
+async def upsert_documents_batch(
+    collection: str = Path(..., description="集合名称，如 requirements, bugs"),
+    body: DocumentBatchUpsertRequest = ...,
+    db: AsyncSession = Depends(get_db),
+    current_app: AppIdentity = Depends(get_current_app),
+) -> DocumentBatchUpsertResponse:
+    if " " in collection:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="collection 名称不能包含空格",
+        )
+
+    payload_items = [item.model_dump() for item in body.items]
+    ids = await document_service.upsert_documents_bulk(
+        db,
+        collection=collection,
+        items=payload_items,
+        app_name=current_app.app_name,
+    )
+
+    return DocumentBatchUpsertResponse(
+        status="success",
+        collection=collection,
+        count=len(ids),
+        ids=ids,
+    )
 
 
 @router.get(

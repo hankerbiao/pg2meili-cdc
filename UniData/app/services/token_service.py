@@ -23,6 +23,13 @@ class TokenService:
         expires_at_ts: int,
         request_payload: Dict[str, Any],
     ) -> None:
+        existing = await token_repository.get_token_by_app_name(db, app_name)
+        if existing is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="app_name 已存在，请更换应用名称",
+            )
+
         try:
             expires_at = datetime.fromtimestamp(expires_at_ts, tz=timezone.utc).replace(tzinfo=None)
         except (TypeError, ValueError, OSError) as e:
