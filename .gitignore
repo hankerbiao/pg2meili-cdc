@@ -162,4 +162,4 @@ tmp/
 temp/
 *.bak
 *~
-.cache/
+.cache/node_modules/
