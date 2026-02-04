@@ -1,5 +1,5 @@
 """通用文档的数据库模型模块。"""
-from datetime import datetime
+from datetime import datetime,timezone
 from sqlalchemy import Column, String, DateTime, Boolean, Index
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -16,12 +16,12 @@ class Document(Base):
     app_name = Column(String, nullable=True, index=True)
     payload = Column(JSONB, nullable=True)
     is_delete = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
     # 复合索引：加速按应用和集合的查询
     __table_args__ = (
-        Index("idx_collection_app", "collection", "app_name"),
+        Index("collection", "app_name"),
     )
 
     def __repr__(self) -> str:

@@ -1,4 +1,5 @@
-from datetime import datetime
+"""Token 持久化仓储层。"""
+from datetime import datetime,timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
@@ -21,13 +22,13 @@ class TokenRepository:
     ) -> None:
         """插入一条待审批的 Token 记录。"""
         obj = AppToken(
-            id=f"{app_name}-{int(datetime.utcnow().timestamp())}",
+            id=f"{app_name}-{int(datetime.now(timezone.utc).timestamp())}",
             app_name=app_name,
             itcode=itcode,
             token=token,
             expires_at=expires_at,
             payload=payload,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         db.add(obj)
         await db.flush()
@@ -61,7 +62,7 @@ class TokenRepository:
     async def approve_token(db: AsyncSession, token_obj: AppToken) -> None:
         """将指定 Token 标记为已审批，并更新时间。"""
         token_obj.is_approved = True
-        token_obj.approved_at = datetime.utcnow()
+        token_obj.approved_at = datetime.now(timezone.utc)
         await db.flush()
 
 

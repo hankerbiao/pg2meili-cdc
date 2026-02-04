@@ -1,4 +1,5 @@
-from datetime import datetime
+"""应用 Token 的数据库模型。"""
+from datetime import datetime,timezone
 
 from sqlalchemy import Boolean, Column, DateTime, String
 from sqlalchemy.dialects.postgresql import JSONB
@@ -7,6 +8,7 @@ from app.models.base import Base
 
 
 class AppToken(Base):
+    """Token 申请与审批记录表。"""
     __tablename__ = "app_tokens"
 
     id = Column(String, primary_key=True, nullable=False)
@@ -16,7 +18,7 @@ class AppToken(Base):
     payload = Column(JSONB, nullable=True)
     expires_at = Column(DateTime, nullable=False)
     is_approved = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
     approved_at = Column(DateTime, nullable=True)
 
     def __repr__(self) -> str:

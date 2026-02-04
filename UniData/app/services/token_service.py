@@ -1,3 +1,4 @@
+"""Token 相关业务服务。"""
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class TokenService:
+    """Token 业务逻辑层，负责保存、查询、审核以及通知。"""
     @staticmethod
     async def save_token(
         db: AsyncSession,
@@ -23,6 +25,7 @@ class TokenService:
         expires_at_ts: int,
         request_payload: Dict[str, Any],
     ) -> None:
+        # 同一 app_name 只允许存在一条 token 记录
         existing = await token_repository.get_token_by_app_name(db, app_name)
         if existing is not None:
             raise HTTPException(
@@ -39,6 +42,7 @@ class TokenService:
                 detail="内部服务器错误",
             )
 
+        # 保存原始申请信息，便于审计与追溯
         payload = {
             "app_name": app_name,
             "scopes": scopes,

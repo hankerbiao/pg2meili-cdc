@@ -1,4 +1,4 @@
-"""模型模块。"""
+"""模型模块入口。"""
 from app.models.base import Base
 from app.models.token import AppToken
 from app.models.document import Document

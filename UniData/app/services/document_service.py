@@ -168,7 +168,6 @@ class DocumentService:
         app_name: str,
     ) -> int:
         try:
-            print(collection,app_name)
             deleted_count = await document_repository.soft_delete_collection_for_app(
                 db=db,
                 collection=collection,

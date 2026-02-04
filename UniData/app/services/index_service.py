@@ -11,6 +11,7 @@ class IndexService:
 
     @staticmethod
     def _send_command(index_uid: str, action: str, payload: Dict[str, Any]) -> None:
+        # 统一构造并发送 Kafka 命令，避免接口层重复逻辑
         settings = get_settings()
         kafka = get_kafka_manager()
         now_ts = int(time.time())
