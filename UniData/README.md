@@ -8,7 +8,7 @@
 > 后面的 Debezium 与 Go 消费者负责把这些数据安全地送到各区域的搜索引擎。
 
 目前数据统一通过通用文档接口 `/api/v1/data/{collection}` 写入，  
-不再单独提供 testcases 专用接口。
+不再单独提供 testcases 专用接口（以 `collection` 区分不同业务数据）。
 
 ---
 
@@ -32,12 +32,12 @@ UniData 处于这条链路的“入口”位置，主要职责是：
 
 - 提供统一的 HTTP API，让上层业务以标准 JSON 格式写入数据；
 - 对输入数据做基础校验与补全（例如确保 `id` 存在、`is_delete` 字段正确）；
-- 将数据写入 PostgreSQL 的 `test_cases` 表或通用 `documents` 表，作为 CDC 的源表；
+- 将数据写入 PostgreSQL 的通用 `documents` 表，作为 CDC 的源表；
 - 对外暴露应用级 JWT 认证能力，控制谁可以写入数据。
 
-关于 Debezium + Kafka + Meilisearch 的完整部署与 CDC 流程，可参考仓库根目录下的文档：
+关于 Debezium + Kafka + Meilisearch 的完整部署与 CDC 流程，可参考仓库文档：
 
-- [docs/debezium 部署.md](file:///Users/libiao/Desktop/异地分布式部署/docs/debezium%20部署.md)
+- [docs/debezium 部署.md](../docs/debezium%20部署.md)
 
 ---
 
@@ -56,9 +56,7 @@ UniData 处于这条链路的“入口”位置，主要职责是：
   - 根据 JWT 中的应用身份，将数据归属到对应 app。
 
 - **PostgreSQL**  
-  存储测试用例与通用文档数据，例如：
-  - `test_cases`：测试用例；
-  - `documents`：通用集合 + app 维度的文档。
+  存储通用文档数据（`documents` 表），按 `collection + app_name` 隔离业务数据。
 
 - **Debezium + Kafka**  
   监听 PostgreSQL 的 WAL 日志，把表的变更转成标准 CDC 事件推入 Kafka 主题。
@@ -96,7 +94,7 @@ UniData 处于这条链路的“入口”位置，主要职责是：
 
 Pydantic 模型见：
 
-- [app/schemas/document.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/schemas/document.py)
+- [app/schemas/document.py](app/schemas/document.py)
 
 特点：
 
@@ -110,16 +108,16 @@ Pydantic 模型见：
 
 ## 4. HTTP 接口概览
 
-所有业务接口都挂载在 `/api/v1` 之下，由 [app/api/v1/router.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/api/v1/router.py) 统一注册：
+所有业务接口都挂载在 `/api/v1` 之下，由 [app/api/v1/router.py](app/api/v1/router.py) 统一注册：
 
-- `/api/v1/auth`：令牌申请与审核；
-- `/api/v1/data/{collection}`：通用文档接口（包括测试用例在内的所有业务数据统一通过此接口写入）。
+- `/api/v1/data/{collection}`：通用文档接口（写入/管理业务数据）；
+- `/api/v1/indexes`：索引管理与设置（索引列表、删除、设置过滤/排序字段）。
 
 健康检查接口：
 
 - `GET /health`：基础探活，返回 `{ "status": "healthy" }`。
 
-下面分块说明核心接口。
+下面分块说明核心接口（鉴权细节请参考 [docs/guide/token.md](../docs/guide/token.md)）。
 
 ---
 
@@ -127,7 +125,7 @@ Pydantic 模型见：
 
 路由定义见：
 
-- [app/api/v1/endpoints/documents.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/api/v1/endpoints/documents.py)
+- [app/api/v1/endpoints/documents.py](app/api/v1/endpoints/documents.py)
 
 该模块提供一套可复用的通用文档 CRUD 能力，用于管理任意集合（包括测试用例在内）：
 
@@ -170,76 +168,26 @@ curl -X POST "http://localhost:8080/api/v1/data/requirements" \
 - 默认仅返回“当前应用”的文档；
 - 如需跨应用查看，需要在服务中扩展更高权限的逻辑。
 
+### 6.5 批量创建/更新文档
+
+- `POST /api/v1/data/{collection}/batch`
+- 请求体包含 `items` 列表，每个元素必须包含 `id`；
+- 适用于批量写入/更新场景。
+
+### 6.6 设置索引可过滤/可排序字段
+
+- `POST /api/v1/indexes/{collection}/settings`
+- 用于同步索引设置到各地 Meilisearch；
+- 请求体需包含 `filterableAttributes` 与 `sortableAttributes`。
+
 ---
 
 ## 7. 认证与 Token 机制
 
-认证模块位于：
+所有需要写入/管理数据的接口都要求携带 `Authorization: Bearer <token>`。  
+详细的 Token 获取方式与认证说明请参考：
 
-- [app/core/auth.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/core/auth.py)
-- [app/api/v1/endpoints/auth.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/api/v1/endpoints/auth.py)
-
-### 7.1 JWT 结构
-
-使用 HS256 对称加密，秘钥来自配置：
-
-- `Settings.jwt_secret`（见 [config.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/core/config.py)）
-
-载荷中包含：
-
-- `app_name`: 应用名称；
-- `scopes`: 权限列表（字符串数组或空格分隔字符串）；
-- `exp`: 过期时间戳（秒）。
-
-### 7.2 令牌签发接口
-
-- `POST /api/v1/auth/token`
-- 请求体：
-
-```json
-{
-  "app_name": "my-app",
-  "itcode": "alice",
-  "scopes": ["write:testcases", "write:documents"],
-  "ttl": 315360000
-}
-```
-
-- 返回：
-
-```json
-{
-  "app_name": "my-app",
-  "itcode": "alice",
-  "expires_at": 1893456000
-}
-```
-
-说明：
-
-- 实际生成的 JWT 会存入数据库，并通过内部的消息渠道（如工权消息）发送给 `itcode` 对应的用户；
-- 审核流程由 `token_service` 负责，可通过内部系统或页面完成。
-
-### 7.3 Token 审核与查询
-
-- `GET /api/v1/auth/tokens/pending`：获取待审核 token 列表；
-- `GET /api/v1/auth/tokens/approved`：获取已审核 token 列表；
-- `POST /api/v1/auth/tokens/{token_id}/approve`：审核通过指定 token，并发送通知。
-
-### 7.4 请求中的身份解析
-
-业务接口（如 `/api/v1/data/...` 等）通过依赖注入获取当前应用：
-
-- Header 要求：
-  - `Authorization: Bearer <jwt>`
-  - 可选 `X-App-Name: <app_name>`，用于与 JWT 内部 `app_name` 做交叉校验。
-
-`get_current_app` 会完成：
-
-- Bearer Token 格式校验；
-- 签名验证与过期检查；
-- 从 payload 中解析 `app_name` 与 `scopes`；
-- 返回 `AppIdentity(app_name, scopes)` 给业务层使用。
+- [docs/guide/token.md](../docs/guide/token.md)
 
 ---
 
@@ -253,7 +201,7 @@ curl -X POST "http://localhost:8080/api/v1/data/requirements" \
   - 提供 `main()` 启动函数，方便通过命令行启动服务。
 
 - `app/api/v1`  
-  - `endpoints/`: 具体业务路由（auth、testcases、documents）；  
+  - `endpoints/`: 具体业务路由（documents、indexes、auth）；  
   - `router.py`: 聚合 v1 版本下所有路由，并挂载在 `/api/v1`。
 
 - `app/core`  
@@ -282,7 +230,7 @@ curl -X POST "http://localhost:8080/api/v1/data/requirements" \
 
 配置通过环境变量或 `.env` 文件加载，定义在：
 
-- [app/core/config.py](file:///Users/libiao/Desktop/异地分布式部署/UniData/app/core/config.py)
+- [app/core/config.py](app/core/config.py)
 
 主要字段：
 
@@ -355,11 +303,11 @@ pytest
 CDC 与搜索同步的部分在仓库其他目录中实现：
 
 - Debezium 与 Kafka 部署文档：  
-  - [docs/debezium 部署.md](file:///Users/libiao/Desktop/异地分布式部署/docs/debezium%20部署.md)
+  - [docs/debezium 部署.md](../docs/debezium%20部署.md)
 - Go 消费者与 Meilisearch 同步程序：  
-  - [meilisearch-sync-service](file:///Users/libiao/Desktop/异地分布式部署/meilisearch-sync-service/main.go)
+  - [meilisearch-sync-service](../meilisearch-sync-service/main.go)
 - 事件生产者样例（其他语言实现）：  
-  - [producer](file:///Users/libiao/Desktop/异地分布式部署/producer/main.go)
+  - [producer](../producer/main.go)
 
 架构上，UniData 与这些组件配合，实现：
 
