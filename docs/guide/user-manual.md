@@ -106,7 +106,7 @@ Content-Type: application/json
 ## 快速导航
 
 - `Token 认证`：/guide/token
-- `管理接口 (Management API)`：/management/index
+- `数据管理 (Management API)`：/management/index
 - `搜索接口 (Search API)`：/search/index
 - `部署指南`：/deployment/index
 

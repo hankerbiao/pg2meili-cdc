@@ -87,6 +87,9 @@ func newKafkaClient(cfg config.AppConfig, topics Topics) (*kgo.Client, error) {
 		kgo.SeedBrokers(cfg.Brokers...),
 		kgo.ConsumerGroup(cfg.GroupID),
 		kgo.ConsumeTopics(subscribeTopics...),
+		// 增加 SessionTimeout 以应对网络抖动或处理延迟
+		kgo.SessionTimeout(60*time.Second),
+		kgo.HeartbeatInterval(5*time.Second),
 	)
 }
 
