@@ -12,7 +12,7 @@ hero:
     - theme: alt
       text: "数据接入"
       link: "/management/index"
-
+  
 features:
   - title: "高性能搜索"
     details: "基于 Meilisearch 的毫秒级搜索体验，支持全文检索、分词高亮与多维过滤。"

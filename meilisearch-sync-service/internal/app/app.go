@@ -45,6 +45,9 @@ func (a *App) Run(ctx context.Context) error {
 		a.topics.CDC, a.topics.Command, a.topics.DLQ, a.cfg.GroupID, a.cfg.Brokers, a.cfg.MeiliHost, a.cfg.Debug,
 	)
 
+	// 启动时向 UniData 注册本机代理信息（若配置了 UNIDATA_URL）
+	service.RegisterAgent(a.cfg)
+
 	server := newHTTPServer(a.cfg)
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -126,6 +129,11 @@ func newHTTPServer(cfg config.AppConfig) *http.Server {
 	// HTTP server 仅对外提供 Search Proxy 接口。
 	mux := http.NewServeMux()
 	mux.Handle("/search", handler.NewSearchHandler(cfg))
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"healthy"}`))
+	})
 
 	return &http.Server{
 		Addr:    cfg.HTTPAddr,

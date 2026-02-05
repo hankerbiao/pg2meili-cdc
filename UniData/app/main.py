@@ -20,6 +20,7 @@ from app.core.database import close_db
 from app.core.logging import init_logging
 from app.api.v1.router import api_router
 from app.web.static import mount_static, register_pages
+from app.services.agent_monitor import scan_agents_loop
 
 
 def parse_cors_origins(value: str) -> list[str]:
@@ -70,8 +71,18 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         logger.info("PostgreSQL 连接: {}", mask_pg_conn_string(settings.pg_conn_string))
         logger.info("服务端口: {}", settings.server_port)
 
+        # 启动后台健康扫描任务
+        import asyncio
+
+        stop_event = asyncio.Event()
+        task = asyncio.create_task(scan_agents_loop(stop_event))
+
         # 应用运行期
         yield
+
+        # 结束后台任务
+        stop_event.set()
+        await task
 
         # 应用关闭阶段：清理资源
         logger.info("正在关闭服务...")

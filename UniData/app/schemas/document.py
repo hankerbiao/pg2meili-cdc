@@ -40,6 +40,30 @@ class IndexSettingsResponse(BaseModel):
     index_uid: str
 
 
+class AgentRegisterRequest(BaseModel):
+    """代理节点注册请求。"""
+    ip: str = Field(..., description="代理节点 IP")
+    port: int = Field(..., description="代理节点端口")
+    hostname: Optional[str] = Field(None, description="主机名")
+    version: Optional[str] = Field(None, description="代理版本")
+    meta: Optional[Dict[str, Any]] = Field(default=None, description="扩展元信息")
+
+
+class AgentRegisterResponse(BaseModel):
+    """代理节点注册响应。"""
+    status: str = "success"
+    id: str
+    ip: str
+    port: int
+
+
+class AgentOnlineResponse(BaseModel):
+    """在线代理信息返回模型。"""
+    ip: str
+    port: int
+    hostname: Optional[str] = None
+
+
 class DocumentResponse(BaseModel):
     """文档响应模式。"""
     status: str = "success"

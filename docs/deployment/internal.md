@@ -46,6 +46,32 @@ curl -s localhost:8083/connectors/meili-connector/status
 
 如需配置参数，请参考该服务的配置文件与环境变量说明。
 
+### 2.2 代理注册（自动上报）
+
+Go 服务启动后会自动向 UniData 注册代理节点信息，用于中心侧的在线状态管理。
+
+必需配置：
+
+- `UNIDATA_URL`：UniData 服务地址（例如 `http://10.32.129.188:8080`）
+
+可选配置：
+
+- `AGENT_IP`：代理对外 IP（不填则自动探测本机 IPv4）
+- `AGENT_PORT`：代理对外端口（不填则使用 `HTTP_ADDR` 解析端口）
+- `AGENT_NAME`：节点名称/主机名（不填则使用系统 hostname）
+- `AGENT_VERSION`：代理版本号
+- `AGENT_META`：扩展元信息（JSON 字符串，如 `{"region":"tj"}`）
+
+示例：
+
+```bash
+export UNIDATA_URL="http://10.32.129.188:8080"
+export HTTP_ADDR=":8091"
+export AGENT_NAME="edge-tj-01"
+export AGENT_VERSION="1.0.0"
+export AGENT_META='{"region":"tj"}'
+```
+
 ### 2.2 核心逻辑示例（参考）
 
 以下为逻辑示意，便于理解 CDC 消息处理流程（不代表完整可运行代码）。

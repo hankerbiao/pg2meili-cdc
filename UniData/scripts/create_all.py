@@ -9,9 +9,8 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from app.core.database import engine
-from app.models.base import Base
-from app.models.document import Document
-from app.models.token import AppToken
+# 统一导入 app.models，确保所有模型都注册到 Base.metadata
+from app.models import Base  # noqa: F401
 
 
 async def _create_all() -> None:

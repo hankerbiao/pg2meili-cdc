@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -18,6 +19,12 @@ type AppConfig struct {
 	Debug        bool
 	JWTSecret    string
 	HTTPAddr     string
+	UniDataURL   string // UniData 服务地址，用于代理注册
+	AgentIP      string // 代理节点对外 IP
+	AgentPort    int    // 代理节点对外端口
+	AgentName    string // 代理节点名称/主机名
+	AgentVersion string // 代理程序版本
+	AgentMeta    string // 代理扩展元信息（JSON 字符串）
 }
 
 // getenv 安全地从环境变量读取配置值
@@ -37,6 +44,11 @@ func LoadConfig() AppConfig {
 	dlqTopic := getenv("KAFKA_DLQ_TOPIC", "meili.dlq")
 	debugEnv := getenv("DEBUG", "false")
 	debug := debugEnv == "1" || strings.EqualFold(debugEnv, "true")
+	agentPortEnv := getenv("AGENT_PORT", "0")
+	agentPort := 0
+	if v, err := strconv.Atoi(agentPortEnv); err == nil {
+		agentPort = v
+	}
 
 	return AppConfig{
 		Brokers:      strings.Split(brokersEnv, ","),
@@ -49,5 +61,11 @@ func LoadConfig() AppConfig {
 		Debug:        debug,
 		JWTSecret:    getenv("JWT_SECRET", "dYAj4kPbhIdCM35XhcDW9HJX53xT3iux"),
 		HTTPAddr:     getenv("HTTP_ADDR", ":8091"),
+		UniDataURL:   getenv("UNIDATA_URL", ""),
+		AgentIP:      getenv("AGENT_IP", ""),
+		AgentPort:    agentPort,
+		AgentName:    getenv("AGENT_NAME", ""),
+		AgentVersion: getenv("AGENT_VERSION", ""),
+		AgentMeta:    getenv("AGENT_META", ""),
 	}
 }

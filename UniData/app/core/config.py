@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     log_diagnose: bool = False
     log_json: bool = False
 
+    # 代理节点健康检查配置
+    agent_health_path: str = "/health"
+    agent_scan_interval_seconds: int = 5
+    agent_health_timeout_seconds: int = 5
+    agent_online_ttl_seconds: int = 120
+
     # 默认 Meilisearch 端点配置（可选）
     meili_default_url: Optional[str] = ""
     meili_default_api_key: Optional[str] = ""
