@@ -6,7 +6,6 @@
 - 索引管理请参考「数据管理」文档：`/management/index`。
 - 代理节点在线列表接口。
 
----
 ## 1. 搜索接口（Search Service）
 
 本小节说明 UniData Search Service 暴露的 `/search` 接口，该接口直接对接 Meilisearch 搜索引擎。
@@ -15,8 +14,6 @@
 
 - **接口地址**：`POST /search?collection={collection}`
 - **基础域名**：
-  - 天津环境：`http://10.17.154.252:8091`
-  - 北京环境：`http://10.32.129.188:8091`
   - 本地示例：`http://localhost:8091`
 - **协议**：HTTPS/HTTP
 - **鉴权方式**：`Authorization: Bearer <JWT>`（应用级访问令牌）
@@ -29,16 +26,44 @@
 
 ### 1.3 请求体参数
 
-请求体为原样透传到 Meilisearch `POST /indexes/{index}/search` 的 JSON 对象，常用字段如下：
+请求体会透传到 Meilisearch `POST /indexes/{index}/search`。当前文档基于 **Meilisearch 1.34.3** 的参数能力整理，实际生效以你部署版本为准。
+
+服务端默认行为：
+- 若请求体未显式提供 `showRankingScore`，服务端会自动补 `showRankingScore: true`。
+
+#### 常用参数
 
 | 参数 | 类型 | 必填 | 说明 | 示例 |
 | :--- | :--- | :--- | :--- | :--- |
-| `q` | string | 是 | 搜索关键字 | `"电源"` |
-| `offset` | integer | 否 | 起始偏移量，用于分页 | `0` |
+| `q` | string | 否 | 查询关键字，空字符串表示全量检索 | `"电源"` |
+| `offset` | integer | 否 | 跳过文档数量（与 `limit` 配合分页） | `0` |
 | `limit` | integer | 否 | 返回条数 | `20` |
-| `filter` | string/array | 否 | 过滤条件 | `tags = "BMC"` |
-| `attributesToHighlight` | array | 否 | 需要高亮的字段列表 | `["*"]` |
-| `attributesToRetrieve` | array | 否 | 指定返回字段白名单 | `["id", "name", "summary"]` |
+| `page` | integer | 否 | 指定页码（与 `hitsPerPage` 配合分页） | `1` |
+| `hitsPerPage` | integer | 否 | 每页条数 | `20` |
+| `filter` | string/array | 否 | 过滤条件表达式 | `tags = "BMC"` |
+| `sort` | array | 否 | 排序规则 | `["created_at:desc"]` |
+| `attributesToRetrieve` | array | 否 | 返回字段白名单 | `["id", "title", "author"]` |
+| `attributesToHighlight` | array | 否 | 高亮字段列表 | `["*"]` |
+| `attributesToCrop` | array | 否 | 裁剪字段列表 | `["content"]` |
+| `cropLength` | integer | 否 | 裁剪长度（词数） | `60` |
+
+#### 高级参数
+
+| 参数 | 类型 | 必填 | 说明 | 示例 |
+| :--- | :--- | :--- | :--- | :--- |
+| `facets` | array | 否 | 返回聚合维度 | `["tags"]` |
+| `distinct` | string | 否 | 去重字段 | `"id"` |
+| `highlightPreTag` | string | 否 | 高亮前置标记 | `"<mark>"` |
+| `highlightPostTag` | string | 否 | 高亮后置标记 | `"</mark>"` |
+| `cropMarker` | string | 否 | 裁剪省略标记 | `"…"` |
+| `attributesToSearchOn` | array | 否 | 仅在指定字段内搜索 | `["title", "content"]` |
+| `showMatchesPosition` | boolean | 否 | 返回匹配位置 | `true` |
+| `matchingStrategy` | string | 否 | 匹配策略 | `"last"` |
+| `showRankingScore` | boolean | 否 | 返回排名分数 | `true` |
+| `showRankingScoreDetails` | boolean | 否 | 返回详细排名分数 | `true` |
+| `rankingScoreThreshold` | number | 否 | 过滤低分结果 | `0.2` |
+
+> 注意：分页参数 `offset/limit` 与 `page/hitsPerPage` 只需任选一组，避免混用。 
 
 ### 1.4 查询参数
 
@@ -54,14 +79,9 @@
 - 真实索引名由后端按 `indexUID = <app_name>_<collection>` 规则拼接。
 - 请求体会透传给 Meilisearch，但服务端会自动补充 `showRankingScore: true`（如未显式提供）。
 
-### 1.6 索引命名与设置说明
-
-- **索引命名规则**：`<app_name>_<collection>`。
-- **索引设置能力**：当前搜索服务为代理模式，不提供索引配置接口（如 searchable/filterable/sortable 等设置由后端统一配置）。
-
 ### 1.7 响应结果
 
-接口返回 Meilisearch 原始搜索结果，主要字段包括：
+接口返回 Meilisearch 原始搜索结果，主要字段包括（`hits` 内的字段来自业务文档本身，不是固定字段，以下为测试用例文档示例）：
 
 - `hits`：文档数组，每个元素为一条命中的测试用例
 - `hits[i].id`：用例内部 ID
@@ -73,7 +93,15 @@
   - `hits[i]._formatted.name`
   - `hits[i]._formatted.summary`
 
----
+### 1.8 常见问题
+
+- **为什么 search 结果比写入慢？**  
+  写入到搜索端是异步同步，可能存在秒级延迟。
+- **为什么字段没返回？**  
+  如果设置了 `attributesToRetrieve`，返回结果只包含白名单字段。
+- **为什么高亮不生效？**  
+  确保 `attributesToHighlight` 包含目标字段，并且字段可被索引。
+
 
 ## 2. 代理节点在线列表
 
@@ -99,7 +127,6 @@ curl -X GET "http://localhost:8080/api/v1/agents/online" \
 ]
 ```
 
----
 
 ## 3. 搜索使用示例
 

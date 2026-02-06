@@ -1,20 +1,19 @@
-# 数据管理
+# 1. 数据管理
 
-本模块说明 UniData Producer Service 提供的索引与文档管理接口，覆盖索引列表查询、索引删除，以及通用文档的增删改查。
+本模块说明 UniData Producer Service 提供的**索引与文档管理**接口，覆盖索引列表查询、索引删除，以及通用文档的增删改查。
 
-## 术语说明（统一口径）
+## 1.1 术语说明
 
-- `collection`：业务集合名称（写入与管理的数据维度）
-- `index`：搜索索引名称（通常与 collection 对应）
+- `collection`：业务集合名称（写入与管理的数据维度，与索引概念一致）
 - `app_name`：应用隔离维度，不同应用的数据互相隔离
 
-## 服务信息
+## 1.2 服务信息
 
-- **服务名称**：UniData Producer Service
-- **接口协议**：HTTPS / HTTP
+- **服务名称**：UniData Service
+- **接口协议**：HTTP
 - **默认版本**：v1
 
-## 接入地址
+## 1.3 接入地址
 
 - **基础地址（示例）**：`http://localhost:8080`
 - **统一前缀**：`/api/v1`
@@ -25,19 +24,19 @@
 http://localhost:8080/api/v1/{resource}
 ```
 
-## 通用说明
+## 1.4 通用说明
 
-- **鉴权**：本模块接口均需要携带 `Authorization: Bearer <token>`。
+- **鉴权**：本模块接口均需要携带 `Authorization: Bearer <token>`（管理/写入接口仅接受后端读写 Token）。
 - **幂等更新**：同一 `collection` 下相同 `id` 会覆盖更新。
 - **同步延迟**：写入成功后会异步同步到搜索端，存在一定延迟（与环境负载相关）。
 - **撤销广播**：当管理员撤销 token 时，UniData 会向 Kafka 发布撤销事件（仅包含被撤销的 `jti`）。
 
-## 命名与使用约束
+## 1.5 命名与使用约束
 
 - `collection` 不能包含空格。
 - 单次批量写入建议控制在合理规模（如 1000 条以内），避免请求体过大导致超时。
 
-## 接口总览
+## 1.6 接口总览
 
 | 模块 | 接口 | 方法 | 描述 |
 | :--- | :--- | :--- | :--- |
@@ -49,12 +48,10 @@ http://localhost:8080/api/v1/{resource}
 | 通用文档管理 | `/api/v1/data/{collection}/{id}` | GET | 获取单个文档详情 |
 | 通用文档管理 | `/api/v1/data/{collection}/{id}` | DELETE | 删除（逻辑删）文档 |
 | 通用文档管理 | `/api/v1/data/{collection}` | GET | 分页列出集合内文档 |
-| Token 管理 | `/api/v1/auth/tokens/revoke` | POST | 撤销指定 token（按 `jti`） |
+| Token 管理 | `/api/v1/auth/tokens/revoke` | POST | 撤销指定 token（按 `jti`），仅ADMIN 有权限 |
 | Token 管理 | `/api/v1/auth/tokens/revoked/{jti}` | GET | 查询 token 是否已撤销 |
 
----
-
-## 索引管理接口
+## 2. 索引管理接口
 
 ### 1. 获取索引列表
 
@@ -79,7 +76,10 @@ curl -X GET "http://localhost:8080/api/v1/indexes?limit=100&offset=0"
 返回一个字符串列表：
 
 ```json
-["testcases", "requirements", "bugs"]
+{
+  "data": ["testcases", "requirements", "bugs"],
+  "message": "ok"
+}
 ```
 
 ### 2. 删除索引并逻辑删除集合内文档
@@ -103,9 +103,12 @@ curl -X DELETE "http://localhost:8080/api/v1/indexes/requirements"
 
 ```json
 {
-  "status": "success",
-  "collection": "requirements",
-  "deleted_count": 128
+  "data": {
+    "status": "success",
+    "collection": "requirements",
+    "deleted_count": 128
+  },
+  "message": "ok"
 }
 ```
 
@@ -137,12 +140,19 @@ curl -X POST "http://localhost:8080/api/v1/indexes/testcases/settings" \
 #### 返回结果
 
 ```json
-{"status":"success","collection":"testcases","index_uid":"libiao_testcases"}
+{
+  "data": {
+    "status": "success",
+    "collection": "testcases",
+    "index_uid": "libiao_testcases"
+  },
+  "message": "ok"
+}
 ```
 
 ---
 
-## 通用文档管理接口
+## 3. 通用文档管理接口
 
 该模块提供针对任意集合（`collection`）的通用 CRUD 能力，用于管理测试用例、需求、缺陷等业务数据。
 
@@ -186,9 +196,12 @@ curl -X POST "http://localhost:8080/api/v1/data/testcases" \
 
 ```json
 {
-  "status": "success",
-  "id": "tc_001",
-  "collection": "testcases"
+  "data": {
+    "status": "success",
+    "id": "tc_001",
+    "collection": "testcases"
+  },
+  "message": "ok"
 }
 ```
 
@@ -216,12 +229,15 @@ curl -X GET "http://localhost:8080/api/v1/data/testcases/tc_001"
 
 ```json
 {
-  "id": "tc_001",
-  "title": "登录功能测试",
-  "priority": "high",
-  "status": "active",
-  "collection": "testcases",
-  "app_name": "my-app"
+  "data": {
+    "id": "tc_001",
+    "title": "登录功能测试",
+    "priority": "high",
+    "status": "active",
+    "collection": "testcases",
+    "app_name": "my-app"
+  },
+  "message": "ok"
 }
 ```
 
@@ -256,10 +272,13 @@ curl -X POST "http://localhost:8080/api/v1/data/testcases/batch" \
 
 ```json
 {
-  "status": "success",
-  "collection": "testcases",
-  "count": 2,
-  "ids": ["tc_001", "tc_002"]
+  "data": {
+    "status": "success",
+    "collection": "testcases",
+    "count": 2,
+    "ids": ["tc_001", "tc_002"]
+  },
+  "message": "ok"
 }
 ```
 
@@ -283,7 +302,18 @@ curl -X DELETE "http://localhost:8080/api/v1/data/testcases/tc_001"
 
 #### 返回结果
 
-返回模型同 `DocumentResponse`。
+返回模型同 `DocumentResponse`，统一封装：
+
+```json
+{
+  "data": {
+    "status": "success",
+    "id": "tc_001",
+    "collection": "testcases"
+  },
+  "message": "ok"
+}
+```
 
 ### 5. 分页列出集合文档
 
@@ -306,11 +336,26 @@ curl -X GET "http://localhost:8080/api/v1/data/testcases?limit=10&offset=0"
 
 #### 返回结果
 
-返回一个文档数组，每个元素与 **获取文档详情** 中返回格式类似。
+返回一个文档数组，统一封装：
 
----
+```json
+{
+  "data": [
+    {
+      "id": "tc_001",
+      "title": "登录功能测试",
+      "priority": "high",
+      "status": "active",
+      "collection": "testcases",
+      "app_name": "my-app"
+    }
+  ],
+  "message": "ok"
+}
+```
 
-## Token 撤销与广播
+
+## 4. Token 撤销与广播
 
 系统仅记录被撤销的 `jti`，不会保存所有 token。撤销时会向 Kafka 广播事件，便于多地服务同步失效名单。
 
@@ -330,6 +375,7 @@ curl -X POST "http://localhost:8080/api/v1/auth/tokens/revoke" \
     "reason": "app 停用"
   }'
 ```
+说明：该接口仅允许具备 `admin:token:revoke` scope 的管理员 Token 调用。
 
 ### 2. 查询 token 是否已撤销
 
@@ -359,7 +405,7 @@ curl -X GET "http://localhost:8080/api/v1/auth/tokens/revoked/b7c9f0e3-1a2b-4c4e
 
 ---
 
-## 错误处理与常见状态码
+## 5. 错误处理与常见状态码
 
 ### 常见 HTTP 状态码
 

@@ -59,8 +59,8 @@ func LoadConfig() AppConfig {
 	if v, err := strconv.Atoi(getenv("REDIS_DB", "0")); err == nil {
 		redisDB = v
 	}
-	revokeTTL := 604800
-	if v, err := strconv.Atoi(getenv("REVOKE_CACHE_TTL_SECONDS", "604800")); err == nil {
+	revokeTTL := 0
+	if v, err := strconv.Atoi(getenv("REVOKE_CACHE_TTL_SECONDS", "0")); err == nil {
 		revokeTTL = v
 	}
 

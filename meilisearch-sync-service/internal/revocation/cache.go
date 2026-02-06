@@ -77,10 +77,13 @@ func (c *Cache) Warmup(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			// 默认使用配置的 revoke TTL，若 Redis 中仍有剩余 TTL，则以剩余 TTL 为准。
-			exp := now.Add(c.ttl)
-			if ttl > 0 {
-				exp = now.Add(ttl)
+			// 默认使用配置的 revoke TTL；若 ttl<=0 则视为永久。
+			exp := time.Time{}
+			if c.ttl > 0 {
+				exp = now.Add(c.ttl)
+				if ttl > 0 {
+					exp = now.Add(ttl)
+				}
 			}
 			c.mu.Lock()
 			c.local[jti] = exp
@@ -112,8 +115,8 @@ func (c *Cache) IsRevoked(ctx context.Context, jti string) (bool, error) {
 	exp, ok := c.local[jti]
 	c.mu.RUnlock()
 	if ok {
-		// 未过期则认为已吊销。
-		if exp.After(now) {
+		// 未过期或永久有效则认为已吊销。
+		if exp.IsZero() || exp.After(now) {
 			return true, nil
 		}
 		// 已过期则从本地缓存中删除，后续走 Redis 查询。
@@ -127,7 +130,10 @@ func (c *Cache) IsRevoked(ctx context.Context, jti string) (bool, error) {
 	if err == nil {
 		// Redis 中存在记录，说明确实已吊销。
 		// 同时将结果写入本地缓存，并设置新的过期时间窗口。
-		exp := now.Add(c.ttl)
+		exp := time.Time{}
+		if c.ttl > 0 {
+			exp = now.Add(c.ttl)
+		}
 		c.mu.Lock()
 		c.local[jti] = exp
 		c.mu.Unlock()
@@ -151,13 +157,20 @@ func (c *Cache) MarkRevoked(ctx context.Context, jti string, payload RevocationE
 	}
 
 	// 1. 更新本地缓存中的过期时间，使后续查询可以立即命中。
-	exp := time.Now().Add(c.ttl)
+	exp := time.Time{}
+	if c.ttl > 0 {
+		exp = time.Now().Add(c.ttl)
+	}
 	c.mu.Lock()
 	c.local[jti] = exp
 	c.mu.Unlock()
 
-	// 2. 将吊销事件序列化后写入 Redis，TTL 使用统一配置。
+	// 2. 将吊销事件序列化后写入 Redis，TTL 使用统一配置（ttl<=0 表示永久）。
 	// value 目前主要用于调试与排查，例如记录是谁在何时吊销的该令牌。
 	value, _ := json.Marshal(payload)
-	return c.redis.Set(ctx, c.key(jti), value, c.ttl).Err()
+	var ttl time.Duration
+	if c.ttl > 0 {
+		ttl = c.ttl
+	}
+	return c.redis.Set(ctx, c.key(jti), value, ttl).Err()
 }

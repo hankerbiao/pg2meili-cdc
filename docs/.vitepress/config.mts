@@ -5,9 +5,6 @@ export default defineConfig({
   description: "Unified Data Management & Search API",
   lang: 'zh-CN',
   lastUpdated: true,
-  markdown: {
-    mermaid: true
-  },
   
   themeConfig: {
     // 启用本地搜索
@@ -21,7 +18,7 @@ export default defineConfig({
       { text: '使用指南', link: '/guide/' },
       { text: '搜索接口', link: '/search/index' },
       { text: '数据管理', link: '/management/index' },
-      { text: '开发环境部署', link: '/deployment/index' }
+      { text: '开发环境部署', link: '/deployment/' }
     ],
 
     // 侧边栏
@@ -30,11 +27,11 @@ export default defineConfig({
         {
           text: '环境部署',
           items: [
-            { text: '部署概览', link: '/deployment/index' },
-            { text: 'Token 认证（开发者）', link: '/deployment/token' },
-            { text: '开源组件部署', link: '/deployment/oss' },
-            { text: 'UniData 服务部署', link: '/deployment/unidata' },
-            { text: '自研工具部署', link: '/deployment/internal' }
+            { text: '部署概览', link: '/deployment/' },
+            { text: '系统需求', link: '/deployment/requirements' },
+            { text: '安装步骤', link: '/deployment/installation' },
+            { text: '配置介绍', link: '/deployment/configuration' },
+            { text: '运行和维护', link: '/deployment/operations' }
           ]
         }
       ],
