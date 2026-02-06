@@ -6,14 +6,16 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"meilisearch-sync-service/internal/auth"
 	"meilisearch-sync-service/internal/config"
+	"meilisearch-sync-service/internal/revocation"
 )
 
 // NewSearchHandler 返回一个基于 JWT 鉴权的 Meilisearch 搜索 HTTP 处理函数
-func NewSearchHandler(cfg config.AppConfig) http.HandlerFunc {
+func NewSearchHandler(cfg config.AppConfig, revocationCache *revocation.Cache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 读取并校验 Authorization 头，要求为 Bearer <token> 格式
 		authHeader := r.Header.Get("Authorization")
@@ -33,6 +35,21 @@ func NewSearchHandler(cfg config.AppConfig) http.HandlerFunc {
 		if err != nil {
 			http.Error(w, "令牌无效: "+err.Error(), http.StatusUnauthorized)
 			return
+		}
+		if err := auth.RequireScopes(identity, []string{"search:read"}); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		if revocationCache != nil {
+			revoked, err := revocationCache.IsRevoked(r.Context(), identity.JTI)
+			if err != nil {
+				log.Printf("Redis 异常，服务退出: %v", err)
+				os.Exit(1)
+			}
+			if revoked {
+				http.Error(w, "令牌已被撤销", http.StatusForbidden)
+				return
+			}
 		}
 
 		// 从查询参数中获取 collection，用于拼接索引名称

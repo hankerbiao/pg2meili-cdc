@@ -14,6 +14,24 @@ import (
 type AppIdentity struct {
 	AppName string
 	Scopes  []string
+	JTI     string
+}
+
+// RequireScopes 校验当前身份是否具备所需权限
+func RequireScopes(identity AppIdentity, required []string) error {
+	if len(required) == 0 {
+		return nil
+	}
+	scopeSet := make(map[string]struct{}, len(identity.Scopes))
+	for _, s := range identity.Scopes {
+		scopeSet[s] = struct{}{}
+	}
+	for _, s := range required {
+		if _, ok := scopeSet[s]; !ok {
+			return fmt.Errorf("缺少权限: %s", s)
+		}
+	}
+	return nil
 }
 
 // base64URLDecode 对不带填充的 URL 安全 Base64 字符串做补齐并解码
@@ -144,8 +162,14 @@ func IdentityFromToken(token string, secret string) (AppIdentity, error) {
 		}
 	}
 
+	jti, _ := payload["jti"].(string)
+	if jti == "" {
+		return AppIdentity{}, fmt.Errorf("令牌中缺少 jti")
+	}
+
 	return AppIdentity{
 		AppName: appName,
 		Scopes:  scopes,
+		JTI:     jti,
 	}, nil
 }
