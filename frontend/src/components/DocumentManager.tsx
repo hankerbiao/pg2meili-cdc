@@ -14,7 +14,7 @@ const DEFAULT_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6Imxp
 const DocumentManager: React.FC = () => {
   const [baseUrl, setBaseUrl] = useState('http://localhost:8080')
   const [token, setToken] = useState(DEFAULT_TOKEN)
-  const [collection, setCollection] = useState('testcases')
+  const [collection, setCollection] = useState('shared_docs')
   const [activeTab, setActiveTab] = useState<'list' | 'create' | 'edit' | 'indexes'>('list')
 
   const [documents, setDocuments] = useState<any[]>([])
