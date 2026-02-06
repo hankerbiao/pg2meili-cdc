@@ -10,9 +10,12 @@ UniData 生产者服务入口。
 
 from contextlib import asynccontextmanager
 from typing import Optional
+import json
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
+from fastapi.routing import APIRoute
 from loguru import logger
 
 from app.core.config import Settings, get_settings
@@ -97,6 +100,41 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         lifespan=lifespan,
     )
 
+    class StandardizedRoute(APIRoute):
+        """统一接口返回格式：{ data, message }。"""
+
+        def get_route_handler(self):
+            original_handler = super().get_route_handler()
+
+            async def custom_route_handler(request: Request) -> Response:
+                response: Response = await original_handler(request)
+
+                # 非 JSON 响应（如 HTML / 文件）不做包装
+                content_type = response.headers.get("content-type", "")
+                if "application/json" not in content_type:
+                    return response
+
+                try:
+                    body_bytes = getattr(response, "body", b"")
+                    if not body_bytes:
+                        return JSONResponse(
+                            status_code=response.status_code,
+                            content={"data": None, "message": "ok"},
+                        )
+                    payload = json.loads(body_bytes)
+                    if isinstance(payload, dict) and "data" in payload and "message" in payload:
+                        return response
+                    return JSONResponse(
+                        status_code=response.status_code,
+                        content={"data": payload, "message": "ok"},
+                    )
+                except Exception:
+                    return response
+
+            return custom_route_handler
+
+    app.router.route_class = StandardizedRoute
+
     # 全局 CORS 配置：
     # 当前放开所有来源，方便本地及多环境联调，生产环境可以按需收紧
     app.add_middleware(
@@ -109,6 +147,20 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     # 挂载 API v1 的所有业务路由到统一前缀 /api/v1
     app.include_router(api_router, prefix="/api/v1")
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"data": None, "message": exc.detail},
+        )
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception):
+        return JSONResponse(
+            status_code=500,
+            content={"data": None, "message": "内部服务器错误"},
+        )
 
     mount_static(app)
     register_pages(app)

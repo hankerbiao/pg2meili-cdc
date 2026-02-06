@@ -8,8 +8,8 @@ from fastapi.staticfiles import StaticFiles
 
 def mount_static(app: FastAPI) -> None:
     """挂载静态资源目录。"""
-    project_root = Path(__file__).resolve().parents[2]
-    libs_dir = project_root / "libs"
+    repo_root = Path(__file__).resolve().parents[3]
+    libs_dir = repo_root / "libs"
     if libs_dir.exists():
         app.mount("/libs", StaticFiles(directory=libs_dir), name="libs")
 

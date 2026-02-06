@@ -4,6 +4,7 @@
 
 - UniData Search Service 的 `/search` 搜索接口；
 - 索引管理请参考「数据管理」文档：`/management/index`。
+- 代理节点在线列表接口。
 
 ---
 ## 1. 搜索接口（Search Service）
@@ -74,9 +75,35 @@
 
 ---
 
-## 2. 搜索使用示例
+## 2. 代理节点在线列表
 
-### 2.1 简单关键字搜索
+该接口由 UniData 提供，用于获取当前在线的代理节点 IP 列表。
+
+- **接口地址**：`GET /api/v1/agents/online`
+- **基础地址（示例）**：`http://localhost:8080`
+- **鉴权方式**：`Authorization: Bearer <YOUR_JWT>`
+
+**请求示例**：
+
+```bash
+curl -X GET "http://localhost:8080/api/v1/agents/online" \
+  -H "Authorization: Bearer <YOUR_JWT>"
+```
+
+**返回示例**：
+
+```json
+[
+  { "ip": "10.17.154.252", "port": 8091, "hostname": "edge-tj-01" },
+  { "ip": "10.32.129.188", "port": 8091, "hostname": "edge-bj-01" }
+]
+```
+
+---
+
+## 3. 搜索使用示例
+
+### 3.1 简单关键字搜索
 
 请求示例：
 
@@ -116,7 +143,7 @@ async function searchSimple() {
 
 :::
 
-### 2.2 高亮搜索
+### 3.2 高亮搜索
 
 请求示例：
 
@@ -173,7 +200,7 @@ async function searchWithHighlight() {
 
 :::
 
-### 2.3 按标签过滤搜索
+### 3.3 按标签过滤搜索
 
 请求示例：
 
@@ -209,7 +236,7 @@ async function searchFilterByTag() {
 
 :::
 
-### 2.4 分页搜索
+### 3.4 分页搜索
 
 请求示例：
 
@@ -248,7 +275,7 @@ async function searchWithPagination(page = 1, pageSize = 5) {
 
 :::
 
-### 2.5 排序搜索
+### 3.5 排序搜索
 
 请求示例：
 
@@ -284,7 +311,7 @@ async function searchWithSort() {
 
 :::
 
-### 2.6 多条件过滤搜索
+### 3.6 多条件过滤搜索
 
 请求示例：
 
@@ -323,7 +350,7 @@ async function searchWithMultiFilter() {
 
 :::
 
-### 2.7 返回字段与摘要裁剪
+### 3.7 返回字段与摘要裁剪
 
 请求示例：
 
@@ -363,7 +390,7 @@ async function searchWithRetrieveAndCrop() {
 
 :::
 
-### 2.8 精准搜索（双引号关键字）
+### 3.8 精准搜索（双引号关键字）
 
 说明：精准搜索可将关键字用双引号包裹，支持多个关键字同时匹配。
 
@@ -404,7 +431,7 @@ async function searchExact() {
 
 :::
 
-### 2.9 分面统计（Facets）
+### 3.9 分面统计（Facets）
 
 分面统计用于对搜索结果做分类统计，常见于“状态/标签”等筛选项。
 例如在搜索结果中统计 `status` 或 `tags` 的数量分布，便于前端展示筛选列表。

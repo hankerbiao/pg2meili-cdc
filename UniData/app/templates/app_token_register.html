@@ -209,6 +209,7 @@
                             <th>接收人</th>
                             <th>失效时间</th>
                             <th>创建时间</th>
+                            <th>状态</th>
                         </tr>
                         </thead>
                         <tbody id="approvedTableBody"></tbody>
@@ -273,8 +274,56 @@ layui.use(['form', 'layer', 'laydate'], function () {
             tdCreated.innerText = formatDate(item.created_at);
             tr.appendChild(tdCreated);
 
+            if (item.revoked_status) {
+                var tdRevoked = document.createElement('td');
+                tdRevoked.style.fontSize = '12px';
+                tdRevoked.style.color = '#666';
+                tdRevoked.innerText = item.revoked_status;
+                tr.appendChild(tdRevoked);
+            } else if (tbodyId === 'approvedTableBody') {
+                var tdRevokedPlaceholder = document.createElement('td');
+                tdRevokedPlaceholder.style.fontSize = '12px';
+                tdRevokedPlaceholder.style.color = '#999';
+                tdRevokedPlaceholder.innerText = '加载中...';
+                tr.appendChild(tdRevokedPlaceholder);
+            }
+
             tbody.appendChild(tr);
         });
+    }
+
+    function parseJtiMap(raw) {
+        if (!raw) return {};
+        var map = {};
+        raw.split(';').forEach(function (item) {
+            item = item.trim();
+            if (!item) return;
+            var idx = item.indexOf(':');
+            if (idx === -1) return;
+            var key = item.slice(0, idx).trim();
+            var value = item.slice(idx + 1).trim();
+            if (key && value) map[key] = value;
+        });
+        return map;
+    }
+
+    function fetchRevoked(jti) {
+        return fetch('/api/v1/auth/tokens/revoked/' + encodeURIComponent(jti))
+            .then(function (resp) {
+                return resp.json().then(function (json) {
+                    return {ok: resp.ok, json: json};
+                });
+            })
+            .then(function (res) {
+                if (!res.ok) {
+                    return false;
+                }
+                var data = res.json.data || res.json;
+                return !!(data && data.revoked);
+            })
+            .catch(function () {
+                return false;
+            });
     }
 
     function loadPending() {
@@ -289,7 +338,8 @@ layui.use(['form', 'layer', 'laydate'], function () {
                     layer.msg('加载待审核列表失败: ' + msg, {icon: 2});
                     return;
                 }
-                renderTable('pendingTableBody', res.json);
+                var items = res.json.data || res.json;
+                renderTable('pendingTableBody', items);
             }).catch(function (err) {
                 layer.msg('网络错误: ' + err, {icon: 2});
             });
@@ -307,7 +357,34 @@ layui.use(['form', 'layer', 'laydate'], function () {
                     layer.msg('加载已注册服务失败: ' + msg, {icon: 2});
                     return;
                 }
-                renderTable('approvedTableBody', res.json);
+                var items = res.json.data || res.json;
+                var tasks = items.map(function (item) {
+                    var map = parseJtiMap(item.jti || '');
+                    var searchJti = map.search;
+                    var dataJti = map.data;
+                    if (!searchJti && !dataJti) {
+                        item.revoked_status = '未知';
+                        return Promise.resolve();
+                    }
+                    return Promise.all([
+                        searchJti ? fetchRevoked(searchJti) : Promise.resolve(false),
+                        dataJti ? fetchRevoked(dataJti) : Promise.resolve(false),
+                    ]).then(function (values) {
+                        var searchRevoked = values[0];
+                        var dataRevoked = values[1];
+                        var parts = [];
+                        if (searchJti) {
+                            parts.push('search:' + (searchRevoked ? '已注销' : '未注销'));
+                        }
+                        if (dataJti) {
+                            parts.push('data:' + (dataRevoked ? '已注销' : '未注销'));
+                        }
+                        item.revoked_status = parts.join(' / ');
+                    });
+                });
+                Promise.all(tasks).then(function () {
+                    renderTable('approvedTableBody', items);
+                });
             }).catch(function (err) {
                 layer.msg('网络错误: ' + err, {icon: 2});
             });

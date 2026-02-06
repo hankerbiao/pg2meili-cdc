@@ -30,6 +30,7 @@ http://localhost:8080/api/v1/{resource}
 - **鉴权**：本模块接口均需要携带 `Authorization: Bearer <token>`。
 - **幂等更新**：同一 `collection` 下相同 `id` 会覆盖更新。
 - **同步延迟**：写入成功后会异步同步到搜索端，存在一定延迟（与环境负载相关）。
+- **撤销广播**：当管理员撤销 token 时，UniData 会向 Kafka 发布撤销事件（仅包含被撤销的 `jti`）。
 
 ## 命名与使用约束
 
@@ -48,6 +49,8 @@ http://localhost:8080/api/v1/{resource}
 | 通用文档管理 | `/api/v1/data/{collection}/{id}` | GET | 获取单个文档详情 |
 | 通用文档管理 | `/api/v1/data/{collection}/{id}` | DELETE | 删除（逻辑删）文档 |
 | 通用文档管理 | `/api/v1/data/{collection}` | GET | 分页列出集合内文档 |
+| Token 管理 | `/api/v1/auth/tokens/revoke` | POST | 撤销指定 token（按 `jti`） |
+| Token 管理 | `/api/v1/auth/tokens/revoked/{jti}` | GET | 查询 token 是否已撤销 |
 
 ---
 
@@ -307,6 +310,55 @@ curl -X GET "http://localhost:8080/api/v1/data/testcases?limit=10&offset=0"
 
 ---
 
+## Token 撤销与广播
+
+系统仅记录被撤销的 `jti`，不会保存所有 token。撤销时会向 Kafka 广播事件，便于多地服务同步失效名单。
+
+### 1. 撤销 token（按 jti）
+
+- **接口地址**：`POST /api/v1/auth/tokens/revoke`
+- **接口说明**：撤销指定 `jti`，撤销后所有携带该 `jti` 的 token 将被拒绝。
+
+**请求示例**：
+
+```bash
+curl -X POST "http://localhost:8080/api/v1/auth/tokens/revoke" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <YOUR_JWT>" \
+  -d '{
+    "jti": "b7c9f0e3-1a2b-4c4e-9d8a-0f7d7c4c0a12",
+    "reason": "app 停用"
+  }'
+```
+
+### 2. 查询 token 是否已撤销
+
+- **接口地址**：`GET /api/v1/auth/tokens/revoked/{jti}`
+
+**请求示例**：
+
+```bash
+curl -X GET "http://localhost:8080/api/v1/auth/tokens/revoked/b7c9f0e3-1a2b-4c4e-9d8a-0f7d7c4c0a12"
+```
+
+### 3. Kafka 撤销广播事件
+
+- **Topic**：`token.revocations`
+- **消息体示例**：
+
+```json
+{
+  "version": 1,
+  "event": "token_revoked",
+  "app_name": "demo-app",
+  "jti": "b7c9f0e3-1a2b-4c4e-9d8a-0f7d7c4c0a12",
+  "reason": "app 停用",
+  "ts": 1732000000
+}
+```
+
+---
+
 ## 错误处理与常见状态码
 
 ### 常见 HTTP 状态码
@@ -325,6 +377,7 @@ curl -X GET "http://localhost:8080/api/v1/data/testcases?limit=10&offset=0"
 
 ```json
 {
-  "detail": "错误信息"
+  "data": null,
+  "message": "错误信息"
 }
 ```

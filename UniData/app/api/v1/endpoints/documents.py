@@ -7,7 +7,7 @@ from typing import List, Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, status, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import AppIdentity, get_current_app
+from app.core.auth import AppIdentity, get_current_app_with_revocation, require_scopes
 from app.core.database import get_db
 from app.schemas.document import (
     DocumentCreateRequest,
@@ -31,8 +31,9 @@ async def upsert_document(
     collection: str = Path(..., description="集合名称，如 requirements, bugs"),
     body: DocumentCreateRequest = ...,
     db: AsyncSession = Depends(get_db),
-    current_app: AppIdentity = Depends(get_current_app),
+    current_app: AppIdentity = Depends(get_current_app_with_revocation),
 ) -> DocumentResponse:
+    require_scopes(current_app, ["data:write"])
     if " " in collection:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -68,8 +69,9 @@ async def upsert_documents_batch(
     collection: str = Path(..., description="集合名称，如 requirements, bugs"),
     body: DocumentBatchUpsertRequest = ...,
     db: AsyncSession = Depends(get_db),
-    current_app: AppIdentity = Depends(get_current_app),
+    current_app: AppIdentity = Depends(get_current_app_with_revocation),
 ) -> DocumentBatchUpsertResponse:
+    require_scopes(current_app, ["data:write"])
     if " " in collection:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -103,8 +105,9 @@ async def get_document(
     collection: str = Path(..., description="集合名称"),
     id: str = Path(..., description="文档 ID"),
     db: AsyncSession = Depends(get_db),
-    current_app: AppIdentity = Depends(get_current_app),
+    current_app: AppIdentity = Depends(get_current_app_with_revocation),
 ) -> Dict[str, Any]:
+    require_scopes(current_app, ["data:read"])
     doc = await document_service.get_document(db, collection, id)
     return doc
 
@@ -120,8 +123,9 @@ async def delete_document(
     collection: str = Path(..., description="集合名称"),
     id: str = Path(..., description="文档 ID"),
     db: AsyncSession = Depends(get_db),
-    current_app: AppIdentity = Depends(get_current_app),
+    current_app: AppIdentity = Depends(get_current_app_with_revocation),
 ) -> DocumentResponse:
+    require_scopes(current_app, ["data:write"])
     await document_service.delete_document(db, collection, id)
     return DocumentResponse(status="success", id=id, collection=collection)
 
@@ -138,8 +142,9 @@ async def list_documents(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-    current_app: AppIdentity = Depends(get_current_app),
+    current_app: AppIdentity = Depends(get_current_app_with_revocation),
 ) -> List[Dict[str, Any]]:
+    require_scopes(current_app, ["data:read"])
     docs = await document_service.list_documents(
         db, 
         collection=collection, 

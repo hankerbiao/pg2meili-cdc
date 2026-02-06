@@ -1,5 +1,7 @@
 """Token 相关业务服务。"""
 import logging
+import hashlib
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
@@ -15,10 +17,22 @@ logger = logging.getLogger(__name__)
 
 class TokenService:
     """Token 业务逻辑层，负责保存、查询、审核以及通知。"""
+    SEARCH_SCOPES = ["search:read"]
+    DATA_SCOPES = ["data:read", "data:write"]
+    @staticmethod
+    def _mask_token(token: str) -> str:
+        if not token:
+            return "**"
+        if len(token) <= 10:
+            masked = f"{token[:2]}**{token[-2:]}"
+        else:
+            masked = f"{token[:6]}**{token[-4:]}"
+        digest = hashlib.sha256(token.encode("utf-8")).hexdigest()[:8]
+        return f"{masked}-{digest}"
+
     @staticmethod
     async def save_token(
         db: AsyncSession,
-        token: str,
         app_name: str,
         scopes: List[str],
         itcode: str,
@@ -52,11 +66,12 @@ class TokenService:
         }
 
         try:
+            placeholder = f"pending**{uuid.uuid4().hex[:12]}"
             await token_repository.insert_token(
                 db=db,
                 app_name=app_name,
                 itcode=itcode,
-                token=token,
+                jti=placeholder,
                 expires_at=expires_at,
                 payload=payload,
             )
@@ -85,12 +100,34 @@ class TokenService:
             )
         if obj.is_approved:
             return obj
+
+        now_ts = int(datetime.utcnow().timestamp())
+        expires_at_ts = (
+            int(obj.expires_at.replace(tzinfo=timezone.utc).timestamp())
+            if obj.expires_at
+            else now_ts
+        )
+        ttl_seconds = max(1, expires_at_ts - now_ts)
+
+        search_jti = str(uuid.uuid4())
+        data_jti = str(uuid.uuid4())
+        from app.core.auth import generate_jwt
+
+        search_token = generate_jwt(obj.app_name, TokenService.SEARCH_SCOPES, ttl_seconds, jti=search_jti)
+        data_token = generate_jwt(obj.app_name, TokenService.DATA_SCOPES, ttl_seconds, jti=data_jti)
+
+        obj.jti = f"search:{search_jti};data:{data_jti}"
         await token_repository.approve_token(db, obj)
         TokenService._send_gquan_message(
             user_itcode=obj.itcode,
             title="UniData Token 审核通过",
             description=f"应用 {obj.app_name} 的访问 Token 已审核通过",
-            content_or_url=obj.token,
+            content_or_url=(
+                "【搜索只读 Token】\n"
+                f"{search_token}\n\n"
+                "【后端读写 Token】\n"
+                f"{data_token}"
+            ),
         )
         return obj
 

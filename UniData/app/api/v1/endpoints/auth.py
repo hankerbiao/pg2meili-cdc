@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import generate_jwt
 from app.core.database import get_db
+from app.core.auth import AppIdentity, get_current_app, require_scopes
 from app.services.token_service import token_service
+from app.services.token_revocation_service import token_revocation_service
 
 
 class TokenCreateRequest(BaseModel):
@@ -30,6 +31,17 @@ class TokenRecord(BaseModel):
     itcode: str
     expires_at: str
     created_at: str
+    jti: str | None = None
+
+
+class TokenRevokeRequest(BaseModel):
+    jti: str = Field(..., description="需要撤销的 token jti")
+    reason: str | None = Field(default=None, description="撤销原因")
+
+
+class TokenRevokeResponse(BaseModel):
+    jti: str
+    revoked_at: str
 
 
 router = APIRouter()
@@ -45,12 +57,10 @@ async def create_token(
     body: TokenCreateRequest,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    token = generate_jwt(body.app_name, body.scopes, body.ttl)
     expires_at = int(time.time()) + body.ttl
 
     await token_service.save_token(
         db=db,
-        token=token,
         app_name=body.app_name,
         scopes=body.scopes,
         itcode=body.itcode,
@@ -77,6 +87,7 @@ async def list_pending_tokens(
             itcode=i.itcode,
             expires_at=i.expires_at.isoformat() if i.expires_at else "",
             created_at=i.created_at.isoformat() if i.created_at else "",
+            jti=getattr(i, "jti", None),
         )
         for i in items
     ]
@@ -98,6 +109,7 @@ async def list_approved_tokens(
             itcode=i.itcode,
             expires_at=i.expires_at.isoformat() if i.expires_at else "",
             created_at=i.created_at.isoformat() if i.created_at else "",
+            jti=getattr(i, "jti", None),
         )
         for i in items
     ]
@@ -114,3 +126,35 @@ async def approve_token(
     obj = await token_service.approve_token(db, token_id)
     expires_at_ts = int(time.mktime(obj.expires_at.timetuple())) if obj.expires_at else 0
     return TokenResponse(app_name=obj.app_name, itcode=obj.itcode, expires_at=expires_at_ts)
+
+
+@router.post(
+    "/tokens/revoke",
+    response_model=TokenRevokeResponse,
+    summary="撤销指定 token（按 jti）",
+)
+async def revoke_token(
+    body: TokenRevokeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_app: AppIdentity = Depends(get_current_app),
+) -> TokenRevokeResponse:
+    require_scopes(current_app, ["admin:token:revoke"])
+    await token_revocation_service.revoke(
+        db=db,
+        jti=body.jti,
+        app_name=current_app.app_name,
+        reason=body.reason,
+    )
+    return TokenRevokeResponse(jti=body.jti, revoked_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+
+
+@router.get(
+    "/tokens/revoked/{jti}",
+    summary="查询 token 是否已撤销",
+)
+async def is_token_revoked(
+    jti: str,
+    db: AsyncSession = Depends(get_db),
+):
+    revoked = await token_revocation_service.is_revoked(db, jti)
+    return {"jti": jti, "revoked": revoked}

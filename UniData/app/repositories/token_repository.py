@@ -16,19 +16,19 @@ class TokenRepository:
         db: AsyncSession,
         app_name: str,
         itcode: str,
-        token: str,
+        jti: str,
         expires_at: datetime,
         payload: Dict[str, Any],
     ) -> None:
         """插入一条待审批的 Token 记录。"""
         obj = AppToken(
-            id=f"{app_name}-{int(datetime.now(timezone.utc).timestamp())}",
+            id=f"{app_name}-{int(datetime.utcnow().timestamp())}",
             app_name=app_name,
             itcode=itcode,
-            token=token,
+            jti=jti,
             expires_at=expires_at,
             payload=payload,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.utcnow(),
         )
         db.add(obj)
         await db.flush()
@@ -62,7 +62,7 @@ class TokenRepository:
     async def approve_token(db: AsyncSession, token_obj: AppToken) -> None:
         """将指定 Token 标记为已审批，并更新时间。"""
         token_obj.is_approved = True
-        token_obj.approved_at = datetime.now(timezone.utc)
+        token_obj.approved_at = datetime.utcnow()
         await db.flush()
 
 

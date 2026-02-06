@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     kafka_batch_size: int = 16384  # 批量发送大小(bytes)，达到此大小或 linger_ms 超时触发发送
     kafka_request_timeout_ms: int = 30000  # 请求超时时间(ms)
     kafka_meili_command_topic: str = "meili.commands"  # Meilisearch 指令专用 Topic
+    kafka_token_revoke_topic: str = "token.revocations"  # Token 撤销广播 Topic
 
     gquan_base_url: Optional[str] = "http://10.32.129.1/springboard_v3"
     gquan_app_name: Optional[str] = ""

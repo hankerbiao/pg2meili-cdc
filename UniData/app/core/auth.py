@@ -10,18 +10,35 @@ import hashlib
 import hmac
 import json
 import time
+import uuid
 from dataclasses import dataclass
 from typing import List, Optional
 
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, status, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.database import get_db
+from app.services.token_revocation_service import token_revocation_service
 
 
 @dataclass
 class AppIdentity:
     app_name: str
     scopes: List[str]
+    jti: str
+
+
+def require_scopes(current_app: AppIdentity, required_scopes: List[str]) -> None:
+    """确保当前 Token 具备所需权限。"""
+    if not required_scopes:
+        return
+    missing = [scope for scope in required_scopes if scope not in current_app.scopes]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"缺少权限: {', '.join(missing)}",
+        )
 
 
 def _base64url_decode(data: str) -> bytes:
@@ -37,14 +54,17 @@ def _base64url_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
-def generate_jwt(app_name: str, scopes: List[str], ttl_seconds: int) -> str:
+def generate_jwt(app_name: str, scopes: List[str], ttl_seconds: int, jti: str | None = None) -> str:
     settings = get_settings()
     secret = settings.jwt_secret
     header = {"alg": "HS256", "typ": "JWT"}
+    now = int(time.time())
     payload = {
         "app_name": app_name,
         "scopes": scopes,
-        "exp": int(time.time()) + ttl_seconds,
+        "exp": now + ttl_seconds,
+        "iat": now,
+        "jti": jti or str(uuid.uuid4()),
     }
 
     header_b64 = _base64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
@@ -188,4 +208,25 @@ async def get_current_app(
     else:
         scopes = []
 
-    return AppIdentity(app_name=app_name, scopes=scopes)
+    jti = payload.get("jti")
+    if not isinstance(jti, str) or not jti:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="令牌中缺少 jti",
+        )
+
+    return AppIdentity(app_name=app_name, scopes=scopes, jti=jti)
+
+
+async def get_current_app_with_revocation(
+    db: AsyncSession = Depends(get_db),
+    authorization: str = Header(default="", alias="Authorization"),
+    x_app_name: str = Header(default="", alias="X-App-Name"),
+) -> AppIdentity:
+    identity = await get_current_app(authorization=authorization, x_app_name=x_app_name)
+    if await token_revocation_service.is_revoked(db, identity.jti):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="令牌已被撤销",
+        )
+    return identity
