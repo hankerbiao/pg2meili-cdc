@@ -51,6 +51,8 @@ http://localhost:8080/api/v1/{resource}
 | Token 管理 | `/api/v1/auth/tokens/revoke` | POST | 撤销指定 token（按 `jti`），仅ADMIN 有权限 |
 | Token 管理 | `/api/v1/auth/tokens/revoked/{jti}` | GET | 查询 token 是否已撤销 |
 
+---
+
 ## 2. 索引管理接口
 
 ### 1. 获取索引列表

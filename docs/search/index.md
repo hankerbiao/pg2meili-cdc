@@ -1,11 +1,5 @@
 # 搜索接口 (Search API)
 
-本模块说明与搜索相关的 HTTP 接口，包括：
-
-- UniData Search Service 的 `/search` 搜索接口；
-- 索引管理请参考「数据管理」文档：`/management/index`。
-- 代理节点在线列表接口。
-
 ## 1. 搜索接口（Search Service）
 
 本小节说明 UniData Search Service 暴露的 `/search` 接口，该接口直接对接 Meilisearch 搜索引擎。

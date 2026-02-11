@@ -39,7 +39,7 @@ export default defineConfig({
         {
           text: '开发指南',
           items: [
-            { text: '指南概览', link: '/guide/' },
+            { text: '使用指南概览', link: '/guide/' },
             { text: '用户引导手册', link: '/guide/user-manual' }
           ]
         }
@@ -48,7 +48,7 @@ export default defineConfig({
         {
           text: '搜索服务',
           items: [
-            { text: '接口概览', link: '/search/index' }
+            { text: '搜索接口概览', link: '/search/index' }
           ]
         }
       ],
