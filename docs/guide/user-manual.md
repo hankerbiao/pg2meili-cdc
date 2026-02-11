@@ -102,6 +102,43 @@ Content-Type: application/json
 4. 将最佳节点地址保存到本地缓存（如 localStorage），后续搜索请求优先使用该地址。
 5. 可设置定时刷新（例如每 10~30 分钟）重新评估节点，保证持续可用与低延迟。
 
+示例：获取在线节点并基于 `/health` 测速（选择最快节点）
+
+```js
+async function fetchAgents(apiBase, token) {
+  const resp = await fetch(`${apiBase}/api/v1/agents/online`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const payload = await resp.json();
+  return payload.data || payload;
+}
+
+async function pickBestAgent(agents) {
+  const tests = agents.map(async (agent) => {
+    const base = `http://${agent.ip}:${agent.port}`;
+    const start = performance.now();
+    try {
+      const resp = await fetch(`${base}/health`, { method: "GET" });
+      if (!resp.ok) throw new Error("bad status");
+      const cost = performance.now() - start;
+      return { base, cost };
+    } catch {
+      return { base, cost: Number.POSITIVE_INFINITY };
+    }
+  });
+  const results = await Promise.all(tests);
+  results.sort((a, b) => a.cost - b.cost);
+  return results[0]?.base;
+}
+
+// 使用示例：
+// const agents = await fetchAgents("http://localhost:8080", "<YOUR_JWT>");
+// const best = await pickBestAgent(agents);
+// localStorage.setItem("best_search_host", best);
+```
+
 
 ## 排障指南
 
