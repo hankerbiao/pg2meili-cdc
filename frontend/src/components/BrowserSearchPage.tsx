@@ -3,7 +3,7 @@ import { search, SearchRequest, SearchResponse, SearchHit } from '../api'
 
 const DEFAULT_TOKEN =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6ImxpYmlhbyIsInNjb3BlcyI6WyJzZWFyY2g6cmVhZCJdLCJleHAiOjE4MDE1MjYzOTcsImlhdCI6MTc3MDc4ODk3NiwianRpIjoiMTBhNDhjYmEtMmRkZC00M2Y4LTg4OTgtOGY3ZWFlYzI3MDljIn0.Bf2E51dWPIbgsJlAjkBvzZV7pn2oKUJjg70r8Holr1M'
-const DEFAULT_BASE_URL = 'http://10.2.48.121:8091'
+const DEFAULT_BASE_URL = 'http://10.32.129.188:8091'
 // 默认从当前页面的后端域名获取在线代理列表
 const AGENTS_API_BASE = 'http://10.32.129.188:8080'
 
@@ -57,7 +57,10 @@ const BrowserSearchPage: React.FC = () => {
           const errorText = await response.text()
           throw new Error(`HTTP ${response.status}: ${errorText}`)
         }
-        const list = await response.json() as OnlineAgent[]
+        const payload = await response.json() as any
+        const list: OnlineAgent[] = Array.isArray(payload?.data)
+          ? payload.data
+          : (Array.isArray(payload) ? payload : [])
         setAgents(list)
         if (list.length > 0 && autoSelectBaseUrl) {
           const nextBaseUrl = formatAgentBaseUrl(list[0])
