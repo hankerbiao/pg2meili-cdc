@@ -2,190 +2,399 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>UniData 首页</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniData | 分布式搜索与同步平台</title>
     <link rel="stylesheet" href="/libs/layui/css/layui.css">
+    <!-- 引入 Lucide 图标 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg-body: #f8fafc;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --card-bg: #ffffff;
+            --border-color: #e2e8f0;
+            --hero-bg: #0f172a;
+        }
+
         body {
-            background-color: #f3f4f6;
-            color: #0f172a;
-            font-family: "IBM Plex Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
         }
-        .page {
-            max-width: 1080px;
+
+        /* 导航栏 */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color);
+            height: 64px;
+            display: flex;
+            align-items: center;
+        }
+
+        .navbar-container {
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 24px;
+            width: 100%;
+            padding: 0 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 32px;
+        }
+
+        .nav-links a {
+            color: var(--text-main);
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary);
+        }
+
+        /* Hero 区域 */
         .hero {
-            padding: 48px;
-            background: radial-gradient(1200px 600px at -10% -10%, #0ea5e9 0%, rgba(14,165,233,0) 60%),
-                        radial-gradient(900px 500px at 110% -10%, #22c55e 0%, rgba(34,197,94,0) 60%),
-                        #0f172a;
-            color: #f8fafc;
-            border-radius: 16px;
-            box-shadow: 0 18px 50px rgba(2, 6, 23, 0.35);
+            position: relative;
+            padding: 100px 24px;
+            background-color: var(--hero-bg);
+            color: #fff;
+            overflow: hidden;
+            text-align: center;
         }
+
+        .hero-bg-pattern {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(37, 99, 235, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(34, 197, 94, 0.1) 0%, transparent 50%);
+            z-index: 1;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
         .hero h1 {
-            font-size: 34px;
-            letter-spacing: 0.4px;
-            margin-bottom: 12px;
+            font-size: 48px;
+            font-weight: 800;
+            line-height: 1.2;
+            margin-bottom: 24px;
+            background: linear-gradient(to right, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
+
         .hero p {
-            font-size: 15px;
-            color: rgba(248, 250, 252, 0.75);
-            line-height: 1.8;
-            max-width: 720px;
+            font-size: 18px;
+            color: #94a3b8;
+            line-height: 1.6;
+            margin-bottom: 40px;
         }
-        .meta {
+
+        .hero-btns {
             display: flex;
             gap: 16px;
-            flex-wrap: wrap;
-            margin-top: 24px;
+            justify-content: center;
         }
-        .meta-item {
-            padding: 10px 14px;
-            background: rgba(15, 23, 42, 0.65);
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            border-radius: 10px;
-            color: #e2e8f0;
-            font-size: 12px;
-        }
-        .cta {
-            margin-top: 28px;
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-        }
-        .cta .layui-btn {
-            height: 40px;
-            line-height: 40px;
-            border-radius: 10px;
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: #fff;
+            padding: 12px 28px;
+            border-radius: 8px;
             font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
-        .section-title {
-            margin: 28px 0 12px;
-            font-size: 16px;
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.4);
+            color: #fff;
+        }
+
+        .btn-secondary {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            padding: 12px 28px;
+            border-radius: 8px;
             font-weight: 600;
-            color: #0f172a;
+            text-decoration: none;
+            transition: all 0.2s;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        .feature-grid {
+
+        .btn-secondary:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
+
+        .features-grid {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 16px;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 32px;
         }
+
         .feature-card {
-            border-radius: 12px;
-            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
-            border: 1px solid #e2e8f0;
+            background: var(--card-bg);
+            padding: 32px;
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
         }
-        .feature-card .layui-card-header {
-            font-weight: 600;
-            font-size: 15px;
-            color: #0f172a;
+
+        .feature-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05);
+            border-color: var(--primary);
         }
-        .feature-card .layui-card-body {
-            font-size: 13px;
-            color: #475569;
-            line-height: 1.7;
-        }
-        .quick-links {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 12px;
-            margin-top: 20px;
-        }
-        .quick-link {
-            padding: 14px 16px;
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
+
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--primary);
             border-radius: 12px;
             display: flex;
             align-items: center;
+            justify-content: center;
+            margin-bottom: 24px;
+        }
+
+        .feature-card h3 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .feature-card p {
+            color: var(--text-muted);
+            line-height: 1.6;
+            font-size: 15px;
+        }
+
+        /* 快速入口 */
+        .quick-links {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-top: 40px;
+        }
+
+        .link-card {
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
             justify-content: space-between;
-            color: #0f172a;
-            transition: all 0.2s ease;
+            text-decoration: none;
+            color: var(--text-main);
+            transition: all 0.2s;
         }
-        .quick-link:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+
+        .link-card:hover {
+            border-color: var(--primary);
+            background: #f8fafc;
+            color: var(--primary);
         }
-        .quick-link span {
-            font-size: 13px;
-            color: #64748b;
+
+        .link-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
-        .footer-note {
-            margin-top: 28px;
+
+        .link-title {
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .link-path {
             font-size: 12px;
-            color: #94a3b8;
+            color: var(--text-muted);
+            margin-top: 2px;
         }
+
+        /* 状态条 */
+        .tech-stack {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 60px;
+            opacity: 0.6;
+            flex-wrap: wrap;
+        }
+
+        .tech-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        /* 页脚 */
+        .footer {
+            border-top: 1px solid var(--border-color);
+            padding: 40px 24px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
         @media (max-width: 960px) {
-            .feature-grid,
-            .quick-links {
+            .features-grid, .quick-links {
                 grid-template-columns: 1fr;
             }
-            .hero {
-                padding: 32px;
+            .hero h1 {
+                font-size: 36px;
+            }
+            .nav-links {
+                display: none;
             }
         }
     </style>
 </head>
-<body class="layui-layout-body">
-<div class="page">
+<body>
+
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="/" class="logo">
+                <i data-lucide="database"></i>
+                UniData
+            </a>
+            <div class="nav-links">
+                <a href="/">首页</a>
+                <a href="/app/register">Token 申请</a>
+                <a href="/health">服务状态</a>
+                <a href="/docs/brief" target="_blank">文档</a>
+            </div>
+        </div>
+    </nav>
+
     <div class="hero">
-        <h1>UniData 分布式搜索与同步平台</h1>
-        <p>面向多地域数据检索场景的统一数据入口。写入集中、同步自动化、就近检索，降低业务侧复杂度并提升可用性与可观测性。</p>
-        <div class="meta">
-            <div class="meta-item">写入：UniData API</div>
-            <div class="meta-item">同步：Debezium + Kafka</div>
-            <div class="meta-item">搜索：Meilisearch</div>
-        </div>
-        <div class="cta">
-            <a href="/app/register" class="layui-btn layui-btn-normal">申请 Token</a>
-            <a href="/docs" class="layui-btn layui-btn-primary">查看文档</a>
-            <a href="/app/review" class="layui-btn layui-btn-primary">审核 Token</a>
-        </div>
-    </div>
+        <div class="hero-bg-pattern"></div>
+        <div class="hero-content">
+            <h1>分布式搜索与同步平台</h1>
+            <p>面向多地域数据检索场景的统一数据入口。实现写入集中、同步自动化、就近检索，为您的分布式应用提供极致性能与稳定性。</p>
+            <div class="hero-btns">
+                <a href="/app/register" class="btn-primary">
+                    立即申请 Token
+                    <i data-lucide="arrow-right" style="width: 18px; height: 18px;"></i>
+                </a>
+                <a href="/docs/brief" target="_blank" class="btn-secondary">查看文档</a>
+            </div>
 
-    <div class="section-title">核心能力</div>
-    <div class="feature-grid">
-        <div class="layui-card feature-card">
-            <div class="layui-card-header">单写多搜</div>
-            <div class="layui-card-body">
-                写入只落主库，CDC 自动同步到多地域搜索节点，避免双写与索引漂移。
-            </div>
-        </div>
-        <div class="layui-card feature-card">
-            <div class="layui-card-header">低延迟访问</div>
-            <div class="layui-card-body">
-                搜索请求就近访问边缘节点，降低跨地域访问时延，稳定在线体验。
-            </div>
-        </div>
-        <div class="layui-card feature-card">
-            <div class="layui-card-header">链路可观测</div>
-            <div class="layui-card-body">
-                PostgreSQL → Kafka → Search 链路清晰，便于故障定位与回放补偿。
+            <div class="tech-stack">
+                <div class="tech-item"><i data-lucide="code-2" style="width: 16px;"></i> UniData API</div>
+                <div class="tech-item"><i data-lucide="refresh-cw" style="width: 16px;"></i> Debezium + Kafka</div>
+                <div class="tech-item"><i data-lucide="search" style="width: 16px;"></i> Meilisearch</div>
             </div>
         </div>
     </div>
 
-    <div class="section-title">快速入口</div>
-    <div class="quick-links">
-        <a class="quick-link" href="/docs/brief" target="_blank">
-            简要接口文档（PDF）
-            <span>/docs/brief</span>
-        </a>
-        <a class="quick-link" href="/app/register">
-            Token 申请
-            <span>/app/register</span>
-        </a>
-        <a class="quick-link" href="/health">
-            服务健康检查
-            <span>/health</span>
-        </a>
+
+
+    <div class="section" style="background: rgba(37, 99, 235, 0.02); border-radius: 32px; margin-bottom: 80px; padding: 60px 40px;">
+        <div class="section-header" style="margin-bottom: 40px; text-align: left;">
+            <h2>快速入口</h2>
+            <p>常用功能与开发者资源</p>
+        </div>
+        <div class="quick-links">
+            <a href="/docs/brief" target="_blank" class="link-card">
+                <div class="link-info">
+                    <i data-lucide="file-text" style="color: var(--primary);"></i>
+                    <div>
+                        <div class="link-title">简要接口文档 (PDF)</div>
+                        <div class="link-path">/docs/brief</div>
+                    </div>
+                </div>
+                <i data-lucide="chevron-right" style="width: 18px;"></i>
+            </a>
+            <a href="/app/register" class="link-card">
+                <div class="link-info">
+                    <i data-lucide="key" style="color: var(--primary);"></i>
+                    <div>
+                        <div class="link-title">Token 申请</div>
+                        <div class="link-path">/app/register</div>
+                    </div>
+                </div>
+                <i data-lucide="chevron-right" style="width: 18px;"></i>
+            </a>
+            <a href="/health" class="link-card">
+                <div class="link-info">
+                    <i data-lucide="activity" style="color: var(--primary);"></i>
+                    <div>
+                        <div class="link-title">服务健康检查</div>
+                        <div class="link-path">/health</div>
+                    </div>
+                </div>
+                <i data-lucide="chevron-right" style="width: 18px;"></i>
+            </a>
+        </div>
     </div>
 
-    <div class="footer-note">建议先完成 Token 申请，再进行写入与搜索联调。</div>
-</div>
+    <footer class="footer">
+        <p>&copy; 2026 UniData 分布式搜索平台. Built for reliability and speed.</p>
+        <p style="margin-top: 8px; font-size: 12px;">建议先完成 Token 申请，再进行写入与搜索联调。</p>
+    </footer>
 
-<script src="/libs/layui/layui.js"></script>
+    <script src="/libs/layui/layui.js"></script>
+    <script>
+        // 初始化 Lucide 图标
+        lucide.createIcons();
+        
+        // 滚动时改变导航栏样式
+        window.addEventListener('scroll', function() {
+            const nav = document.querySelector('.navbar');
+            if (window.scrollY > 20) {
+                nav.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+            } else {
+                nav.style.boxShadow = 'none';
+            }
+        });
+    </script>
 </body>
 </html>

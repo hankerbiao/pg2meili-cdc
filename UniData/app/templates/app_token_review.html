@@ -2,136 +2,288 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Token 审核</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token 审核 | UniData</title>
     <link rel="stylesheet" href="/libs/layui/css/layui.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg-body: #f8fafc;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --card-bg: #ffffff;
+            --border-color: #e2e8f0;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* 导航栏 */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color);
+            height: 64px;
+            display: flex;
+            align-items: center;
+        }
+
+        .navbar-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 0 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 32px;
+        }
+
+        .nav-links a {
+            color: var(--text-main);
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary);
+        }
+
+        /* 页面主体 */
+        .page-header {
+            background: #fff;
+            border-bottom: 1px solid var(--border-color);
+            padding: 40px 0;
+            margin-bottom: 40px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .page-desc {
+            color: var(--text-muted);
+            font-size: 15px;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            padding: 32px;
+            margin-bottom: 32px;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* 表格定制 */
+        .layui-table {
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        .layui-table th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: var(--text-main);
+            padding: 16px;
+        }
+
+        .layui-table td {
+            padding: 16px;
+            color: #475569;
+        }
+
+        .layui-btn-sm {
+            border-radius: 6px;
+            font-weight: 500;
+        }
+
+        .btn-approve {
+            background-color: var(--primary) !important;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 0;
+            color: var(--text-muted);
+        }
+    </style>
 </head>
-<body class="layui-layout-body">
-<div class="layui-container" style="margin-top:40px;">
-    <div class="layui-row">
-        <div class="layui-col-md10 layui-col-md-offset1">
-            <div class="layui-card">
-                <div class="layui-card-header">待审核 Token</div>
-                <div class="layui-card-body">
-                    <table class="layui-table">
-                        <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>应用名称</th>
-                            <th>接收 itcode</th>
-                            <th>失效时间</th>
-                            <th>创建时间</th>
-                            <th>操作</th>
-                        </tr>
-                        </thead>
-                        <tbody id="tokenTableBody">
-                        </tbody>
-                    </table>
-                </div>
+<body>
+
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="/" class="logo">
+                <i data-lucide="database"></i>
+                UniData
+            </a>
+            <div class="nav-links">
+                <a href="/">首页</a>
+                <a href="/app/register">Token 申请</a>
+                <a href="/health">服务状态</a>
+                <a href="/docs/brief" target="_blank">文档</a>
             </div>
         </div>
+    </nav>
+
+    <div class="page-header">
+        <div class="container">
+            <h1 class="page-title">Token 审核中心</h1>
+            <p class="page-desc">管理员可以在此审核新应用的 Token 申请请求。</p>
+        </div>
     </div>
-</div>
-<script src="/libs/layui/layui.js"></script>
-<script>
-layui.use(['layer'], function () {
-    var layer = layui.layer;
 
-    function formatDate(s) {
-        if (!s) return '';
-        return s.replace('T', ' ').replace('Z', '');
-    }
+    <div class="container">
+        <div class="card">
+            <div class="card-title">
+                <i data-lucide="clipboard-check" style="color: var(--primary);"></i>
+                待处理申请
+            </div>
+            
+            <table class="layui-table" lay-skin="line">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>应用名称</th>
+                        <th>申请人 (IT Code)</th>
+                        <th>申请时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="tokenTableBody">
+                    <!-- 动态加载内容 -->
+                </tbody>
+            </table>
+        </div>
+    </div>
 
-    function loadTokens() {
-        fetch('/api/v1/auth/tokens/pending')
-            .then(function (resp) {
-                return resp.json().then(function (json) {
-                    return {ok: resp.ok, json: json};
+    <script src="/libs/layui/layui.js"></script>
+    <script>
+        lucide.createIcons();
+
+        layui.use(['layer'], function () {
+            var layer = layui.layer;
+
+            function formatDate(s) {
+                if (!s) return '';
+                const date = new Date(s);
+                return date.toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
                 });
-            })
-            .then(function (res) {
-                if (!res.ok) {
-                    var msg = res.json.detail || res.json.message || JSON.stringify(res.json);
-                    layer.msg('加载失败: ' + msg, {icon: 2});
-                    return;
-                }
-                var tbody = document.getElementById('tokenTableBody');
-                tbody.innerHTML = '';
-                if (!Array.isArray(res.json) || res.json.length === 0) {
-                    var tr = document.createElement('tr');
-                    var td = document.createElement('td');
-                    td.colSpan = 6;
-                    td.innerText = '暂无待审核记录';
-                    tr.appendChild(td);
-                    tbody.appendChild(tr);
-                    return;
-                }
-                res.json.forEach(function (item) {
-                    var tr = document.createElement('tr');
+            }
 
-                    var tdId = document.createElement('td');
-                    tdId.innerText = item.id;
-                    tr.appendChild(tdId);
+            function loadTokens() {
+                fetch('/api/v1/auth/tokens/pending')
+                    .then(resp => resp.json())
+                    .then(res => {
+                        // 兼容包装格式 {data: [...], message: "ok"} 或 直接数组
+                        const data = res.data || res;
+                        const tbody = document.getElementById('tokenTableBody');
+                        tbody.innerHTML = '';
+                        
+                        if (!Array.isArray(data) || data.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><i data-lucide="inbox" style="margin: 0 auto 12px; width: 40px; height: 40px; opacity: 0.2;"></i><p>当前没有待审核的申请</p></td></tr>';
+                            lucide.createIcons();
+                            return;
+                        }
 
-                    var tdApp = document.createElement('td');
-                    tdApp.innerText = item.app_name;
-                    tr.appendChild(tdApp);
+                        data.forEach(item => {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td>${item.id}</td>
+                                <td style="font-weight: 500; color: var(--text-main);">${item.app_name}</td>
+                                <td><code>${item.itcode}</code></td>
+                                <td>${formatDate(item.created_at)}</td>
+                                <td>
+                                    <button class="layui-btn layui-btn-sm btn-approve" onclick="approveToken(${item.id})">
+                                        通过审核
+                                    </button>
+                                </td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+                    })
+                    .catch(err => {
+                        layer.msg('加载失败', {icon: 2});
+                    });
+            }
 
-                    var tdIt = document.createElement('td');
-                    tdIt.innerText = item.itcode;
-                    tr.appendChild(tdIt);
-
-                    var tdExpire = document.createElement('td');
-                    tdExpire.innerText = formatDate(item.expires_at);
-                    tr.appendChild(tdExpire);
-
-                    var tdCreated = document.createElement('td');
-                    tdCreated.innerText = formatDate(item.created_at);
-                    tr.appendChild(tdCreated);
-
-                    var tdOp = document.createElement('td');
-                    var btn = document.createElement('button');
-                    btn.className = 'layui-btn layui-btn-sm';
-                    btn.innerText = '审核通过';
-                    btn.onclick = function () {
-                        approveToken(item.id);
-                    };
-                    tdOp.appendChild(btn);
-                    tr.appendChild(tdOp);
-
-                    tbody.appendChild(tr);
+            window.approveToken = function(id) {
+                layer.confirm('确定通过该应用的 Token 申请吗？', {
+                    title: '审核确认',
+                    btn: ['确定', '取消']
+                }, function(index) {
+                    fetch(`/api/v1/auth/tokens/${id}/approve`, {
+                        method: 'POST'
+                    })
+                    .then(resp => resp.json())
+                    .then(res => {
+                        if (res.message === 'ok' || res.status === 'approved') {
+                            layer.msg('审核已通过', {icon: 1});
+                            loadTokens();
+                        } else {
+                            layer.msg('操作失败: ' + (res.message || '未知错误'), {icon: 2});
+                        }
+                    })
+                    .catch(err => {
+                        layer.msg('网络请求失败', {icon: 2});
+                    });
+                    layer.close(index);
                 });
-            })
-            .catch(function (err) {
-                layer.msg('网络错误: ' + err, {icon: 2});
-            });
-    }
+            };
 
-    function approveToken(id) {
-        layer.confirm('确认审核通过该 Token 吗？', function (index) {
-            layer.close(index);
-            fetch('/api/v1/auth/tokens/' + encodeURIComponent(id) + '/approve', {
-                method: 'POST'
-            }).then(function (resp) {
-                return resp.json().then(function (json) {
-                    return {ok: resp.ok, json: json};
-                });
-            }).then(function (res) {
-                if (!res.ok) {
-                    var msg = res.json.detail || res.json.message || JSON.stringify(res.json);
-                    layer.msg('审核失败: ' + msg, {icon: 2});
-                    return;
-                }
-                layer.msg('审核通过并已发送消息', {icon: 1});
-                loadTokens();
-            }).catch(function (err) {
-                layer.msg('网络错误: ' + err, {icon: 2});
-            });
+            loadTokens();
         });
-    }
-
-    loadTokens();
-});
-</script>
+    </script>
 </body>
 </html>
-

@@ -2,470 +2,396 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>注册应用并获取 Token</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token 申请 | UniData</title>
     <link rel="stylesheet" href="/libs/layui/css/layui.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg-body: #f8fafc;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --card-bg: #ffffff;
+            --border-color: #e2e8f0;
+        }
+
         body {
-            background-color: #f0f2f5;
-            color: #333;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
         }
-        .header-bar {
-            background-color: #393D49;
-            height: 60px;
-            line-height: 60px;
-            color: #fff;
-            padding: 0 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+
+        /* 导航栏 */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color);
+            height: 64px;
+            display: flex;
+            align-items: center;
         }
-        .header-bar .logo {
+
+        .navbar-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 0 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 32px;
+        }
+
+        .nav-links a {
+            color: var(--text-main);
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary);
+        }
+
+        /* 页面主体 */
+        .page-header {
+            background: #fff;
+            border-bottom: 1px solid var(--border-color);
+            padding: 40px 0;
+            margin-bottom: 40px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .page-desc {
+            color: var(--text-muted);
+            font-size: 15px;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            padding: 32px;
+            margin-bottom: 32px;
+        }
+
+        .card-title {
             font-size: 18px;
-            font-weight: bold;
-        }
-        .layui-card {
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            border: none;
-            margin-bottom: 20px;
-        }
-        .layui-card-header {
             font-weight: 600;
-            font-size: 16px;
-            border-bottom: 1px solid #f6f6f6;
-            padding: 15px 20px;
-            height: auto;
-            line-height: normal;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        .layui-card-body {
-            padding: 20px;
-        }
+
+        /* 表单定制 */
         .layui-form-label {
             width: 100px;
-            color: #666;
+            font-weight: 500;
+            color: var(--text-main);
         }
+
         .layui-input-block {
             margin-left: 130px;
         }
+
         .layui-input {
-            border-radius: 4px;
-            border-color: #e6e6e6;
-            height: 38px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            height: 42px;
+            transition: all 0.2s;
         }
+
         .layui-input:focus {
-            border-color: #009688;
-            box-shadow: 0 0 0 3px rgba(0, 150, 136, 0.1);
+            border-color: var(--primary) !important;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
+
         .layui-btn {
-            border-radius: 4px;
-            height: 38px;
-            line-height: 38px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            transition: all 0.3s;
-        }
-        .layui-btn-primary {
-            border-color: #e6e6e6;
-            box-shadow: none;
-        }
-        .layui-table {
-            color: #555;
-        }
-        .layui-table th {
-            background-color: #fafafa;
+            height: 42px;
+            line-height: 42px;
+            border-radius: 8px;
             font-weight: 600;
-            color: #333;
+            padding: 0 24px;
+            transition: all 0.2s;
         }
+
+        .btn-submit {
+            background-color: var(--primary) !important;
+        }
+
+        .btn-submit:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        /* 结果展示 */
+        .result-box {
+            display: none;
+            margin-top: 24px;
+            padding: 20px;
+            background: #f1f5f9;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .token-display {
+            background: #fff;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            font-family: monospace;
+            word-break: break-all;
+            margin: 10px 0;
+            font-size: 13px;
+            color: #1e293b;
+        }
+
+        /* 表格样式 */
+        .layui-table {
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        .layui-table th {
+            background: #f8fafc;
+            font-weight: 600;
+        }
+
         .status-badge {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
             padding: 2px 8px;
-            border-radius: 4px;
+            border-radius: 99px;
             font-size: 12px;
+            font-weight: 500;
         }
-        /* Custom scrollbar for webkit */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #f1f1f1; 
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #ccc; 
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #bbb; 
-        }
-        .form-icon {
-            position: absolute;
-            left: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #ccc;
-            z-index: 10;
+
+        .status-pending { background: #fef3c7; color: #92400e; }
+        .status-active { background: #dcfce7; color: #166534; }
+        .status-revoked { background: #fee2e2; color: #991b1b; }
+
+        @media (max-width: 640px) {
+            .layui-form-label {
+                float: none;
+                width: 100%;
+                text-align: left;
+                padding: 0 0 8px 0;
+            }
+            .layui-input-block {
+                margin-left: 0;
+            }
         }
     </style>
 </head>
 <body>
 
-<div class="header-bar">
-    <div class="layui-container">
-        <div class="logo"><i class="layui-icon layui-icon-engine"></i> 内部搜索引擎应用授权管理中心</div>
-    </div>
-</div>
-
-<div class="layui-container">
-    <div class="layui-row layui-col-space20">
-        <div class="layui-col-md5">
-            <div class="layui-card">
-                <div class="layui-card-header"><i class="layui-icon layui-icon-edit" style="margin-right: 8px; color: #009688;"></i>申请新服务</div>
-                <div class="layui-card-body">
-                    <form class="layui-form" lay-filter="tokenForm" id="tokenForm">
-                        <div class="layui-form-item">
-                            <label class="layui-form-label">应用名称</label>
-                            <div class="layui-input-block">
-                                <input type="text" name="app_name" lay-verify="required" placeholder="如：myapp" autocomplete="off" class="layui-input">
-                            </div>
-                        </div>
-                        <div class="layui-form-item">
-                            <label class="layui-form-label">失效日期</label>
-                            <div class="layui-input-block">
-                                <input type="text" id="expireDate" name="expire_date" lay-verify="required" placeholder="请选择失效日期" autocomplete="off" class="layui-input">
-                            </div>
-                        </div>
-                        <div class="layui-form-item">
-                            <label class="layui-form-label">接收 itcode</label>
-                            <div class="layui-input-block">
-                                <input type="text" name="itcode" lay-verify="required" placeholder="请输入接收 token 的 itcode" autocomplete="off" class="layui-input">
-                            </div>
-                        </div>
-                        <div class="layui-form-item" style="margin-top: 30px;">
-                            <div class="layui-input-block">
-                                <button class="layui-btn layui-btn-fluid" lay-submit lay-filter="submitToken" style="background-color: #009688;">立即申请 Token</button>
-                            </div>
-                        </div>
-                        <div class="layui-form-item">
-                            <div class="layui-input-block">
-                                <button type="reset" class="layui-btn layui-btn-primary layui-btn-fluid">重置表单</button>
-                            </div>
-                        </div>
-                    </form>
-                </div>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="/" class="logo">
+                <i data-lucide="database"></i>
+                UniData
+            </a>
+            <div class="nav-links">
+                <a href="/">首页</a>
+                <a href="/app/register">Token 申请</a>
+                <a href="/health">服务状态</a>
+                <a href="/docs/brief" target="_blank">文档</a>
             </div>
-            
-            <div class="layui-card">
-                <div class="layui-card-body" style="color: #888; font-size: 13px; line-height: 1.8;">
-                    <p><i class="layui-icon layui-icon-tips" style="color: #FFB800; margin-right: 5px;"></i><strong>说明：</strong></p>
-                    <p>1. 应用名称请使用英文字母或数字。</p>
-                    <p>2. Token 将发送至您的 itcode光圈，请注意查收。</p>
-                    <p>3. 失效日期请根据实际需求合理设置。</p>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <div class="container">
+            <h1 class="page-title">Token 申请与管理</h1>
+            <p class="page-desc">申请访问令牌以开始使用 UniData 分布式搜索与同步服务。</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <div class="card-title">
+                <i data-lucide="plus-circle" style="color: var(--primary);"></i>
+                新应用申请
+            </div>
+            <form class="layui-form" action="">
+                <div class="layui-form-item">
+                    <label class="layui-form-label">应用名称</label>
+                    <div class="layui-input-block">
+                        <input type="text" name="app_name" required lay-verify="required" placeholder="请输入应用系统名称" autocomplete="off" class="layui-input">
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">IT Code</label>
+                    <div class="layui-input-block">
+                        <input type="text" name="itcode" required lay-verify="required" placeholder="请输入您的 IT Code" autocomplete="off" class="layui-input">
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <div class="layui-input-block">
+                        <button class="layui-btn btn-submit" lay-submit lay-filter="registerForm">提交申请</button>
+                        <button type="reset" class="layui-btn layui-btn-primary">重置</button>
+                    </div>
+                </div>
+            </form>
+
+            <div id="resultBox" class="result-box">
+                <div style="font-weight: 600; color: #166534; display: flex; align-items: center; gap: 8px;">
+                    <i data-lucide="check-circle-2" style="width: 18px;"></i>
+                    申请已提交，请等待管理员审核。
+                </div>
+                <div style="margin-top: 12px; font-size: 14px; color: #475569;">
+                    审核通过后，您可以使用 IT Code 在下方查询您的 Token。
                 </div>
             </div>
         </div>
-        
-        <div class="layui-col-md7">
-            <div class="layui-card">
-                <div class="layui-card-header">
-                    <i class="layui-icon layui-icon-loading" style="margin-right: 8px; color: #FFB800;"></i>待审核的申请
-                </div>
-                <div class="layui-card-body">
-                    <table class="layui-table" lay-skin="line">
-                        <colgroup>
-                            <col width="60">
-                            <col>
-                            <col width="100">
-                            <col width="150">
-                        </colgroup>
-                        <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>应用名称</th>
-                            <th>接收人</th>
-                            <th>失效时间</th>
-                            <th>创建时间</th>
-                        </tr>
-                        </thead>
-                        <tbody id="pendingTableBody"></tbody>
-                    </table>
+
+        <div class="card">
+            <div class="card-title">
+                <i data-lucide="search" style="color: var(--primary);"></i>
+                Token 查询
+            </div>
+            <div class="layui-form">
+                <div class="layui-form-item">
+                    <label class="layui-form-label">IT Code</label>
+                    <div class="layui-input-block" style="display: flex; gap: 10px;">
+                        <input type="text" id="queryItcode" placeholder="输入 IT Code 查询已生成的 Token" class="layui-input">
+                        <button class="layui-btn layui-btn-normal" onclick="queryTokens()">查询</button>
+                    </div>
                 </div>
             </div>
-            
-            <div class="layui-card">
-                <div class="layui-card-header">
-                    <i class="layui-icon layui-icon-auz" style="margin-right: 8px; color: #1E9FFF;"></i>已注册的服务
-                </div>
-                <div class="layui-card-body">
-                    <table class="layui-table" lay-skin="line">
-                         <colgroup>
-                            <col width="60">
-                            <col>
-                            <col width="100">
-                            <col width="150">
-                        </colgroup>
-                        <thead>
+
+            <div style="margin-top: 24px;">
+                <table class="layui-table" lay-skin="line">
+                    <thead>
                         <tr>
-                            <th>ID</th>
                             <th>应用名称</th>
-                            <th>接收人</th>
-                            <th>失效时间</th>
-                            <th>创建时间</th>
                             <th>状态</th>
+                            <th>失效时间</th>
+                            <th>操作</th>
                         </tr>
-                        </thead>
-                        <tbody id="approvedTableBody"></tbody>
-                    </table>
-                </div>
+                    </thead>
+                    <tbody id="tokenTableBody">
+                        <tr>
+                            <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 40px;">暂无数据，请输入 IT Code 进行查询</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
-</div>
 
-<script src="/libs/layui/layui.js"></script>
-<script>
-layui.use(['form', 'layer', 'laydate'], function () {
-    var form = layui.form;
-    var layer = layui.layer;
-    var laydate = layui.laydate;
+    <script src="/libs/layui/layui.js"></script>
+    <script>
+        lucide.createIcons();
 
-    function formatDate(s) {
-        if (!s) return '';
-        return s.replace('T', ' ').replace('Z', '');
-    }
-
-    function renderTable(tbodyId, items) {
-        var tbody = document.getElementById(tbodyId);
-        tbody.innerHTML = '';
-        if (!Array.isArray(items) || items.length === 0) {
-            var tr = document.createElement('tr');
-            var td = document.createElement('td');
-            td.colSpan = 5;
-            td.style.textAlign = 'center';
-            td.style.color = '#999';
-            td.innerText = '暂无相关数据';
-            tr.appendChild(td);
-            tbody.appendChild(tr);
-            return;
-        }
-        items.forEach(function (item) {
-            var tr = document.createElement('tr');
-
-            var tdId = document.createElement('td');
-            tdId.innerText = item.id;
-            tr.appendChild(tdId);
-
-            var tdApp = document.createElement('td');
-            tdApp.style.fontWeight = '500';
-            tdApp.innerText = item.app_name;
-            tr.appendChild(tdApp);
-
-            var tdIt = document.createElement('td');
-            tdIt.innerText = item.itcode;
-            tr.appendChild(tdIt);
-
-            var tdExpire = document.createElement('td');
-            tdExpire.style.fontSize = '12px';
-            tdExpire.style.color = '#666';
-            tdExpire.innerText = formatDate(item.expires_at);
-            tr.appendChild(tdExpire);
-
-            var tdCreated = document.createElement('td');
-            tdCreated.style.fontSize = '12px';
-            tdCreated.style.color = '#666';
-            tdCreated.innerText = formatDate(item.created_at);
-            tr.appendChild(tdCreated);
-
-            if (item.revoked_status) {
-                var tdRevoked = document.createElement('td');
-                tdRevoked.style.fontSize = '12px';
-                tdRevoked.style.color = '#666';
-                tdRevoked.innerText = item.revoked_status;
-                tr.appendChild(tdRevoked);
-            } else if (tbodyId === 'approvedTableBody') {
-                var tdRevokedPlaceholder = document.createElement('td');
-                tdRevokedPlaceholder.style.fontSize = '12px';
-                tdRevokedPlaceholder.style.color = '#999';
-                tdRevokedPlaceholder.innerText = '加载中...';
-                tr.appendChild(tdRevokedPlaceholder);
-            }
-
-            tbody.appendChild(tr);
-        });
-    }
-
-    function parseJtiMap(raw) {
-        if (!raw) return {};
-        var map = {};
-        raw.split(';').forEach(function (item) {
-            item = item.trim();
-            if (!item) return;
-            var idx = item.indexOf(':');
-            if (idx === -1) return;
-            var key = item.slice(0, idx).trim();
-            var value = item.slice(idx + 1).trim();
-            if (key && value) map[key] = value;
-        });
-        return map;
-    }
-
-    function fetchRevoked(jti) {
-        return fetch('/api/v1/auth/tokens/revoked/' + encodeURIComponent(jti))
-            .then(function (resp) {
-                return resp.json().then(function (json) {
-                    return {ok: resp.ok, json: json};
+        layui.use(['form', 'layer'], function(){
+            var form = layui.form;
+            var layer = layui.layer;
+            
+            form.on('submit(registerForm)', function(data){
+                fetch('/api/v1/auth/tokens/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data.field)
+                })
+                .then(resp => resp.json())
+                .then(res => {
+                    if (res.message === 'ok' || res.id) {
+                        document.getElementById('resultBox').style.display = 'block';
+                        layer.msg('提交成功', {icon: 1});
+                    } else {
+                        layer.msg('提交失败: ' + (res.message || '未知错误'), {icon: 2});
+                    }
+                })
+                .catch(err => {
+                    layer.msg('网络请求失败', {icon: 2});
                 });
-            })
-            .then(function (res) {
-                if (!res.ok) {
-                    return false;
-                }
-                var data = res.json.data || res.json;
-                return !!(data && data.revoked);
-            })
-            .catch(function () {
                 return false;
             });
-    }
+        });
 
-    function loadPending() {
-        fetch('/api/v1/auth/tokens/pending')
-            .then(function (resp) {
-                return resp.json().then(function (json) {
-                    return {ok: resp.ok, json: json};
-                });
-            }).then(function (res) {
-                if (!res.ok) {
-                    var msg = res.json.detail || res.json.message || JSON.stringify(res.json);
-                    layer.msg('加载待审核列表失败: ' + msg, {icon: 2});
-                    return;
-                }
-                var items = res.json.data || res.json;
-                renderTable('pendingTableBody', items);
-            }).catch(function (err) {
-                layer.msg('网络错误: ' + err, {icon: 2});
-            });
-    }
-
-    function loadApproved() {
-        fetch('/api/v1/auth/tokens/approved')
-            .then(function (resp) {
-                return resp.json().then(function (json) {
-                    return {ok: resp.ok, json: json};
-                });
-            }).then(function (res) {
-                if (!res.ok) {
-                    var msg = res.json.detail || res.json.message || JSON.stringify(res.json);
-                    layer.msg('加载已注册服务失败: ' + msg, {icon: 2});
-                    return;
-                }
-                var items = res.json.data || res.json;
-                var tasks = items.map(function (item) {
-                    var map = parseJtiMap(item.jti || '');
-                    var searchJti = map.search;
-                    var dataJti = map.data;
-                    if (!searchJti && !dataJti) {
-                        item.revoked_status = '未知';
-                        return Promise.resolve();
-                    }
-                    return Promise.all([
-                        searchJti ? fetchRevoked(searchJti) : Promise.resolve(false),
-                        dataJti ? fetchRevoked(dataJti) : Promise.resolve(false),
-                    ]).then(function (values) {
-                        var searchRevoked = values[0];
-                        var dataRevoked = values[1];
-                        var parts = [];
-                        if (searchJti) {
-                            parts.push('search:' + (searchRevoked ? '已注销' : '未注销'));
-                        }
-                        if (dataJti) {
-                            parts.push('data:' + (dataRevoked ? '已注销' : '未注销'));
-                        }
-                        item.revoked_status = parts.join(' / ');
-                    });
-                });
-                Promise.all(tasks).then(function () {
-                    renderTable('approvedTableBody', items);
-                });
-            }).catch(function (err) {
-                layer.msg('网络错误: ' + err, {icon: 2});
-            });
-    }
-
-    laydate.render({
-        elem: '#expireDate',
-        type: 'date',
-        min: 0,
-        theme: '#009688'
-    });
-
-    form.on('submit(submitToken)', function (data) {
-        var value = data.field;
-        if (!value.app_name) {
-            layer.msg('请填写应用名称', {icon: 2, anim: 6});
-            return false;
-        }
-        if (!value.itcode) {
-            layer.msg('请填写接收 token 的 itcode', {icon: 2, anim: 6});
-            return false;
-        }
-        if (!value.expire_date) {
-            layer.msg('请选择失效日期', {icon: 2, anim: 6});
-            return false;
-        }
-        var now = new Date();
-        var parts = value.expire_date.split('-');
-        if (parts.length !== 3) {
-            layer.msg('失效日期格式不正确', {icon: 2});
-            return false;
-        }
-        var year = parseInt(parts[0], 10);
-        var month = parseInt(parts[1], 10) - 1;
-        var day = parseInt(parts[2], 10);
-        var expireDate = new Date(year, month, day, 23, 59, 59);
-        if (isNaN(expireDate.getTime()) || expireDate <= now) {
-            layer.msg('失效日期必须大于当前时间', {icon: 2, anim: 6});
-            return false;
-        }
-        var ttl = Math.floor((expireDate.getTime() - now.getTime()) / 1000);
-        var payload = {
-            app_name: value.app_name,
-            itcode: value.itcode,
-            scopes: [],
-            ttl: ttl
-        };
-        
-        var loadIndex = layer.load(2); // Add loading state
-        
-        fetch('/api/v1/auth/token', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
-        }).then(function (resp) {
-            return resp.json().then(function (json) {
-                return {ok: resp.ok, json: json};
-            });
-        }).then(function (res) {
-            layer.close(loadIndex);
-            if (!res.ok) {
-                var msg = res.json.detail || res.json.message || JSON.stringify(res.json);
-                layer.msg('申请失败: ' + msg, {icon: 2});
+        function queryTokens() {
+            var itcode = document.getElementById('queryItcode').value;
+            if (!itcode) {
+                layer.msg('请输入 IT Code');
                 return;
             }
-            layer.msg('申请已提交，等待审核', {icon: 1});
-            // Optional: reset form
-            // document.getElementById('tokenForm').reset();
-            loadPending();
-        }).catch(function (err) {
-            layer.close(loadIndex);
-            layer.msg('网络错误: ' + err, {icon: 2});
-        });
-        return false;
-    });
 
-    loadPending();
-    loadApproved();
-});
-</script>
+            fetch('/api/v1/auth/tokens/my?itcode=' + itcode)
+            .then(resp => resp.json())
+            .then(res => {
+                var data = res.data || res;
+                var tbody = document.getElementById('tokenTableBody');
+                tbody.innerHTML = '';
+                
+                if (!Array.isArray(data) || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 40px;">未找到相关 Token 记录</td></tr>';
+                    return;
+                }
+
+                data.forEach(item => {
+                    var tr = document.createElement('tr');
+                    var statusClass = item.is_revoked ? 'status-revoked' : (item.token ? 'status-active' : 'status-pending');
+                    var statusText = item.is_revoked ? '已撤销' : (item.token ? '已激活' : '待审核');
+                    
+                    tr.innerHTML = `
+                        <td>${item.app_name}</td>
+                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                        <td>${item.expires_at ? item.expires_at.split('T')[0] : '-'}</td>
+                        <td>
+                            ${item.token ? `<button class="layui-btn layui-btn-xs layui-btn-primary" onclick="viewToken('${item.token}')">查看 Token</button>` : '-'}
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            });
+        }
+
+        function viewToken(token) {
+            layui.layer.open({
+                title: '您的访问令牌 (Token)',
+                content: `<div class="token-display">${token}</div><p style="font-size: 12px; color: #ef4444; margin-top: 8px;">请妥善保管，切勿泄露给他人。</p>`,
+                area: ['400px']
+            });
+        }
+    </script>
 </body>
 </html>
