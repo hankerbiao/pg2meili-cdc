@@ -32,3 +32,9 @@ def register_pages(app: FastAPI) -> None:
     async def app_review_page():
         html_path = templates_dir / "app_token_review.html"
         return FileResponse(html_path)
+
+    @app.get("/docs/brief", include_in_schema=False)
+    async def app_brief_doc():
+        repo_root = Path(__file__).resolve().parents[3]
+        pdf_path = repo_root / "docs" / "接口简要说明.pdf"
+        return FileResponse(pdf_path, media_type="application/pdf")

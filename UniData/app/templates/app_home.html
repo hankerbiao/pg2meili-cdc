@@ -6,76 +6,184 @@
     <link rel="stylesheet" href="/libs/layui/css/layui.css">
     <style>
         body {
-            background-color: #f5f7fa;
-            color: #1f2937;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+            background-color: #f3f4f6;
+            color: #0f172a;
+            font-family: "IBM Plex Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+        .page {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 24px;
         }
         .hero {
-            padding: 60px 40px;
-            background: linear-gradient(135deg, #0f172a, #1f2937);
-            color: #fff;
-            border-radius: 12px;
-            margin-top: 30px;
+            padding: 48px;
+            background: radial-gradient(1200px 600px at -10% -10%, #0ea5e9 0%, rgba(14,165,233,0) 60%),
+                        radial-gradient(900px 500px at 110% -10%, #22c55e 0%, rgba(34,197,94,0) 60%),
+                        #0f172a;
+            color: #f8fafc;
+            border-radius: 16px;
+            box-shadow: 0 18px 50px rgba(2, 6, 23, 0.35);
         }
         .hero h1 {
-            font-size: 30px;
+            font-size: 34px;
+            letter-spacing: 0.4px;
             margin-bottom: 12px;
         }
         .hero p {
-            font-size: 14px;
-            color: #cbd5f5;
+            font-size: 15px;
+            color: rgba(248, 250, 252, 0.75);
             line-height: 1.8;
+            max-width: 720px;
+        }
+        .meta {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-top: 24px;
+        }
+        .meta-item {
+            padding: 10px 14px;
+            background: rgba(15, 23, 42, 0.65);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 10px;
+            color: #e2e8f0;
+            font-size: 12px;
+        }
+        .cta {
+            margin-top: 28px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .cta .layui-btn {
+            height: 40px;
+            line-height: 40px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+        .section-title {
+            margin: 28px 0 12px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #0f172a;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 16px;
         }
         .feature-card {
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-            border: none;
+            border-radius: 12px;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+            border: 1px solid #e2e8f0;
         }
         .feature-card .layui-card-header {
             font-weight: 600;
+            font-size: 15px;
+            color: #0f172a;
         }
-        .cta {
+        .feature-card .layui-card-body {
+            font-size: 13px;
+            color: #475569;
+            line-height: 1.7;
+        }
+        .quick-links {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
             margin-top: 20px;
+        }
+        .quick-link {
+            padding: 14px 16px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: #0f172a;
+            transition: all 0.2s ease;
+        }
+        .quick-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+        }
+        .quick-link span {
+            font-size: 13px;
+            color: #64748b;
+        }
+        .footer-note {
+            margin-top: 28px;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+        @media (max-width: 960px) {
+            .feature-grid,
+            .quick-links {
+                grid-template-columns: 1fr;
+            }
+            .hero {
+                padding: 32px;
+            }
         }
     </style>
 </head>
 <body class="layui-layout-body">
-<div class="layui-container">
+<div class="page">
     <div class="hero">
         <h1>UniData 分布式搜索与同步平台</h1>
-        <p>UniData 以 CDC 为核心，将写入与搜索解耦，实现单写多搜、多地同步与就近查询。适用于测试用例、需求、知识库等文档型数据的检索场景。</p>
+        <p>面向多地域数据检索场景的统一数据入口。写入集中、同步自动化、就近检索，降低业务侧复杂度并提升可用性与可观测性。</p>
+        <div class="meta">
+            <div class="meta-item">写入：UniData API</div>
+            <div class="meta-item">同步：Debezium + Kafka</div>
+            <div class="meta-item">搜索：Meilisearch</div>
+        </div>
         <div class="cta">
             <a href="/app/register" class="layui-btn layui-btn-normal">申请 Token</a>
             <a href="/docs" class="layui-btn layui-btn-primary">查看文档</a>
+            <a href="/app/review" class="layui-btn layui-btn-primary">审核 Token</a>
         </div>
     </div>
 
-    <div class="layui-row layui-col-space20" style="margin-top: 20px;">
-        <div class="layui-col-md4">
-            <div class="layui-card feature-card">
-                <div class="layui-card-header">单写多搜</div>
-                <div class="layui-card-body">
-                    写入只落主库，数据自动同步到多地域搜索节点，避免业务双写。
-                </div>
+    <div class="section-title">核心能力</div>
+    <div class="feature-grid">
+        <div class="layui-card feature-card">
+            <div class="layui-card-header">单写多搜</div>
+            <div class="layui-card-body">
+                写入只落主库，CDC 自动同步到多地域搜索节点，避免双写与索引漂移。
             </div>
         </div>
-        <div class="layui-col-md4">
-            <div class="layui-card feature-card">
-                <div class="layui-card-header">低延迟检索</div>
-                <div class="layui-card-body">
-                    搜索请求就近访问边缘节点，降低跨地域访问时延。
-                </div>
+        <div class="layui-card feature-card">
+            <div class="layui-card-header">低延迟访问</div>
+            <div class="layui-card-body">
+                搜索请求就近访问边缘节点，降低跨地域访问时延，稳定在线体验。
             </div>
         </div>
-        <div class="layui-col-md4">
-            <div class="layui-card feature-card">
-                <div class="layui-card-header">链路可观测</div>
-                <div class="layui-card-body">
-                    PostgreSQL → Debezium → Kafka → Meilisearch 链路清晰，便于排障。
-                </div>
+        <div class="layui-card feature-card">
+            <div class="layui-card-header">链路可观测</div>
+            <div class="layui-card-body">
+                PostgreSQL → Kafka → Search 链路清晰，便于故障定位与回放补偿。
             </div>
         </div>
     </div>
+
+    <div class="section-title">快速入口</div>
+    <div class="quick-links">
+        <a class="quick-link" href="/docs/brief" target="_blank">
+            简要接口文档（PDF）
+            <span>/docs/brief</span>
+        </a>
+        <a class="quick-link" href="/app/register">
+            Token 申请
+            <span>/app/register</span>
+        </a>
+        <a class="quick-link" href="/health">
+            服务健康检查
+            <span>/health</span>
+        </a>
+    </div>
+
+    <div class="footer-note">建议先完成 Token 申请，再进行写入与搜索联调。</div>
 </div>
 
 <script src="/libs/layui/layui.js"></script>
