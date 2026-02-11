@@ -18,6 +18,11 @@ def register_pages(app: FastAPI) -> None:
     """注册简单 HTML 页面路由。"""
     templates_dir = Path(__file__).resolve().parents[1] / "templates"
 
+    @app.get("/", include_in_schema=False)
+    async def app_home_page():
+        html_path = templates_dir / "app_home.html"
+        return FileResponse(html_path)
+
     @app.get("/app/register", include_in_schema=False)
     async def app_register_page():
         html_path = templates_dir / "app_token_register.html"

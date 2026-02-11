@@ -17,7 +17,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/",
+    "",
     response_model=List[str],
     status_code=status.HTTP_200_OK,
     summary="获取当前应用下的索引列表",

@@ -2,9 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { search, SearchRequest, SearchResponse, SearchHit } from '../api'
 
 const DEFAULT_TOKEN =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6Im5jaXRfdjEiLCJzY29wZXMiOltdLCJleHAiOjQxMDI0MTU5OTh9.Ggm2SDW0E22nVV3R9ho_olNdXXVKfpzLU1K9kdSAEj0'
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6ImxpYmlhbyIsInNjb3BlcyI6WyJzZWFyY2g6cmVhZCJdLCJleHAiOjE4MDE1MjYzOTcsImlhdCI6MTc3MDc4ODk3NiwianRpIjoiMTBhNDhjYmEtMmRkZC00M2Y4LTg4OTgtOGY3ZWFlYzI3MDljIn0.Bf2E51dWPIbgsJlAjkBvzZV7pn2oKUJjg70r8Holr1M'
 const DEFAULT_BASE_URL = 'http://10.2.48.121:8091'
-const AGENTS_API_BASE = 'http://localhost:8080'
+// 默认从当前页面的后端域名获取在线代理列表
+const AGENTS_API_BASE = 'http://10.32.129.188:8080'
 
 interface OnlineAgent {
   ip: string
@@ -18,7 +19,7 @@ const BrowserSearchPage: React.FC = () => {
   const [query, setQuery] = useState('电源')
   const [filter, setFilter] = useState('')
   const [highlight, setHighlight] = useState(false)
-  const [collection, setCollection] = useState('shared_docs')
+  const [collection, setCollection] = useState('testcases')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [response, setResponse] = useState<SearchResponse | null>(null)
@@ -29,7 +30,10 @@ const BrowserSearchPage: React.FC = () => {
   const [autoSelectBaseUrl, setAutoSelectBaseUrl] = useState(true)
 
   const agentsEndpoint = useMemo(() => {
-    const normalized = AGENTS_API_BASE.replace(/\/$/, '')
+    const base =
+      AGENTS_API_BASE ||
+      (typeof window !== 'undefined' ? window.location.origin : '')
+    const normalized = base.replace(/\/$/, '')
     return `${normalized}/api/v1/agents/online`
   }, [])
 
@@ -77,7 +81,6 @@ const BrowserSearchPage: React.FC = () => {
     const req: SearchRequest = {}
     if (query.trim()) req.q = query.trim()
     if (highlight) req.attributesToHighlight = ['*']
-    req.attributesToRetrieve = ['author', 'content', 'id', 'title']
     req.attributesToCrop = ['content']
     req.cropLength = 60
     if (filter.trim()) req.filter = [filter.trim()]
@@ -112,7 +115,6 @@ const BrowserSearchPage: React.FC = () => {
       if (highlight) {
         req.attributesToHighlight = ['*']
       }
-      req.attributesToRetrieve = ['author', 'content', 'id', 'title']
       req.attributesToCrop = ['content']
       req.cropLength = 60
       if (filter.trim()) {

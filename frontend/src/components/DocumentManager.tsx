@@ -12,7 +12,7 @@ import {
 const DEFAULT_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6ImxpYmlhb190ZXN0Iiwic2NvcGVzIjpbXSwiZXhwIjoxODMwMzU1MTk4fQ.HKsX8kU5UHpZfWbw-bxivup21jnON2k6zXw6LpHNtoY'
 
 const DocumentManager: React.FC = () => {
-  const [baseUrl, setBaseUrl] = useState('http://localhost:8080')
+  const [baseUrl, setBaseUrl] = useState('http://10.32.129.188:8080')
   const [token, setToken] = useState(DEFAULT_TOKEN)
   const [collection, setCollection] = useState('shared_docs')
   const [activeTab, setActiveTab] = useState<'list' | 'create' | 'edit' | 'indexes'>('list')
