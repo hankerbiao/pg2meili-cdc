@@ -12,13 +12,14 @@ from app.core.database import get_db
 from app.schemas.document import IndexSettingsRequest, IndexSettingsResponse
 from app.services.document_service import document_service
 from app.services.index_service import index_service
+from app.api.v1.response import ok
 
 router = APIRouter()
 
 
 @router.get(
     "",
-    response_model=List[str],
+    response_model=Dict[str, Any],
     status_code=status.HTTP_200_OK,
     summary="获取当前应用下的索引列表",
     description="返回当前应用在 UniData 中已使用的 collection 名称列表。",
@@ -36,7 +37,7 @@ async def list_app_indexes(
         limit=limit,
         offset=offset,
     )
-    return collections
+    return ok(collections)
 
 
 @router.delete(
@@ -61,16 +62,16 @@ async def delete_app_index(
         app_name=current_app.app_name,
         collection=collection,
     )
-    return {
+    return ok({
         "status": "success",
         "collection": collection,
         "deleted_count": deleted_count,
-    }
+    })
 
 
 @router.post(
     "/{collection}/settings",
-    response_model=IndexSettingsResponse,
+    response_model=Dict[str, Any],
     status_code=status.HTTP_200_OK,
     summary="设置索引可过滤/可排序字段",
     description="接收前端索引设置请求，发送 Kafka 命令同步到各地 Meilisearch。",
@@ -87,8 +88,8 @@ async def update_index_settings(
         filterable=body.filterableAttributes,
         sortable=body.sortableAttributes,
     )
-    return IndexSettingsResponse(
+    return ok(IndexSettingsResponse(
         status="success",
         collection=collection,
         index_uid=index_uid,
-    )
+    ).model_dump())

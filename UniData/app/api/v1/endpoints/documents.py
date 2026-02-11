@@ -16,13 +16,14 @@ from app.schemas.document import (
     DocumentResponse,
 )
 from app.services.document_service import document_service
+from app.api.v1.response import ok
 
 router = APIRouter()
 
 
 @router.post(
     "/{collection}",
-    response_model=DocumentResponse,
+    response_model=Dict[str, Any],
     status_code=status.HTTP_201_CREATED,
     summary="创建/更新通用文档",
     description="向指定集合（collection）中插入或更新文档。请求体必须包含 'id'。",
@@ -55,12 +56,12 @@ async def upsert_document(
         app_name=current_app.app_name
     )
 
-    return DocumentResponse(status="success", id=id_value, collection=collection)
+    return ok(DocumentResponse(status="success", id=id_value, collection=collection).model_dump())
 
 
 @router.post(
     "/{collection}/batch",
-    response_model=DocumentBatchUpsertResponse,
+    response_model=Dict[str, Any],
     status_code=status.HTTP_201_CREATED,
     summary="批量创建/更新通用文档",
     description="向指定集合（collection）中批量插入或更新文档。请求体必须包含 items 列表，且每个元素包含 'id'。",
@@ -86,17 +87,17 @@ async def upsert_documents_batch(
         app_name=current_app.app_name,
     )
 
-    return DocumentBatchUpsertResponse(
+    return ok(DocumentBatchUpsertResponse(
         status="success",
         collection=collection,
         count=len(ids),
         ids=ids,
-    )
+    ).model_dump())
 
 
 @router.get(
     "/{collection}/{id}",
-    response_model=Dict[str, Any], # 直接返回 payload 内容
+    response_model=Dict[str, Any],
     status_code=status.HTTP_200_OK,
     summary="获取文档详情",
     description="根据集合和 ID 获取文档完整内容。",
@@ -109,12 +110,12 @@ async def get_document(
 ) -> Dict[str, Any]:
     require_scopes(current_app, ["data:read"])
     doc = await document_service.get_document(db, collection, id)
-    return doc
+    return ok(doc)
 
 
 @router.delete(
     "/{collection}/{id}",
-    response_model=DocumentResponse,
+    response_model=Dict[str, Any],
     status_code=status.HTTP_200_OK,
     summary="删除文档",
     description="软删除指定文档。",
@@ -127,12 +128,12 @@ async def delete_document(
 ) -> DocumentResponse:
     require_scopes(current_app, ["data:write"])
     await document_service.delete_document(db, collection, id)
-    return DocumentResponse(status="success", id=id, collection=collection)
+    return ok(DocumentResponse(status="success", id=id, collection=collection).model_dump())
 
 
 @router.get(
     "/{collection}",
-    response_model=List[Dict[str, Any]],
+    response_model=Dict[str, Any],
     status_code=status.HTTP_200_OK,
     summary="列出集合文档",
     description="分页列出指定集合下的文档。默认只返回当前应用的文档。",
@@ -152,4 +153,4 @@ async def list_documents(
         limit=limit, 
         offset=offset
     )
-    return docs
+    return ok(docs)

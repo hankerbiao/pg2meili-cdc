@@ -1,6 +1,6 @@
 """认证与令牌相关的 API 端点模块。"""
 import time
-from typing import List
+from typing import List, Any, Dict
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -10,6 +10,7 @@ from app.core.database import get_db
 from app.core.auth import AppIdentity, get_current_app, require_scopes
 from app.services.token_service import token_service
 from app.services.token_revocation_service import token_revocation_service
+from app.api.v1.response import ok
 
 
 class TokenCreateRequest(BaseModel):
@@ -49,7 +50,7 @@ router = APIRouter()
 
 @router.post(
     "/token",
-    response_model=TokenResponse,
+    response_model=Dict[str, Any],
     summary="为应用生成访问令牌",
     description="根据 app_name、scopes 和 ttl 生成 JWT 令牌，供前端注册后使用。",
 )
@@ -68,19 +69,19 @@ async def create_token(
         request_payload=body.model_dump(),
     )
 
-    return TokenResponse(app_name=body.app_name, itcode=body.itcode, expires_at=expires_at)
+    return ok(TokenResponse(app_name=body.app_name, itcode=body.itcode, expires_at=expires_at).model_dump())
 
 
 @router.get(
     "/tokens/pending",
-    response_model=List[TokenRecord],
+    response_model=Dict[str, Any],
     summary="获取待审核 token 列表",
 )
 async def list_pending_tokens(
     db: AsyncSession = Depends(get_db),
 ) -> List[TokenRecord]:
     items = await token_service.list_pending_tokens(db)
-    return [
+    return ok([
         TokenRecord(
             id=i.id,
             app_name=i.app_name,
@@ -90,19 +91,19 @@ async def list_pending_tokens(
             jti=getattr(i, "jti", None),
         )
         for i in items
-    ]
+    ])
 
 
 @router.get(
     "/tokens/approved",
-    response_model=List[TokenRecord],
+    response_model=Dict[str, Any],
     summary="获取已审核 token 列表",
 )
 async def list_approved_tokens(
     db: AsyncSession = Depends(get_db),
 ) -> List[TokenRecord]:
     items = await token_service.list_approved_tokens(db)
-    return [
+    return ok([
         TokenRecord(
             id=i.id,
             app_name=i.app_name,
@@ -112,7 +113,7 @@ async def list_approved_tokens(
             jti=getattr(i, "jti", None),
         )
         for i in items
-    ]
+    ])
 
 
 @router.post(
@@ -122,10 +123,10 @@ async def list_approved_tokens(
 async def approve_token(
     token_id: str,
     db: AsyncSession = Depends(get_db),
-) -> TokenResponse:
+) -> Dict[str, Any]:
     obj = await token_service.approve_token(db, token_id)
     expires_at_ts = int(time.mktime(obj.expires_at.timetuple())) if obj.expires_at else 0
-    return TokenResponse(app_name=obj.app_name, itcode=obj.itcode, expires_at=expires_at_ts)
+    return ok(TokenResponse(app_name=obj.app_name, itcode=obj.itcode, expires_at=expires_at_ts).model_dump())
 
 
 @router.post(
@@ -137,7 +138,7 @@ async def revoke_token(
     body: TokenRevokeRequest,
     db: AsyncSession = Depends(get_db),
     current_app: AppIdentity = Depends(get_current_app),
-) -> TokenRevokeResponse:
+) -> Dict[str, Any]:
     require_scopes(current_app, ["admin:token:revoke"])
     await token_revocation_service.revoke(
         db=db,
@@ -145,7 +146,7 @@ async def revoke_token(
         app_name=current_app.app_name,
         reason=body.reason,
     )
-    return TokenRevokeResponse(jti=body.jti, revoked_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    return ok(TokenRevokeResponse(jti=body.jti, revoked_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())).model_dump())
 
 
 @router.get(
@@ -157,4 +158,4 @@ async def is_token_revoked(
     db: AsyncSession = Depends(get_db),
 ):
     revoked = await token_revocation_service.is_revoked(db, jti)
-    return {"jti": jti, "revoked": revoked}
+    return ok({"jti": jti, "revoked": revoked})
