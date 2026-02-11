@@ -51,7 +51,7 @@ except ImportError:
 def create_test_case(base_url, index_uid, test_case_data):
     """通过 API 创建测试用例"""
     # 1. 生成 Token
-    token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6ImxpYmlhbyIsInNjb3BlcyI6W10sImV4cCI6MTgwMTc1Njc5OH0.gZ_rtjMYxBandxUXkSPIstDJJWTyPeGrIWe_CtqOs88"
+    token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6ImxpYmlhbyIsInNjb3BlcyI6WyJkYXRhOnJlYWQiLCJkYXRhOndyaXRlIl0sImV4cCI6MTgwMTUyNjM5NywiaWF0IjoxNzcwNzg4OTc2LCJqdGkiOiJiNDFjZDIzNy1jYjU3LTQ2OTUtODY1Ny0zOTgwZGJkYzdjM2YifQ.5zNgFyiXKLMHRD0YMX4YC28FwF-6i_UvMqEg8QzLBd8"
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -70,7 +70,6 @@ def create_test_case(base_url, index_uid, test_case_data):
         print(f"\n响应状态码: {response.status_code}")
         try:
             print("响应内容:")
-            print(json.dumps(response.json(), indent=2, ensure_ascii=False))
         except ValueError:
             print(response.text)
 
@@ -80,9 +79,8 @@ def create_test_case(base_url, index_uid, test_case_data):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="通过 API 添加测试用例的测试脚本")
-    parser.add_argument("--url", default="http://localhost:8080", help="API 服务的基础 URL")
-    parser.add_argument("--app", default="test_app", help="用于认证的应用名称")
-    parser.add_argument("--index", default="test_index", help="索引唯一标识")
+    parser.add_argument("--url", default="http://10.32.129.188:8080", help="API 服务的基础 URL")
+    parser.add_argument("--index", default="test_cases", help="索引唯一标识")
 
     args = parser.parse_args()
 
@@ -94,6 +92,6 @@ if __name__ == "__main__":
         print("请求成功！")
         # 尝试解析 JSON 返回值
         datas = response.json()['data']
-        for data in tqdm(datas[40:100]):
-            print(data)
+        for data in tqdm(datas[1500:]):
             create_test_case(args.url, args.index, data)
+            time.sleep(1)
