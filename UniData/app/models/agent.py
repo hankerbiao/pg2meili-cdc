@@ -1,5 +1,5 @@
 """代理节点数据库模型。"""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String
@@ -24,8 +24,8 @@ class AgentNode(Base):
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
     last_checked_at = Column(DateTime(timezone=True), nullable=True)
 
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     def __repr__(self) -> str:
         return f"<AgentNode(id={self.id}, ip={self.ip}, port={self.port})>"

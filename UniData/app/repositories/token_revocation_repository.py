@@ -1,5 +1,5 @@
 """Token 撤销记录仓储层。"""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -31,7 +31,7 @@ class TokenRevocationRepository:
             jti=jti,
             app_name=app_name,
             reason=reason,
-            revoked_at=datetime.utcnow(),
+            revoked_at=datetime.now(timezone.utc),
         )
         db.add(obj)
         await db.flush()

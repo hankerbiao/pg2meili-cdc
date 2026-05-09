@@ -71,9 +71,3 @@ class DocumentResponse(BaseModel):
     collection: str
 
 
-class DocumentDetailResponse(BaseModel):
-    """文档详情响应。"""
-    id: str
-    collection: str
-    app_name: Optional[str] = None
-    payload: Dict[str, Any]

@@ -26,7 +26,7 @@ class AgentRepository:
         existing = result.scalar_one_or_none()
 
         # 使用 UTC 的时区感知时间
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if existing:
             existing.ip = ip
             existing.port = port
@@ -60,7 +60,7 @@ class AgentRepository:
 
     @staticmethod
     async def list_online(db: AsyncSession, ttl_seconds: int) -> List[AgentNode]:
-        deadline = datetime.utcnow() - timedelta(seconds=ttl_seconds)
+        deadline = datetime.now(timezone.utc) - timedelta(seconds=ttl_seconds)
         stmt = select(AgentNode).where(AgentNode.last_seen_at.isnot(None), AgentNode.last_seen_at >= deadline)
         result = await db.execute(stmt)
         return list(result.scalars().all())
@@ -73,10 +73,10 @@ class AgentRepository:
         last_checked_at: Optional[datetime] = None,
     ) -> None:
         agent.is_online = is_online
-        agent.last_checked_at = last_checked_at or datetime.utcnow()
-        agent.updated_at = datetime.utcnow()
+        agent.last_checked_at = last_checked_at or datetime.now(timezone.utc)
+        agent.updated_at = datetime.now(timezone.utc)
         if is_online:
-            agent.last_seen_at = datetime.utcnow()
+            agent.last_seen_at = datetime.now(timezone.utc)
         await db.flush()
 
 

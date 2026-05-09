@@ -35,10 +35,10 @@ async def upsert_document(
     current_app: AppIdentity = Depends(get_current_app_with_revocation),
 ) -> DocumentResponse:
     require_scopes(current_app, ["data:write"])
-    if " " in collection:
+    if not collection or not collection.replace("-", "").replace("_", "").isalnum():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="collection 名称不能包含空格",
+            detail="collection 名称只能包含字母、数字、下划线和连字符",
         )
 
     payload = body.model_dump()
@@ -73,10 +73,10 @@ async def upsert_documents_batch(
     current_app: AppIdentity = Depends(get_current_app_with_revocation),
 ) -> DocumentBatchUpsertResponse:
     require_scopes(current_app, ["data:write"])
-    if " " in collection:
+    if not collection or not collection.replace("-", "").replace("_", "").isalnum():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="collection 名称不能包含空格",
+            detail="collection 名称只能包含字母、数字、下划线和连字符",
         )
 
     payload_items = [item.model_dump() for item in body.items]

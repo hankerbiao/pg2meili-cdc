@@ -1,15 +1,13 @@
 """通用文档业务逻辑的服务层模块。"""
 import json
-import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.document_repository import document_repository
 from app.models.document import Document
-
-logger = logging.getLogger(__name__)
 
 
 class DocumentService:

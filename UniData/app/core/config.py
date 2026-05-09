@@ -31,15 +31,11 @@ class Settings(BaseSettings):
     agent_health_timeout_seconds: int = 5
     agent_online_ttl_seconds: int = 120
 
-    # 默认 Meilisearch 端点配置（可选）
-    meili_default_url: Optional[str] = ""
-    meili_default_api_key: Optional[str] = ""
-
     # JWT 签名秘钥（HS256）
     jwt_secret: str = "dYAj4kPbhIdCM35XhcDW9HJX53xT3iux"
 
     # Kafka 配置
-    kafka_bootstrap_servers: str = "http://10.17.154.252:9092"  # Kafka 集群地址，格式如 "host1:9092,host2:9092"
+    kafka_bootstrap_servers: str = "10.17.154.252:9092"  # Kafka 集群地址，格式如 "host1:9092,host2:9092"
     kafka_client_id: str = "unidata-producer"  # 客户端标识符，用于区分不同的生产者
     kafka_security_protocol: str = "PLAINTEXT"  # 安全协议，可选 PLAINTEXT, SASL_PLAINTEXT, SASL_SSL, SSL
     kafka_sasl_mechanism: Optional[str] = None  # SASL 认证机制，如 PLAIN, SCRAM-SHA-256 等
@@ -54,7 +50,6 @@ class Settings(BaseSettings):
     kafka_token_revoke_topic: str = "token.revocations"  # Token 撤销广播 Topic
 
     gquan_base_url: Optional[str] = "http://10.32.129.1/springboard_v3"
-    gquan_app_name: Optional[str] = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

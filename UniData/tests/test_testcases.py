@@ -8,7 +8,7 @@ class TestHealthCheck:
     async def test_health_check(self, clean_client: AsyncClient):
         response = await clean_client.get("/health")
         assert response.status_code == 200
-        assert response.json()["status"] == "healthy"
+        assert response.json()["data"]["status"] == "healthy"
 
 
 class TestAPIRoutes:
@@ -26,6 +26,6 @@ class TestGenericDocumentsEndpoints:
             json=payload,
         )
         assert response.status_code in (200, 201)
-        data = response.json()
+        data = response.json()["data"]
         assert data["status"] == "success"
         assert data["id"] == "doc-1"

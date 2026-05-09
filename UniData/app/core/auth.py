@@ -5,15 +5,12 @@
 3. 从令牌中解析出 app_name 和 scopes，封装为 AppIdentity 返回给业务层。
 """
 
-import base64
-import hashlib
-import hmac
-import json
 import time
 import uuid
 from dataclasses import dataclass
 from typing import List, Optional
 
+import jwt
 from fastapi import Header, HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,23 +38,8 @@ def require_scopes(current_app: AppIdentity, required_scopes: List[str]) -> None
         )
 
 
-def _base64url_decode(data: str) -> bytes:
-    """对 JWT 中使用的 base64url 字符串进行解码。
-
-    JWT 规范规定结尾的 '=' 可以省略，因此这里需要补齐 padding。
-    """
-    padding = "=" * (-len(data) % 4)
-    return base64.urlsafe_b64decode(data + padding)
-
-
-def _base64url_encode(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
-
 def generate_jwt(app_name: str, scopes: List[str], ttl_seconds: int, jti: str | None = None) -> str:
     settings = get_settings()
-    secret = settings.jwt_secret
-    header = {"alg": "HS256", "typ": "JWT"}
     now = int(time.time())
     payload = {
         "app_name": app_name,
@@ -66,93 +48,20 @@ def generate_jwt(app_name: str, scopes: List[str], ttl_seconds: int, jti: str | 
         "iat": now,
         "jti": jti or str(uuid.uuid4()),
     }
-
-    header_b64 = _base64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
-    payload_b64 = _base64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
-    signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
-
-    signature = hmac.new(
-        key=secret.encode("utf-8"),
-        msg=signing_input,
-        digestmod=hashlib.sha256,
-    ).digest()
-    signature_b64 = _base64url_encode(signature)
-
-    return f"{header_b64}.{payload_b64}.{signature_b64}"
+    return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
 
 
 def _decode_jwt(token: str, secret: str, algorithms: Optional[List[str]] = None) -> dict:
-    """手动解析并验证一个使用 HS256 签名的 JWT。
-
-    步骤：
-    1. 拆分 header.payload.signature 三段；
-    2. 解码并反序列化 header / payload；
-    3. 检查签名算法是否在允许列表；
-    4. 使用 jwt_secret 对 header.payload 重新计算签名并比对；
-    5. 校验 exp 过期时间字段（如存在）。
-    """
+    """解析并验证 JWT，将 PyJWT 异常统一转换为 FastAPI HTTPException。"""
     if algorithms is None:
         algorithms = ["HS256"]
 
-    parts = token.split(".")
-    if len(parts) != 3:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效的令牌格式",
-        )
-
-    header_b64, payload_b64, signature_b64 = parts
-
     try:
-        header = json.loads(_base64url_decode(header_b64))
-        payload = json.loads(_base64url_decode(payload_b64))
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无法解析令牌",
-        )
-
-    alg = header.get("alg")
-    if alg not in algorithms:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="不支持的签名算法",
-        )
-
-    # 根据 header 和 payload 重新计算签名
-    signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
-    expected_sig = hmac.new(
-        key=secret.encode("utf-8"),
-        msg=signing_input,
-        digestmod=hashlib.sha256,
-    ).digest()
-    expected_sig_b64 = base64.urlsafe_b64encode(expected_sig).rstrip(b"=").decode("ascii")
-
-    # 使用恒定时间比较函数，避免时序攻击
-    if not hmac.compare_digest(expected_sig_b64, signature_b64):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="令牌签名无效",
-        )
-
-    # 如存在 exp 字段，按秒级时间戳校验是否过期
-    exp = payload.get("exp")
-    if exp is not None:
-        try:
-            exp_int = int(exp)
-        except (TypeError, ValueError):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="令牌过期时间无效",
-            )
-        now = int(time.time())
-        if now >= exp_int:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="令牌已过期",
-            )
-
-    return payload
+        return jwt.decode(token, secret, algorithms=algorithms, options={"require": ["exp", "jti"]})
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="令牌已过期")
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的令牌")
 
 
 async def get_current_app(

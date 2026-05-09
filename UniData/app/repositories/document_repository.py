@@ -26,7 +26,7 @@ class DocumentRepository:
         result = await db.execute(stmt)
         existing = result.scalar_one_or_none()
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         if existing:
             existing.payload = payload
@@ -58,7 +58,7 @@ class DocumentRepository:
             return False
 
         obj.is_delete = True
-        obj.updated_at = datetime.utcnow()
+        obj.updated_at = datetime.now(timezone.utc)
         await db.flush()
         return True
 
@@ -123,7 +123,7 @@ class DocumentRepository:
         if not docs:
             return 0
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         for doc in docs:
             doc.is_delete = True
             doc.updated_at = now

@@ -1,5 +1,5 @@
 """代理节点注册与健康管理服务。"""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 import httpx
@@ -72,7 +72,7 @@ class AgentService:
             db=db,
             agent=agent,
             is_online=is_online,
-            last_checked_at=datetime.utcnow(),
+            last_checked_at=datetime.now(timezone.utc),
         )
 
 

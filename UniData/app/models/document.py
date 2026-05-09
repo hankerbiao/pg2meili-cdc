@@ -16,8 +16,8 @@ class Document(Base):
     app_name = Column(String, nullable=True, index=True)
     payload = Column(JSONB, nullable=True)
     is_delete = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # 复合索引：加速按应用和集合的查询
     __table_args__ = (

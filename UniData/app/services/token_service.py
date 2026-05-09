@@ -1,18 +1,16 @@
 """Token 相关业务服务。"""
-import logging
 import hashlib
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-import requests
+import httpx
 from fastapi import HTTPException, status
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.repositories.token_repository import token_repository
-
-logger = logging.getLogger(__name__)
 
 
 class TokenService:
@@ -101,7 +99,7 @@ class TokenService:
         if obj.is_approved:
             return obj
 
-        now_ts = int(datetime.utcnow().timestamp())
+        now_ts = int(datetime.now(timezone.utc).timestamp())
         expires_at_ts = (
             int(obj.expires_at.replace(tzinfo=timezone.utc).timestamp())
             if obj.expires_at
@@ -118,7 +116,7 @@ class TokenService:
 
         obj.jti = f"search:{search_jti};data:{data_jti}"
         await token_repository.approve_token(db, obj)
-        TokenService._send_gquan_message(
+        await TokenService._send_gquan_message(
             user_itcode=obj.itcode,
             title="UniData Token 审核通过",
             description=f"应用 {obj.app_name} 的访问 Token 已审核通过",
@@ -132,7 +130,7 @@ class TokenService:
         return obj
 
     @staticmethod
-    def _send_gquan_message(
+    async def _send_gquan_message(
         user_itcode: str,
         msg_type: str = "MSG",
         title: str = "",
@@ -151,30 +149,26 @@ class TokenService:
         }
         gquan_url = f"{base_url.rstrip('/')}/send_gquan_msg/searchunidatainterface"
         try:
-            res = requests.post(gquan_url, data=form_data, timeout=15)
+            async with httpx.AsyncClient(timeout=15) as client:
+                res = await client.post(gquan_url, data=form_data)
             try:
                 res.raise_for_status()
-            except requests.HTTPError as e:
-                logger.error(
-                    "发送 gquan 消息失败: %s, status=%s, body=%s",
-                    e,
-                    res.status_code,
-                    res.text,
-                )
+            except httpx.HTTPStatusError as e:
+                logger.error("发送 gquan 消息失败: {}, status={}, body={}", e, res.status_code, res.text)
                 return
             try:
                 resp_json = res.json()
             except ValueError:
-                logger.error("gquan 响应不是 JSON, body=%s", res.text)
+                logger.error("gquan 响应不是 JSON, body={}", res.text)
                 return
             data = resp_json.get("data", "")
             message = resp_json.get("message", "")
             if data != "ok":
-                logger.error("发送 gquan 消息失败: %s, resp=%s", message, resp_json)
+                logger.error("发送 gquan 消息失败: {}, resp={}", message, resp_json)
             else:
                 logger.info("gquan 消息发送成功")
         except Exception as e:
-            logger.error("发送 gquan 消息异常: %s", e)
+            logger.error("发送 gquan 消息异常: {}", e)
 
 
 token_service = TokenService()

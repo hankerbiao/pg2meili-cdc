@@ -1,5 +1,5 @@
 """Token 撤销记录模型。"""
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, String
 
@@ -15,7 +15,7 @@ class TokenRevocation(Base):
     app_name = Column(String, nullable=False)
     reason = Column(String, nullable=True)
     revoked_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     def __repr__(self) -> str:
         return f"<TokenRevocation(jti={self.jti}, app_name={self.app_name})>"

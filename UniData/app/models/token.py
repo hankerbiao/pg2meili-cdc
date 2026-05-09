@@ -18,7 +18,7 @@ class AppToken(Base):
     payload = Column(JSONB, nullable=True)
     expires_at = Column(DateTime, nullable=False)
     is_approved = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     approved_at = Column(DateTime, nullable=True)
 
     def __repr__(self) -> str:
