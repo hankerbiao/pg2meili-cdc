@@ -37,7 +37,7 @@ UniData 处于这条链路的“入口”位置，主要职责是：
 
 关于 Debezium + Kafka + Meilisearch 的完整部署与 CDC 流程，可参考仓库文档：
 
-- [docs/debezium 部署.md](../docs/debezium%20部署.md)
+- [部署指南](../docs/deployment/installation.md)
 
 ---
 
@@ -117,7 +117,7 @@ Pydantic 模型见：
 
 - `GET /health`：基础探活，返回 `{ "status": "healthy" }`。
 
-下面分块说明核心接口（鉴权细节请参考 [docs/guide/token.md](../docs/guide/token.md)）。
+下面分块说明核心接口（鉴权细节请参考 [用户引导手册](../docs/guide/user-manual.md)）。
 
 ---
 
@@ -187,7 +187,7 @@ curl -X POST "http://localhost:8080/api/v1/data/requirements" \
 所有需要写入/管理数据的接口都要求携带 `Authorization: Bearer <token>`。  
 详细的 Token 获取方式与认证说明请参考：
 
-- [docs/guide/token.md](../docs/guide/token.md)
+- [用户引导手册](../docs/guide/user-manual.md)
 
 ---
 
@@ -303,11 +303,9 @@ pytest
 CDC 与搜索同步的部分在仓库其他目录中实现：
 
 - Debezium 与 Kafka 部署文档：  
-  - [docs/debezium 部署.md](../docs/debezium%20部署.md)
+  - [部署指南](../docs/deployment/installation.md)
 - Go 消费者与 Meilisearch 同步程序：  
   - [meilisearch-sync-service](../meilisearch-sync-service/main.go)
-- 事件生产者样例（其他语言实现）：  
-  - [producer](../producer/main.go)
 
 架构上，UniData 与这些组件配合，实现：
 

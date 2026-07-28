@@ -18,7 +18,7 @@
 
 ### 环境要求
 
-- Go 1.20+
+- Go 1.25.4+
 - Kafka 集群
 - Meilisearch 实例
 

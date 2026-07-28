@@ -87,7 +87,7 @@ python scripts/generate_jwt.py \
 
 #### 1. Kafka 无法连接
 - **现象**: Sync Service 或 Debezium 报错无法连接 Broker。
-- **检查**: 检查 `BOOTSTRAP_SERVERS` 地址是否可达；检查 Docker 网络配置。
+- **检查**: 检查 `KAFKA_BROKERS` 地址是否可达；检查 Docker 网络配置。
 
 #### 2. Meilisearch 写入失败
 - **现象**: 数据在 PG 更新但搜索搜不到。

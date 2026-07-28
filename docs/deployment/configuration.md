@@ -9,10 +9,10 @@ UniData 配置主要通过环境变量或 `.env` 文件加载。核心定义位�
 | 变量名 | 必填 | 说明 | 默认值/示例 |
 | :--- | :--- | :--- | :--- |
 | `PG_CONN_STRING` | 是 | PostgreSQL 连接字符串 | `postgres://user:pass@host:5432/unidata` |
-| `SERVER_PORT` | 否 | 服务监听端口 | `8080` |
+| `SERVER_PORT` | 否 | 服务监听端口 | `:8080` |
 | `JWT_SECRET` | 是 | JWT 签名秘钥 (HS256) | `your-secret-key-change-it` |
-| `MEILI_DEFAULT_URL` | 否 | 默认 Meilisearch 地址 | `http://localhost:7700` |
-| `MEILI_DEFAULT_API_KEY` | 否 | 默认 Meilisearch 密钥 | `my_master_key` |
+| `CORS_ALLOW_ORIGINS` | 否 | 允许的跨域来源，多个值用逗号分隔 | `*` |
+| `KAFKA_BOOTSTRAP_SERVERS` | 否 | Kafka Broker 地址，多个值用逗号分隔 | `kafka:9092` |
 | `KAFKA_TOKEN_REVOKE_TOPIC` | 否 | Token 撤销广播 Topic | `token.revocations` |
 
 ## 2. Sync Service (Go Agent) 配置
@@ -25,7 +25,8 @@ Go 同步服务通过环境变量读取配置，支持从 `.env` 文件加载（
 | :--- | :--- | :--- |
 | `UNIDATA_URL` | **[必需]** UniData 中心服务地址，用于注册和心跳 | `http://10.32.129.188:8080` |
 | `HTTP_ADDR` | 服务监听地址 | `:8091` |
-| `BOOTSTRAP_SERVERS` | Kafka 连接地址 | `kafka:9092` |
+| `KAFKA_BROKERS` | Kafka 连接地址，多个值用逗号分隔 | `kafka:9092` |
+| `KAFKA_TOPIC` | Debezium 数据 Topic，多个值用逗号分隔 | `search_sync.public.uni_documents` |
 | `MEILI_HOST` | 本地 Meilisearch 地址 | `http://localhost:7700` |
 | `MEILI_API_KEY` | 本地 Meilisearch 密钥 | `my_master_key` |
 | `KAFKA_TOKEN_REVOKE_TOPIC` | 撤销广播 Topic | `token.revocations` |

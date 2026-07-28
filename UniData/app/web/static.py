@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 
@@ -35,6 +35,4 @@ def register_pages(app: FastAPI) -> None:
 
     @app.get("/docs/brief", include_in_schema=False)
     async def app_brief_doc():
-        repo_root = Path(__file__).resolve().parents[3]
-        pdf_path = repo_root / "docs" / "接口简要说明.pdf"
-        return FileResponse(pdf_path, media_type="application/pdf")
+        return RedirectResponse(url="/docs")

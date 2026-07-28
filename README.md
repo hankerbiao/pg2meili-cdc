@@ -62,7 +62,7 @@
 │
 ├── frontend/                         # 前端演示应用 (React)
 ├── libs/                             # 静态资源库 (Layui 等)
-├── debezium_docker-compose.yml       # 核心中间件部署配置
+├── docker-compose.yml                # 核心中间件部署配置
 └── README.md
 ```
 
@@ -102,7 +102,7 @@
 
 ### 环境要求
 
-- Python 3.10+
+- Python 3.11+
 - Go 1.25+
 - PostgreSQL 14+
 - Meilisearch

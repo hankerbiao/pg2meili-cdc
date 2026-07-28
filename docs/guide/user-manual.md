@@ -32,7 +32,7 @@
     *   `接收人 ITCode`：Token 下发目标用户
 3.  提交后等待管理员审核（状态 `pending` -> `approved`）。
 4.  审核通过后，Token 将通过内部光圈下发。
-![token 获取.png](../public/images/token%20%E8%8E%B7%E5%8F%96.png))
+![Token 获取页面](../public/images/token%20%E8%8E%B7%E5%8F%96.png)
 **验证方式：**  
 拿到 Token 后，可用 curl 验证连通性（替换 `<API_HOST>` 与 `<jwt>`）：
 

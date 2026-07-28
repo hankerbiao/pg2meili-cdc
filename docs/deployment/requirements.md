@@ -27,7 +27,7 @@
 - **包管理器**: 推荐 [uv](https://github.com/astral-sh/uv) 或 pip
 
 #### Sync Service (Go 服务)
-- **Go**: >= 1.21 (如果需要从源码编译)
+- **Go**: >= 1.25.4 (如果需要从源码编译)
 - **运行环境**: Linux 二进制文件 (glibc 2.17+)
 
 ### 存储与中间件
