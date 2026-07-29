@@ -193,6 +193,15 @@ GET /api/v1/data/{collection_name}/{id}
 DELETE /api/v1/data/{collection_name}/{id}
 ```
 
+## Python SDK
+
+仓库内提供独立的 [`unidata-sdk`](python-sdk/README.md)，统一封装文档、索引、
+Agent 发现与版本化搜索接口，并同时支持同步和异步 Python 客户端。
+
+```bash
+pip install ./python-sdk
+```
+
 ## 部署拓扑
 
 ```
