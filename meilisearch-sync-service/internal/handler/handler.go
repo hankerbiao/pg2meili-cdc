@@ -3,21 +3,32 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"strings"
+	"time"
 
 	"meilisearch-sync-service/internal/auth"
 	"meilisearch-sync-service/internal/config"
-	"meilisearch-sync-service/internal/revocation"
+	"meilisearch-sync-service/internal/model"
 )
 
-// NewSearchHandler 返回一个基于 JWT 鉴权的 Meilisearch 搜索 HTTP 处理函数
-func NewSearchHandler(cfg config.AppConfig, revocationCache *revocation.Cache) http.HandlerFunc {
+const maxSearchBodyBytes = 1 << 20
+
+var searchHTTPClient = &http.Client{Timeout: 10 * time.Second}
+
+// NewSearchHandler 返回一个基于开放平台 API Key 鉴权的 Meilisearch 搜索处理函数。
+func NewSearchHandler(cfg config.AppConfig, credentialStore auth.CredentialStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 读取并校验 Authorization 头，要求为 Bearer <token> 格式
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, "仅支持 POST", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// 读取并校验 Authorization 头，要求为 Bearer <api_key> 格式。
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
 			http.Error(w, "缺少 Authorization 头", http.StatusUnauthorized)
@@ -28,30 +39,21 @@ func NewSearchHandler(cfg config.AppConfig, revocationCache *revocation.Cache) h
 			http.Error(w, "Authorization 格式无效", http.StatusUnauthorized)
 			return
 		}
-		token := parts[1]
+		credential := parts[1]
 
-		// 解析并验证 JWT，获得当前调用方的应用身份
-		identity, err := auth.IdentityFromToken(token, cfg.JWTSecret)
+		identity, err := auth.IdentityFromAPIKey(r.Context(), credential, credentialStore)
 		if err != nil {
-			http.Error(w, "令牌无效: "+err.Error(), http.StatusUnauthorized)
+			if errors.Is(err, auth.ErrAuthUnavailable) {
+				http.Error(w, "鉴权服务暂时不可用", http.StatusServiceUnavailable)
+				return
+			}
+			http.Error(w, "API Key 无效", http.StatusUnauthorized)
 			return
 		}
 		if err := auth.RequireScopes(identity, []string{"search:read"}); err != nil {
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		}
-		if revocationCache != nil {
-			revoked, err := revocationCache.IsRevoked(r.Context(), identity.JTI)
-			if err != nil {
-				log.Printf("Redis 异常，服务退出: %v", err)
-				os.Exit(1)
-			}
-			if revoked {
-				http.Error(w, "令牌已被撤销", http.StatusForbidden)
-				return
-			}
-		}
-
 		// 从查询参数中获取 collection，用于拼接索引名称
 		collection := r.URL.Query().Get("collection")
 		if collection == "" {
@@ -64,11 +66,17 @@ func NewSearchHandler(cfg config.AppConfig, revocationCache *revocation.Cache) h
 		}
 
 		// 索引命名规则：<app_name>_<collection>
-		indexUID := identity.AppName + "_" + collection
+		indexUID := model.IndexUID(identity.AppName, collection)
 
 		// 读取前端请求体，用于构造 Meilisearch 的 search 请求
+		r.Body = http.MaxBytesReader(w, r.Body, maxSearchBodyBytes)
 		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				http.Error(w, "请求体过大", http.StatusRequestEntityTooLarge)
+				return
+			}
 			http.Error(w, "读取请求体失败", http.StatusBadRequest)
 			return
 		}
@@ -105,7 +113,7 @@ func NewSearchHandler(cfg config.AppConfig, revocationCache *revocation.Cache) h
 		}
 
 		// 调用 Meilisearch，并将响应原样转发给前端
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := searchHTTPClient.Do(req)
 		if err != nil {
 			log.Printf("执行 Meilisearch 搜索失败 index=%s app=%s 错误=%v", indexUID, identity.AppName, err)
 			http.Error(w, "搜索失败", http.StatusInternalServerError)

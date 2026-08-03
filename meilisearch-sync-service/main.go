@@ -15,7 +15,9 @@ import (
 
 func main() {
 	// 入口仅负责加载配置与启动应用，避免业务逻辑下沉到 main。
-	_ = godotenv.Load()
+	if err := godotenv.Load(); err != nil {
+		log.Printf("提示: 未加载 .env 文件 (%v)，将完全依赖环境变量", err)
+	}
 
 	cfg := config.LoadConfig()
 	application := app.New(cfg)
@@ -25,7 +27,7 @@ func main() {
 	setupGracefulShutdown(cancel)
 
 	if err := application.Run(ctx); err != nil && ctx.Err() == nil {
-		log.Printf("运行循环出现错误: %v", err)
+		log.Fatalf("服务运行失败: %v", err)
 	}
 }
 

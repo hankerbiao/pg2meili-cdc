@@ -63,6 +63,18 @@ func RegisterAgent(cfg config.AppConfig) {
 			log.Printf("AGENT_META 解析失败，忽略该字段: %v", err)
 		}
 	}
+	if meta == nil {
+		meta = make(map[string]interface{})
+	}
+	publicURL := cfg.AgentPublicURL
+	if publicURL == "" {
+		publicURL = fmt.Sprintf("http://%s:%d", agentIP, agentPort)
+	}
+	meta["region"] = cfg.RegionID
+	meta["base_url"] = publicURL
+	if _, ok := meta["weight"]; !ok {
+		meta["weight"] = 100
+	}
 
 	payload := agentRegisterPayload{
 		IP:       agentIP,
@@ -83,6 +95,7 @@ func RegisterAgent(cfg config.AppConfig) {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Agent-Token", cfg.AgentRegistrationToken)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -92,7 +105,7 @@ func RegisterAgent(cfg config.AppConfig) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		log.Printf("代理注册成功 ip=%s port=%d", agentIP, agentPort)
+		log.Printf("代理注册成功 region=%s base_url=%s", cfg.RegionID, publicURL)
 		return
 	}
 	log.Printf("代理注册失败 status=%d", resp.StatusCode)

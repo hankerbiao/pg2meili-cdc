@@ -3,18 +3,19 @@ package app
 import (
 	// app 包负责整个同步服务的装配与启动：
 	// 1）创建 Meilisearch 客户端与 Kafka 消费者；
-	// 2）初始化吊销缓存、HTTP 搜索代理；
+	// 2）初始化 API Key 注册表、HTTP 搜索代理；
 	// 3）根据配置构建 topic -> handler 路由并启动消费循环；
 	// 4）统一管理服务的启动与优雅关闭。
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
 
+	"meilisearch-sync-service/internal/apikey"
 	"meilisearch-sync-service/internal/config"
 	"meilisearch-sync-service/internal/handler"
 	"meilisearch-sync-service/internal/logger"
-	"meilisearch-sync-service/internal/revocation"
 	"meilisearch-sync-service/internal/service"
 
 	"github.com/meilisearch/meilisearch-go"
@@ -33,8 +34,12 @@ func New(cfg config.AppConfig) *App {
 	// New 负责注入配置并构建 Topics。
 	// 一般在 main 包中调用，用于完成 app 的最小初始化。
 	return &App{
-		cfg:    cfg,
-		topics: BuildTopics(cfg),
+		cfg: cfg,
+		topics: Topics{
+			CDC:     cfg.Topics,
+			Command: cfg.CommandTopic,
+			APIKey:  cfg.APIKeyTopic,
+		},
 	}
 }
 
@@ -42,6 +47,9 @@ func (a *App) Run(ctx context.Context) error {
 	// Run 是应用的主入口，负责启动所有核心组件并管理它们的生命周期。
 	// 调用方通过传入的 ctx 控制整体退出（例如收到系统信号后 cancel）。
 
+	if err := a.cfg.Validate(); err != nil {
+		return fmt.Errorf("配置校验失败: %w", err)
+	}
 	// 1. 初始化全局日志器（根据 Debug 开关调整日志级别与格式）。
 	logger.InitLogger(a.cfg.Debug)
 
@@ -55,22 +63,20 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	defer client.Close()
 
-	// 4. 初始化令牌吊销缓存，用于搜索前的权限校验（黑名单/撤销列表）。
-	revocationCache, err := revocation.NewCache(a.cfg)
+	// 4. 初始化并预热区域 API Key 注册表。
+	keyRegistry, err := apikey.New(a.cfg)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_ = revocationCache.Close()
+		_ = keyRegistry.Close()
 	}()
-	// 预热吊销缓存，使服务启动后立即具备最新的吊销状态。
-	if err := revocationCache.Warmup(ctx); err != nil {
+	if err := keyRegistry.Warmup(ctx, a.cfg); err != nil {
 		return err
 	}
-
 	log.Printf(
-		"服务启动，监听 cdcTopics=%v commandTopic=%s revokeTopic=%s dlqTopic=%s group=%s brokers=%v meiliHost=%s debug=%v",
-		a.topics.CDC, a.topics.Command, a.topics.Revoke, a.topics.DLQ, a.cfg.GroupID, a.cfg.Brokers, a.cfg.MeiliHost, a.cfg.Debug,
+		"服务启动，监听 region=%s cdcTopics=%v commandTopic=%s apiKeyTopic=%s dlqTopic=%s group=%s brokers=%v meiliHost=%s debug=%v",
+		a.cfg.RegionID, a.topics.CDC, a.topics.Command, a.topics.APIKey, a.cfg.DLQTopic, a.cfg.GroupID, a.cfg.Brokers, a.cfg.MeiliHost, a.cfg.Debug,
 	)
 
 	// 5. 启动时向 UniData 注册本机代理信息（若配置了 UNIDATA_URL），
@@ -78,7 +84,7 @@ func (a *App) Run(ctx context.Context) error {
 	service.RegisterAgent(a.cfg)
 
 	// 6. 创建对外 HTTP 服务，提供 /search 代理与 /health 健康检查接口。
-	server := newHTTPServer(a.cfg, revocationCache)
+	server := newHTTPServer(a.cfg, keyRegistry)
 
 	// 7. 使用 errgroup 并发管理 HTTP 服务与 Kafka 消费循环，
 	// 任一子协程返回错误都会导致整体退出。
@@ -94,9 +100,9 @@ func (a *App) Run(ctx context.Context) error {
 
 	g.Go(func() error {
 		// 根据 topics 构建 topic -> handler 路由表。
-		handlers := BuildHandlers(a.topics, meiliClient, revocationCache)
+		handlers := BuildHandlers(a.topics, meiliClient, keyRegistry)
 		// 启动消费主循环：从 Kafka 拉取消息，按 topic 分发给对应 handler。
-		return service.Run(ctx, client, meiliClient, a.cfg, handlers)
+		return service.Run(ctx, client, a.cfg, handlers)
 	})
 
 	// 8. 等待外部 ctx 被取消（例如收到中断信号）。
@@ -121,6 +127,7 @@ func newMeiliClient(cfg config.AppConfig) meilisearch.ServiceManager {
 	return meilisearch.New(
 		cfg.MeiliHost,
 		meilisearch.WithAPIKey(cfg.MeiliAPIKey),
+		meilisearch.WithCustomClient(&http.Client{Timeout: 15 * time.Second}),
 	)
 }
 
@@ -134,6 +141,11 @@ func newKafkaClient(cfg config.AppConfig, topics Topics) (*kgo.Client, error) {
 		kgo.SeedBrokers(cfg.Brokers...),
 		kgo.ConsumerGroup(cfg.GroupID),
 		kgo.ConsumeTopics(subscribeTopics...),
+		// 新区域首次创建 group 时从仍在保留期内的最早消息开始回放。
+		// 已存在的 group 仍优先使用其已提交 offset。
+		kgo.ConsumeStartOffset(kgo.NewOffset().AtStart()),
+		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
+		kgo.DisableAutoCommit(),
 		// 增大 SessionTimeout 以应对网络抖动或 handler 处理耗时稍长的情况。
 		kgo.SessionTimeout(60*time.Second),
 		// HeartbeatInterval 用于维持与 broker 的心跳，避免因心跳超时被移出消费组。
@@ -163,28 +175,21 @@ func uniqueTopics(topics Topics) []string {
 			result = append(result, topics.Command)
 		}
 	}
-	if topics.Revoke != "" {
-		if _, ok := seen[topics.Revoke]; !ok {
-			seen[topics.Revoke] = struct{}{}
-			result = append(result, topics.Revoke)
-		}
-	}
-	if topics.DLQ != "" {
-		if _, ok := seen[topics.DLQ]; !ok {
-			seen[topics.DLQ] = struct{}{}
-			result = append(result, topics.DLQ)
+	if topics.APIKey != "" {
+		if _, ok := seen[topics.APIKey]; !ok {
+			seen[topics.APIKey] = struct{}{}
+			result = append(result, topics.APIKey)
 		}
 	}
 	return result
 }
 
-func newHTTPServer(cfg config.AppConfig, revocationCache *revocation.Cache) *http.Server {
+func newHTTPServer(cfg config.AppConfig, keyRegistry *apikey.Registry) *http.Server {
 	// newHTTPServer 创建对外的 HTTP Server。
-	// 目前仅提供两个接口：
-	// 1）/search：搜索代理，将请求转发到对应的 Meilisearch 集群；
-	// 2）/health：健康检查，用于存活探测与监控。
+	// /search 保持兼容；/api/v1/collections/{collection}/search 面向新接入方提供稳定契约。
 	mux := http.NewServeMux()
-	mux.Handle("/search", handler.NewSearchHandler(cfg, revocationCache))
+	mux.Handle("/search", handler.NewSearchHandler(cfg, keyRegistry))
+	mux.Handle("/api/v1/collections/", handler.NewV1SearchHandler(cfg, keyRegistry))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -192,8 +197,12 @@ func newHTTPServer(cfg config.AppConfig, revocationCache *revocation.Cache) *htt
 	})
 
 	return &http.Server{
-		Addr:    cfg.HTTPAddr,
-		Handler: withCORS(mux),
+		Addr:              cfg.HTTPAddr,
+		Handler:           withCORS(mux),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 }
 
@@ -202,13 +211,14 @@ func withCORS(h http.Handler) http.Handler {
 	// 当前策略较为宽松（允许任意 Origin），如需收紧可在此调整。
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID, Retry-After")
 
 		reqHeaders := r.Header.Get("Access-Control-Request-Headers")
 		if reqHeaders != "" {
 			w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
 		} else {
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-App-Name, x-app-name")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-App-Name, X-Request-ID")
 		}
 
 		if r.Method == http.MethodOptions {

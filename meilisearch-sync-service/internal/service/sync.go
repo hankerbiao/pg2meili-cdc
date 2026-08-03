@@ -7,21 +7,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"meilisearch-sync-service/internal/config"
 	"meilisearch-sync-service/internal/model"
 
-	"github.com/meilisearch/meilisearch-go"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
+
+const maxPollRecords = 50
 
 // Run 是消息处理的主循环函数，负责持续消费 Kafka 消息并同步到 Meilisearch。
 // handlers 由 App 层按 topic 注册，便于扩展不同类型的消息处理。
 func Run(
 	ctx context.Context,
 	client *kgo.Client,
-	meiliClient meilisearch.ServiceManager,
 	cfg config.AppConfig,
 	handlers map[string]RecordHandler,
 ) error {
@@ -31,7 +32,7 @@ func Run(
 		}
 
 		// 从 Kafka 拉取一批消息，如果有错误先记录日志再继续下一轮
-		fetches := client.PollFetches(ctx)
+		fetches := client.PollRecords(ctx, maxPollRecords)
 		if errs := fetches.Errors(); len(errs) > 0 {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -42,28 +43,37 @@ func Run(
 			continue
 		}
 
-		// 遍历本批次消息，同时累积记录用于后续提交 offset
+		// 整批处理完成后再提交，失败时允许 Kafka 重新投递。
 		iter := fetches.RecordIter()
 		var records []*kgo.Record
 
 		for !iter.Done() {
 			record := iter.Next()
-			records = append(records, record)
 
 			handler := handlers[record.Topic]
+			var handleErr error
 			if handler == nil {
-				log.Printf("未注册的 topic，跳过处理 topic=%s partition=%d offset=%d", record.Topic, record.Partition, record.Offset)
-				continue
+				handleErr = permanent(fmt.Errorf("未注册的 topic: %s", record.Topic))
+			} else {
+				handleErr = handler.Handle(ctx, record)
 			}
-			if err := handler.Handle(ctx, record); err != nil {
-				log.Printf("处理消息出错: %v", err)
-				sendToDLQ(ctx, client, cfg, record, err)
-				continue
+
+			if handleErr != nil {
+				if !isPermanent(handleErr) {
+					return fmt.Errorf("处理可重试消息失败 topic=%s partition=%d offset=%d: %w", record.Topic, record.Partition, record.Offset, handleErr)
+				}
+				log.Printf("永久消息错误，写入 DLQ: %v", handleErr)
+				if err := sendToDLQ(ctx, client, cfg, record, handleErr); err != nil {
+					return fmt.Errorf("写入 DLQ 失败，保留原消息 offset: %w", err)
+				}
 			}
+			records = append(records, record)
 		}
 
 		if len(records) > 0 {
-			client.CommitRecords(ctx, records...)
+			if err := client.CommitRecords(ctx, records...); err != nil {
+				return fmt.Errorf("提交 Kafka offset 失败: %w", err)
+			}
 		}
 	}
 }
@@ -79,10 +89,13 @@ type DLQMessage struct {
 	Headers         map[string]string `json:"headers,omitempty"`
 }
 
-func sendToDLQ(ctx context.Context, client *kgo.Client, cfg config.AppConfig, record *kgo.Record, err error) {
-	// 仅在配置了 DLQ topic 时写入失败消息。
+type recordProducer interface {
+	ProduceSync(context.Context, ...*kgo.Record) kgo.ProduceResults
+}
+
+func sendToDLQ(ctx context.Context, client recordProducer, cfg config.AppConfig, record *kgo.Record, err error) error {
 	if cfg.DLQTopic == "" {
-		return
+		return fmt.Errorf("未配置 KAFKA_DLQ_TOPIC")
 	}
 
 	headers := make(map[string]string)
@@ -103,11 +116,10 @@ func sendToDLQ(ctx context.Context, client *kgo.Client, cfg config.AppConfig, re
 
 	payload, marshalErr := json.Marshal(msg)
 	if marshalErr != nil {
-		log.Printf("DLQ 消息序列化失败: %v", marshalErr)
-		return
+		return fmt.Errorf("序列化 DLQ 消息失败: %w", marshalErr)
 	}
 
-	ctxSend, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctxSend, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	res := client.ProduceSync(ctxSend, &kgo.Record{
@@ -115,9 +127,10 @@ func sendToDLQ(ctx context.Context, client *kgo.Client, cfg config.AppConfig, re
 		Value: payload,
 		Key:   record.Key,
 	})
-	if res.FirstErr() != nil {
-		log.Printf("DLQ 发送失败 topic=%s err=%v", cfg.DLQTopic, res.FirstErr())
+	if err := res.FirstErr(); err != nil {
+		return fmt.Errorf("发送 DLQ topic=%s: %w", cfg.DLQTopic, err)
 	}
+	return nil
 }
 
 // processDebeziumMessage 解析 Debezium 消息，抽取操作类型、文档内容和主键 id
@@ -152,9 +165,9 @@ func processDebeziumMessage(value []byte) (string, string, map[string]interface{
 		if payload.Before == nil {
 			return "", "", nil, "", fmt.Errorf("删除操作缺少 before 字段")
 		}
-		id := fmt.Sprint(payload.Before["id"])
-		if id == "" {
-			return "", "", nil, "", fmt.Errorf("删除操作 payload 中 id 为空: %v", payload.Before)
+		id, err := documentID(payload.Before)
+		if err != nil {
+			return "", "", nil, "", fmt.Errorf("删除操作主键无效: %w", err)
 		}
 		before := payload.Before
 		before["id"] = id
@@ -184,22 +197,13 @@ func ResolveIndex(doc map[string]interface{}) string {
 	if doc == nil {
 		return ""
 	}
-
-	appName := ""
-	if v, ok := doc["app_name"]; ok {
-		appName = fmt.Sprint(v)
-	}
-
-	collection := ""
-	if v, ok := doc["collection"]; ok {
-		collection = fmt.Sprint(v)
-	}
-
-	if appName == "" || collection == "" {
+	appName, appOK := nonEmptyString(doc["app_name"])
+	collection, collectionOK := nonEmptyString(doc["collection"])
+	if !appOK || !collectionOK {
 		return ""
 	}
 
-	return appName + "_" + collection
+	return model.IndexUID(appName, collection)
 }
 
 // extractDocument 从 DebeziumPayload 中抽取实际业务文档和主键 id
@@ -222,7 +226,7 @@ func extractDocument(p model.DebeziumPayload) (map[string]interface{}, string, e
 		case map[string]interface{}:
 			doc = v
 		default:
-			doc = map[string]interface{}{}
+			return nil, "", fmt.Errorf("内层 payload 必须是 JSON 字符串或对象")
 		}
 	} else {
 		// 兼容 doc 字段或直接使用 After 作为文档
@@ -233,11 +237,15 @@ func extractDocument(p model.DebeziumPayload) (map[string]interface{}, string, e
 		}
 	}
 
-	id := ""
-	if v, ok := doc["id"]; ok {
-		id = fmt.Sprint(v)
-	} else if v, ok := base["id"]; ok {
-		id = fmt.Sprint(v)
+	if doc == nil {
+		return nil, "", fmt.Errorf("文档 payload 不能为空")
+	}
+	id, err := documentID(doc)
+	if err != nil {
+		id, err = documentID(base)
+		if err != nil {
+			return nil, "", err
+		}
 	}
 
 	// 确保最终文档中一定带有 id 字段
@@ -257,4 +265,31 @@ func extractDocument(p model.DebeziumPayload) (map[string]interface{}, string, e
 	}
 
 	return doc, id, nil
+}
+
+func documentID(doc map[string]interface{}) (string, error) {
+	value, ok := doc["id"]
+	if !ok || value == nil {
+		return "", fmt.Errorf("缺少 id")
+	}
+	var id string
+	switch value := value.(type) {
+	case string:
+		id = value
+	case json.Number:
+		id = value.String()
+	case float64, float32, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		id = fmt.Sprint(value)
+	default:
+		return "", fmt.Errorf("id 类型无效: %T", value)
+	}
+	if strings.TrimSpace(id) == "" {
+		return "", fmt.Errorf("id 不能为空")
+	}
+	return id, nil
+}
+
+func nonEmptyString(value interface{}) (string, bool) {
+	text, ok := value.(string)
+	return text, ok && strings.TrimSpace(text) != ""
 }

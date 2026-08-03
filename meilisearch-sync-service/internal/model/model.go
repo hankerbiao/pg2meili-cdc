@@ -1,5 +1,10 @@
 package model
 
+// IndexUID returns the shared Meilisearch index name for an application collection.
+func IndexUID(appName, collection string) string {
+	return appName + "_" + collection
+}
+
 // DebeziumPayload 对应 Debezium CDC 消息中的 payload.before / payload.after / payload.op
 type DebeziumPayload struct {
 	Before map[string]interface{} `json:"before"`
@@ -10,15 +15,6 @@ type DebeziumPayload struct {
 // DebeziumMessage 是 Debezium 单条消息的顶层结构
 type DebeziumMessage struct {
 	Payload DebeziumPayload `json:"payload"`
-}
-
-type SearchProxyRequest struct {
-	IndexUID string      `json:"index_uid"`
-	Q        string      `json:"q"`
-	Offset   *int64      `json:"offset,omitempty"`
-	Limit    *int64      `json:"limit,omitempty"`
-	Filter   interface{} `json:"filter,omitempty"`
-	Sort     []string    `json:"sort,omitempty"`
 }
 
 // MeiliCommandPayload 表示索引设置变更所需字段集合。
