@@ -61,6 +61,12 @@ func splitAndTrim(s string) []string {
 	return result
 }
 
+// JoinURL 拼接 base 与 path，规整首尾多余的斜杠。
+// base 视为已含 scheme（如 http://host:7700）；如需补 scheme 请先规范化。
+func JoinURL(base, path string) string {
+	return strings.TrimRight(strings.TrimSpace(base), "/") + "/" + strings.TrimLeft(path, "/")
+}
+
 // ConsumerGroupID 为一个区域生成稳定的 Kafka consumer group。
 // 同一区域的多个副本会共享 group；不同区域会得到不同的 group，从而各自消费完整消息流。
 func ConsumerGroupID(prefix, regionID string) string {
@@ -164,7 +170,7 @@ func LoadConfig() AppConfig {
 	}
 	return AppConfig{
 		Brokers:                splitAndTrim(brokersEnv),
-		Topics:                 strings.Split(topicEnv, ","),
+		Topics:                 splitAndTrim(topicEnv),
 		CommandTopic:           commandTopic,
 		APIKeyTopic:            apiKeyTopic,
 		DLQTopic:               dlqTopic,

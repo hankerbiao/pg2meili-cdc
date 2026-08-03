@@ -59,6 +59,15 @@ func waitForTask(ctx context.Context, client meilisearch.ServiceManager, info *m
 	return nil
 }
 
+// deleteDocument 统一执行 Meilisearch 文档删除并等待任务完成。
+func (h DebeziumHandler) deleteDocument(ctx context.Context, indexName, id, label string) error {
+	task, err := h.MeiliClient.Index(indexName).DeleteDocumentWithContext(ctx, id, nil)
+	if err != nil {
+		return meiliOperationError(fmt.Sprintf("Meilisearch %s失败 index=%s id=%s", label, indexName, id), err)
+	}
+	return waitForTask(ctx, h.MeiliClient, task, "Meilisearch "+label)
+}
+
 func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 	op, id, doc, delID, err := processDebeziumMessage(record.Value)
 	if err != nil {
@@ -79,11 +88,7 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 
 		if isDeleted(doc) {
 			logger.DebugLogf("执行标记删除触发物理删除 index=%s id=%s doc=%v", indexName, id, doc)
-			task, err := h.MeiliClient.Index(indexName).DeleteDocumentWithContext(ctx, id, nil)
-			if err != nil {
-				return meiliOperationError(fmt.Sprintf("Meilisearch 标记删除失败 index=%s id=%s", indexName, id), err)
-			}
-			if err := waitForTask(ctx, h.MeiliClient, task, "Meilisearch 标记删除"); err != nil {
+			if err := h.deleteDocument(ctx, indexName, id, "标记删除"); err != nil {
 				return err
 			}
 			log.Printf("[delete-by-flag] Meilisearch 索引=%s id=%s", indexName, id)
@@ -114,11 +119,7 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 			return permanent(fmt.Errorf("删除消息缺少有效的 app_name 或 collection"))
 		}
 		logger.DebugLogf("执行硬删除 index=%s id=%s doc=%v", indexName, delID, doc)
-		task, err := h.MeiliClient.Index(indexName).DeleteDocumentWithContext(ctx, delID, nil)
-		if err != nil {
-			return meiliOperationError(fmt.Sprintf("Meilisearch 硬删除失败 index=%s id=%s", indexName, delID), err)
-		}
-		if err := waitForTask(ctx, h.MeiliClient, task, "Meilisearch 硬删除"); err != nil {
+		if err := h.deleteDocument(ctx, indexName, delID, "硬删除"); err != nil {
 			return err
 		}
 		log.Printf("[delete] Meilisearch 索引=%s id=%s", indexName, delID)
@@ -140,38 +141,35 @@ func (h MeiliCommandHandler) Handle(ctx context.Context, record *kgo.Record) err
 		return permanent(fmt.Errorf("解码命令消息失败: %w", err))
 	}
 
-	if cmd.Action != "update_settings" {
-		if cmd.Action == "delete_index" {
-			if cmd.IndexUID == "" {
-				return permanent(fmt.Errorf("命令缺少 index_uid"))
-			}
-			task, err := h.MeiliClient.DeleteIndexWithContext(ctx, cmd.IndexUID)
-			if err != nil {
-				return meiliOperationError(fmt.Sprintf("Meilisearch 删除索引失败 index=%s", cmd.IndexUID), err)
-			}
-			if err := waitForTask(ctx, h.MeiliClient, task, "Meilisearch 删除索引"); err != nil {
-				return err
-			}
-			log.Printf("[delete-index] Meilisearch 索引=%s", cmd.IndexUID)
-			return nil
-		}
-		return permanent(fmt.Errorf("未知命令 action=%s", cmd.Action))
-	}
 	if cmd.IndexUID == "" {
 		return permanent(fmt.Errorf("命令缺少 index_uid"))
 	}
 
-	settings := &meilisearch.Settings{
-		FilterableAttributes: cmd.Payload.FilterableAttributes,
-		SortableAttributes:   cmd.Payload.SortableAttributes,
+	switch cmd.Action {
+	case "update_settings":
+		settings := &meilisearch.Settings{
+			FilterableAttributes: cmd.Payload.FilterableAttributes,
+			SortableAttributes:   cmd.Payload.SortableAttributes,
+		}
+		task, err := h.MeiliClient.Index(cmd.IndexUID).UpdateSettingsWithContext(ctx, settings)
+		if err != nil {
+			return meiliOperationError(fmt.Sprintf("Meilisearch 更新设置失败 index=%s", cmd.IndexUID), err)
+		}
+		if err := waitForTask(ctx, h.MeiliClient, task, "Meilisearch 更新设置"); err != nil {
+			return err
+		}
+		log.Printf("[update-settings] Meilisearch 索引=%s filterable=%v sortable=%v", cmd.IndexUID, cmd.Payload.FilterableAttributes, cmd.Payload.SortableAttributes)
+	case "delete_index":
+		task, err := h.MeiliClient.DeleteIndexWithContext(ctx, cmd.IndexUID)
+		if err != nil {
+			return meiliOperationError(fmt.Sprintf("Meilisearch 删除索引失败 index=%s", cmd.IndexUID), err)
+		}
+		if err := waitForTask(ctx, h.MeiliClient, task, "Meilisearch 删除索引"); err != nil {
+			return err
+		}
+		log.Printf("[delete-index] Meilisearch 索引=%s", cmd.IndexUID)
+	default:
+		return permanent(fmt.Errorf("未知命令 action=%s", cmd.Action))
 	}
-	task, err := h.MeiliClient.Index(cmd.IndexUID).UpdateSettingsWithContext(ctx, settings)
-	if err != nil {
-		return meiliOperationError(fmt.Sprintf("Meilisearch 更新设置失败 index=%s", cmd.IndexUID), err)
-	}
-	if err := waitForTask(ctx, h.MeiliClient, task, "Meilisearch 更新设置"); err != nil {
-		return err
-	}
-	log.Printf("[update-settings] Meilisearch 索引=%s filterable=%v sortable=%v", cmd.IndexUID, cmd.Payload.FilterableAttributes, cmd.Payload.SortableAttributes)
 	return nil
 }

@@ -100,7 +100,7 @@ func NewV1SearchHandler(cfg config.AppConfig, credentialStore auth.CredentialSto
 		}
 
 		indexUID := model.IndexUID(identity.AppName, collection)
-		meiliURL := strings.TrimRight(cfg.MeiliHost, "/") + "/indexes/" + url.PathEscape(indexUID) + "/search"
+		meiliURL := config.JoinURL(cfg.MeiliHost, "indexes/"+url.PathEscape(indexUID)+"/search")
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, meiliURL, bytes.NewReader(body))
 		if err != nil {
 			log.Printf("构造 Meilisearch 请求失败 request_id=%s index=%s: %v", requestID, indexUID, err)

@@ -57,29 +57,26 @@ func New(cfg config.AppConfig) (*Registry, error) {
 func (r *Registry) Close() error { return r.redis.Close() }
 
 func (r *Registry) Lookup(ctx context.Context, keyID string) (auth.KeyRecord, auth.AppRecord, error) {
-	keyJSON, err := r.redis.Get(ctx, keyPrefix+keyID).Bytes()
-	if errors.Is(err, redis.Nil) {
-		return auth.KeyRecord{}, auth.AppRecord{}, auth.ErrInvalidAPIKey
-	}
-	if err != nil {
-		return auth.KeyRecord{}, auth.AppRecord{}, err
-	}
 	var key auth.KeyRecord
-	if err := json.Unmarshal(keyJSON, &key); err != nil {
-		return auth.KeyRecord{}, auth.AppRecord{}, err
-	}
-	appJSON, err := r.redis.Get(ctx, appPrefix+key.AppID).Bytes()
-	if errors.Is(err, redis.Nil) {
-		return auth.KeyRecord{}, auth.AppRecord{}, auth.ErrInvalidAPIKey
-	}
-	if err != nil {
+	if err := r.getRecord(ctx, keyPrefix+keyID, &key); err != nil {
 		return auth.KeyRecord{}, auth.AppRecord{}, err
 	}
 	var app auth.AppRecord
-	if err := json.Unmarshal(appJSON, &app); err != nil {
+	if err := r.getRecord(ctx, appPrefix+key.AppID, &app); err != nil {
 		return auth.KeyRecord{}, auth.AppRecord{}, err
 	}
 	return key, app, nil
+}
+
+func (r *Registry) getRecord(ctx context.Context, redisKey string, out interface{}) error {
+	raw, err := r.redis.Get(ctx, redisKey).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return auth.ErrInvalidAPIKey
+	}
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, out)
 }
 
 func (r *Registry) Apply(ctx context.Context, payload []byte) error {
@@ -134,7 +131,7 @@ func (r *Registry) Warmup(ctx context.Context, cfg config.AppConfig) error {
 	if strings.TrimSpace(cfg.UniDataURL) == "" || strings.TrimSpace(cfg.AgentRegistrationToken) == "" {
 		return fmt.Errorf("API Key 快照需要 UNIDATA_URL 和 AGENT_REGISTRATION_TOKEN")
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(cfg.UniDataURL, "/")+"/api/v1/internal/api-keys/snapshot", nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, config.JoinURL(cfg.UniDataURL, "api/v1/internal/api-keys/snapshot"), nil)
 	if err != nil {
 		return err
 	}

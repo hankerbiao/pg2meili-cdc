@@ -96,7 +96,7 @@ func NewSearchHandler(cfg config.AppConfig, credentialStore auth.CredentialStore
 		}
 
 		// 构造 Meilisearch 搜索接口的 URL，并在调试模式下打印请求信息
-		meiliURL := strings.TrimRight(cfg.MeiliHost, "/") + "/indexes/" + indexUID + "/search"
+		meiliURL := config.JoinURL(cfg.MeiliHost, "indexes/"+indexUID+"/search")
 		if cfg.Debug {
 			log.Printf("Meilisearch 请求 index=%s app=%s url=%s body=%s", indexUID, identity.AppName, meiliURL, string(bodyBytes))
 		}

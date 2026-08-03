@@ -85,8 +85,7 @@ func RegisterAgent(cfg config.AppConfig) {
 	}
 
 	body, _ := json.Marshal(payload)
-	baseURL := normalizeURL(cfg.UniDataURL)
-	url := strings.TrimRight(baseURL, "/") + "/api/v1/agents/register"
+	url := config.JoinURL(normalizeURL(cfg.UniDataURL), "api/v1/agents/register")
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
