@@ -42,6 +42,22 @@ interface ApiEnvelope<T> {
   message: string
 }
 
+export type DocumentData = Record<string, unknown> & { id: string | number }
+
+async function apiRequest<T>(url: string, apiKey: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init.headers,
+    },
+  })
+  return parseApiResponse<T>(response)
+}
+
+const apiUrl = (baseUrl: string, path: string) => `${baseUrl.replace(/\/$/, '')}${path}`
+
 async function parseApiResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get('content-type') || ''
   const isJson = contentType.includes('application/json')
@@ -68,7 +84,6 @@ async function parseApiResponse<T>(response: Response): Promise<T> {
   return payload as T
 }
 
-// 预设搜索场景
 export interface PresetScenario {
   name: string
   description: string
@@ -103,42 +118,24 @@ export const PRESET_SCENARIOS: PresetScenario[] = [
   }
 ]
 
-// API 调用函数
 export async function search(
   baseUrl: string,
-  token: string,
+  apiKey: string,
   request: SearchRequest
 ): Promise<SearchResponse> {
   const { collection, showRankingScore, ...rest } = request
-  const payload: any = {
+  const payload = {
     ...rest,
-    showRankingScore: typeof showRankingScore === 'boolean' ? showRankingScore : true,
+    showRankingScore: showRankingScore ?? true,
   }
-  let url = `${baseUrl.replace(/\/$/, '')}/search`
-  if (collection && collection.trim()) {
-    const encoded = encodeURIComponent(collection.trim())
-    const sep = url.includes('?') ? '&' : '?'
-    url = `${url}${sep}collection=${encoded}`
-  }
+  const url = new URL(apiUrl(baseUrl, '/search'))
+  if (collection?.trim()) url.searchParams.set('collection', collection.trim())
 
-  const response = await fetch(url, {
+  return apiRequest<SearchResponse>(url.toString(), apiKey, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify(payload),
   })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`HTTP ${response.status}: ${errorText}`)
-  }
-
-  return response.json()
 }
-
-// 通用文档管理接口
 
 export interface DocumentResponse {
   status: string
@@ -148,96 +145,54 @@ export interface DocumentResponse {
 
 export async function createDocument(
   baseUrl: string,
-  token: string,
+  apiKey: string,
   collection: string,
-  payload: any
+  payload: DocumentData
 ): Promise<DocumentResponse> {
-  const response = await fetch(`${baseUrl}/api/v1/data/${collection}`, {
+  return apiRequest<DocumentResponse>(apiUrl(baseUrl, `/api/v1/data/${encodeURIComponent(collection)}`), apiKey, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify(payload),
   })
-
-  return parseApiResponse<DocumentResponse>(response)
-}
-
-export async function updateDocument(
-  baseUrl: string,
-  token: string,
-  collection: string,
-  payload: any
-): Promise<DocumentResponse> {
-  // Update is the same as create for upsert logic, but semantically separate for UI
-  return createDocument(baseUrl, token, collection, payload)
 }
 
 export async function getDocument(
   baseUrl: string,
-  token: string,
+  apiKey: string,
   collection: string,
-  id: string
-): Promise<any> {
-  const response = await fetch(`${baseUrl}/api/v1/data/${collection}/${id}`, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  })
-
-  return parseApiResponse<any>(response)
+  id: string | number
+): Promise<DocumentData> {
+  return apiRequest<DocumentData>(apiUrl(baseUrl, `/api/v1/data/${encodeURIComponent(collection)}/${encodeURIComponent(String(id))}`), apiKey)
 }
 
 export async function deleteDocument(
   baseUrl: string,
-  token: string,
+  apiKey: string,
   collection: string,
-  id: string
+  id: string | number
 ): Promise<DocumentResponse> {
-  const response = await fetch(`${baseUrl}/api/v1/data/${collection}/${id}`, {
+  return apiRequest<DocumentResponse>(apiUrl(baseUrl, `/api/v1/data/${encodeURIComponent(collection)}/${encodeURIComponent(String(id))}`), apiKey, {
     method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
   })
-
-  return parseApiResponse<DocumentResponse>(response)
 }
 
 export async function listDocuments(
   baseUrl: string,
-  token: string,
+  apiKey: string,
   collection: string,
   limit: number = 20,
   offset: number = 0
-): Promise<any[]> {
-  const response = await fetch(`${baseUrl}/api/v1/data/${collection}?limit=${limit}&offset=${offset}`, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  })
-
-  return parseApiResponse<any[]>(response)
+): Promise<DocumentData[]> {
+  const path = `/api/v1/data/${encodeURIComponent(collection)}?limit=${limit}&offset=${offset}`
+  return apiRequest<DocumentData[]>(apiUrl(baseUrl, path), apiKey)
 }
 
 export async function listIndexes(
   baseUrl: string,
-  token: string,
+  apiKey: string,
   limit: number = 100,
   offset: number = 0
 ): Promise<string[]> {
-  const normalizedBase = baseUrl.replace(/\/$/, '')
-  const response = await fetch(`${normalizedBase}/api/v1/index/indexes?limit=${limit}&offset=${offset}`, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  })
-
-  return parseApiResponse<string[]>(response)
+  return apiRequest<string[]>(apiUrl(baseUrl, `/api/v1/index/indexes?limit=${limit}&offset=${offset}`), apiKey)
 }
 
 export interface DeleteIndexResponse {
@@ -248,27 +203,10 @@ export interface DeleteIndexResponse {
 
 export async function deleteIndex(
   baseUrl: string,
-  token: string,
+  apiKey: string,
   collection: string
 ): Promise<DeleteIndexResponse> {
-  const normalizedBase = baseUrl.replace(/\/$/, '')
-  const response = await fetch(`${normalizedBase}/api/v1/index/indexes/${encodeURIComponent(collection)}`, {
+  return apiRequest<DeleteIndexResponse>(apiUrl(baseUrl, `/api/v1/index/indexes/${encodeURIComponent(collection)}`), apiKey, {
     method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
   })
-
-  return parseApiResponse<DeleteIndexResponse>(response)
-}
-
-// 高亮文本渲染
-export function renderHighlightedText(
-  text: string | undefined,
-  highlightedText: string | undefined
-): string {
-  if (highlightedText) {
-    return highlightedText.replace(/<em>|<\/em>/g, '**')
-  }
-  return text || ''
 }

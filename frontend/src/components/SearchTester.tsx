@@ -1,113 +1,31 @@
-import React, { useState } from 'react'
-import { search, PRESET_SCENARIOS, SearchRequest, SearchResponse, SearchHit } from '../api'
+import { useEffect, useState } from 'react'
+import { search, PRESET_SCENARIOS } from '../api'
+import type { SearchHit, SearchRequest, SearchResponse } from '../api'
+import { buildSearchCurl, parseSearchCurl, renderHighlight } from '../searchUtils'
 
-const DEFAULT_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6ImxpYmlhb190ZXN0Iiwic2NvcGVzIjpbXSwiZXhwIjoxODMwMzU1MTk4fQ.HKsX8kU5UHpZfWbw-bxivup21jnON2k6zXw6LpHNtoY'
+const DEFAULT_API_KEY = import.meta.env.VITE_DEFAULT_API_KEY ?? ''
 
-const buildCurl = (baseUrl: string, token: string, body: string): string => {
-  let url = `${baseUrl.replace(/\/$/, '')}/search`
-  const displayToken = token.trim() || '<YOUR_JWT>'
-  let prettyBody = body
-  let collection: string | undefined
-  try {
-    const parsed = JSON.parse(body)
-    if (parsed && typeof parsed === 'object') {
-      if ((parsed as any).collection) {
-        collection = String((parsed as any).collection)
-        delete (parsed as any).collection
-      }
-      if ((parsed as any).showRankingScore === undefined) {
-        ;(parsed as any).showRankingScore = true
-      }
-    }
-    prettyBody = JSON.stringify(parsed, null, 2)
-  } catch {
-  }
-  if (collection && collection.trim()) {
-    const encoded = encodeURIComponent(collection.trim())
-    const sep = url.includes('?') ? '&' : '?'
-    url = `${url}${sep}collection=${encoded}`
-  }
-  const safeBody = prettyBody.replace(/'/g, `'\"'\"'`)
-  return [
-    `curl -X POST "${url}" \\`,
-    `  -H "Content-Type: application/json" \\`,
-    `  -H "Authorization: Bearer ${displayToken}" \\`,
-    `  --data-raw '${safeBody}'`,
-  ].join('\n')
-}
-
-const parseCurlCommand = (cmd: string) => {
-  // URL
-  const urlMatch = cmd.match(/curl.*?["'](http.*?)["']/) || cmd.match(/\s(http\S+)/)
-  const fullUrl = urlMatch ? urlMatch[1] : null
-  let baseUrl = null
-  if (fullUrl) {
-    try {
-      const urlObj = new URL(fullUrl)
-      baseUrl = urlObj.origin
-    } catch {}
-  }
-
-  // Token
-  const tokenMatch = cmd.match(/Authorization: Bearer\s+([^\s"']+)/)
-  const token = tokenMatch ? tokenMatch[1] : null
-
-  // Body
-  let body = '{}'
-  const dataMarkers = ['--data-raw \'', '--data \'', '-d \'']
-  for (const marker of dataMarkers) {
-      const idx = cmd.indexOf(marker)
-      if (idx !== -1) {
-          let rawBody = cmd.slice(idx + marker.length)
-          const lastQuote = rawBody.lastIndexOf("'")
-          if (lastQuote !== -1) {
-              rawBody = rawBody.slice(0, lastQuote)
-          }
-          // Restore single quotes
-          body = rawBody.replace(/'"'"'/g, "'")
-          break
-      }
-  }
-  
-  let collection: string | null = null
-  if (fullUrl) {
-    try {
-      const urlObj = new URL(fullUrl)
-      collection = urlObj.searchParams.get('collection')
-    } catch {}
-  }
-
-  return { baseUrl, token, body, collection }
-}
-
-const SearchTester: React.FC = () => {
+const SearchTester = () => {
   const [baseUrl, setBaseUrl] = useState('http://127.0.0.1:8091')
-  const [token, setToken] = useState(DEFAULT_TOKEN)
-  const [selectedScenario, setSelectedScenario] = useState<number>(0)
-  const [customRequest, setCustomRequest] = useState<string>(
-    JSON.stringify(PRESET_SCENARIOS[0].request, null, 2)
-  )
-  const [collection, setCollection] = useState<string>(
-    (PRESET_SCENARIOS[0].request as SearchRequest).collection ?? ''
-  )
+  const [apiKey, setApiKey] = useState(DEFAULT_API_KEY)
+  const [selectedScenario, setSelectedScenario] = useState(0)
+  const [request, setRequest] = useState<SearchRequest>(PRESET_SCENARIOS[0].request)
   const [curlText, setCurlText] = useState('')
   const [response, setResponse] = useState<SearchResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const collection = request.collection ?? ''
 
-  // Sync curlText when dependencies change
-  React.useEffect(() => {
-    setCurlText(buildCurl(baseUrl, token, customRequest))
-  }, [baseUrl, token, customRequest])
+  useEffect(() => {
+    setCurlText(buildSearchCurl(baseUrl, apiKey, request))
+  }, [baseUrl, apiKey, request])
 
-  const executeSearch = async (request: SearchRequest, overrideBaseUrl?: string, overrideToken?: string) => {
+  const executeSearch = async (request: SearchRequest, overrideBaseUrl?: string, overrideApiKey?: string) => {
     setLoading(true)
     setError(null)
 
     try {
-      const targetBaseUrl = overrideBaseUrl || baseUrl
-      const targetToken = overrideToken || token
-      const result = await search(targetBaseUrl, targetToken, request)
+      const result = await search(overrideBaseUrl || baseUrl, overrideApiKey || apiKey, request)
       setResponse(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : '未知错误')
@@ -120,26 +38,28 @@ const SearchTester: React.FC = () => {
   const handleScenarioChange = (index: number) => {
     setSelectedScenario(index)
     const req = PRESET_SCENARIOS[index].request
-    setCustomRequest(JSON.stringify(req, null, 2))
-    setCollection((req as SearchRequest).collection ?? '')
-    // 自动执行搜索
-    executeSearch(PRESET_SCENARIOS[index].request)
+    setRequest(req)
+    executeSearch(req)
+  }
+
+  const updateCollection = (value: string) => {
+    const collection = value.trim()
+    setRequest((current) => {
+      const next = { ...current }
+      if (collection) next.collection = collection
+      else delete next.collection
+      return next
+    })
   }
 
   const handleManualSearch = () => {
     try {
-      const parsed = parseCurlCommand(curlText)
-      // Update state controls if parsed
+      const parsed = parseSearchCurl(curlText)
       if (parsed.baseUrl) setBaseUrl(parsed.baseUrl)
-      if (parsed.token) setToken(parsed.token)
-      
-      const request = JSON.parse(parsed.body)
-      if (parsed.collection) {
-        ;(request as any).collection = parsed.collection
-        setCollection(parsed.collection)
-      }
-      setCustomRequest(JSON.stringify(request, null, 2))
-      executeSearch(request, parsed.baseUrl || baseUrl, parsed.token || token)
+      if (parsed.apiKey) setApiKey(parsed.apiKey)
+
+      setRequest(parsed.request)
+      executeSearch(parsed.request, parsed.baseUrl || baseUrl, parsed.apiKey || apiKey)
     } catch (e) {
       setError('解析 CURL 失败: ' + (e instanceof Error ? e.message : String(e)))
     }
@@ -154,12 +74,11 @@ const SearchTester: React.FC = () => {
     try {
       const currentOffset = response.offset || 0
       const currentLimit = response.limit || 20
-      const baseRequest = JSON.parse(customRequest)
-      const request: SearchRequest = {
-        ...baseRequest,
+      const nextRequest: SearchRequest = {
+        ...request,
         offset: currentOffset + currentLimit,
       }
-      const result = await search(baseUrl, token, request)
+      const result = await search(baseUrl, apiKey, nextRequest)
       setResponse({
         ...result,
         hits: [...response.hits, ...result.hits],
@@ -169,55 +88,6 @@ const SearchTester: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }
-
-  // 解析 Meilisearch 高亮标签 <em>keyword</em>
-  const parseHighlight = (text?: string): React.ReactNode[] => {
-    if (!text) {
-      return []
-    }
-    const parts: React.ReactNode[] = []
-    const regex = /(<em>|<\/em>)/g
-    let lastIndex = 0
-    let match: RegExpExecArray | null
-
-    while ((match = regex.exec(text)) !== null) {
-      const beforeText = text.slice(lastIndex, match.index)
-      if (beforeText) {
-        parts.push(beforeText)
-      }
-      parts.push(match[0])
-      lastIndex = regex.lastIndex
-    }
-
-    const remainingText = text.slice(lastIndex)
-    if (remainingText) {
-      parts.push(remainingText)
-    }
-
-    const result: React.ReactNode[] = []
-    let highlightBuffer = ''
-    let inHighlight = false
-
-    for (const part of parts) {
-      if (typeof part === 'string') {
-        if (part === '<em>') {
-          inHighlight = true
-        } else if (part === '</em>') {
-          if (highlightBuffer) {
-            result.push(<em key={result.length}>{highlightBuffer}</em>)
-            highlightBuffer = ''
-          }
-          inHighlight = false
-        } else if (inHighlight) {
-          highlightBuffer += part
-        } else {
-          result.push(part)
-        }
-      }
-    }
-
-    return result
   }
 
   const renderHit = (hit: SearchHit) => {
@@ -231,10 +101,10 @@ const SearchTester: React.FC = () => {
           <span className="hit-id">#{hit.id}</span>
         </div>
         <h3 className="hit-name">
-          {parseHighlight(name)}
+          {renderHighlight(name)}
         </h3>
         <p className="hit-summary">
-          {parseHighlight(summary)}
+          {renderHighlight(summary)}
         </p>
         <div className="hit-tags">
           {(hit.tags || []).map((tag, i) => (
@@ -253,7 +123,6 @@ const SearchTester: React.FC = () => {
       </header>
 
       <div className="main-container">
-        {/* 左边 - 预设场景 */}
         <aside className="sidebar">
           <div className="sidebar-title">预设场景</div>
           <div className="scenario-list">
@@ -270,9 +139,7 @@ const SearchTester: React.FC = () => {
           </div>
         </aside>
 
-        {/* 右边 - 配置、请求、结果 */}
         <main className="content">
-          {/* 配置区域 */}
           <section className="config-section">
             <h2>配置</h2>
             <div className="config-row">
@@ -287,11 +154,11 @@ const SearchTester: React.FC = () => {
             </div>
             <div className="config-row">
               <div className="config-field">
-                <label>JWT Token</label>
+                <label>API Key</label>
                 <input
                   type="password"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
                 />
               </div>
             </div>
@@ -301,26 +168,12 @@ const SearchTester: React.FC = () => {
                 <input
                   type="text"
                   value={collection}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    setCollection(value)
-                    try {
-                      const obj = JSON.parse(customRequest)
-                      if (value.trim()) {
-                        ;(obj as any).collection = value.trim()
-                      } else {
-                        delete (obj as any).collection
-                      }
-                      setCustomRequest(JSON.stringify(obj, null, 2))
-                    } catch {
-                    }
-                  }}
+                  onChange={(event) => updateCollection(event.target.value)}
                 />
               </div>
             </div>
           </section>
 
-          {/* 请求参数 */}
           <section className="request-section">
             <div className="section-header">
               <h2>请求参数</h2>
@@ -333,7 +186,7 @@ const SearchTester: React.FC = () => {
                     <strong>POST</strong> {baseUrl}/search
                     {'\n'}
                     <strong>Headers:</strong>
-                    {'\n'}  Authorization: Bearer [token]
+                    {'\n'}  Authorization: Bearer [api_key]
                     {'\n'}  Content-Type: application/json
                   </pre>
                   <div className="curl-preview">
@@ -352,38 +205,36 @@ const SearchTester: React.FC = () => {
             <button
               className="execute-btn"
               onClick={handleManualSearch}
-              disabled={loading || !token}
+              disabled={loading || !apiKey}
             >
               {loading ? '搜索中...' : '执行搜索'}
             </button>
           </section>
 
-          {/* 错误信息 */}
           {error && (
             <section className="error-section">
               <pre className="error-content">{error}</pre>
             </section>
           )}
 
-          {/* 搜索结果 */}
           {response && (
             <section className="result-section">
               <div className="result-header">
                 <h2>搜索结果</h2>
                 <div className="result-stats">
-                  <span>总数: {response.estimatedTotalHits || response.hits.length}</span>
+                  <span>总数: {response.estimatedTotalHits ?? response.hits.length}</span>
                   <span>返回: {response.hits.length} 条</span>
                   <span>耗时: {response.processingTimeMs || '-'}ms</span>
                 </div>
               </div>
-          {(response.hits || []).length === 0 ? (
+              {response.hits.length === 0 ? (
                 <div className="no-results">未找到匹配的测试用例</div>
               ) : (
                 <>
                   <div className="hits-list">
-                {(response.hits || []).map(renderHit)}
+                    {response.hits.map(renderHit)}
                   </div>
-              {((response.hits || []).length < (response.estimatedTotalHits || Infinity)) && (
+                  {response.hits.length < (response.estimatedTotalHits ?? Infinity) && (
                     <button
                       className="load-more-btn"
                       onClick={handleLoadMore}

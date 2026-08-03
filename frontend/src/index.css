@@ -62,14 +62,12 @@ body {
   margin-top: 4px;
 }
 
-/* 主容器 - 左右分栏 */
 .main-container {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
 
-/* 左侧边栏 */
 .sidebar {
   width: 280px;
   background: white;
@@ -121,7 +119,6 @@ body {
   line-height: 1.4;
 }
 
-/* 右侧内容区 */
 .content {
   flex: 1;
   padding: 20px 24px;
@@ -131,7 +128,6 @@ body {
   gap: 20px;
 }
 
-/* 配置区域 */
 .config-section {
   background: white;
   border-radius: 8px;
@@ -178,7 +174,194 @@ body {
   border-color: #667eea;
 }
 
-/* 请求参数区域 */
+.manager-header {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.manager-content {
+  background: #fff;
+}
+
+.manager-config-title {
+  margin-top: 20px;
+}
+
+.manager-config {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.manager-alert {
+  padding: 12px;
+  border-radius: 6px;
+}
+
+.manager-alert-error {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.manager-alert-success {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.manager-panel-header,
+.manager-document-header,
+.manager-index-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.manager-panel-header {
+  margin-bottom: 16px;
+}
+
+.manager-panel-header h2,
+.manager-editor h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.manager-button {
+  padding: 7px 12px;
+  color: #374151;
+  cursor: pointer;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+}
+
+.manager-button:disabled,
+.manager-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.manager-button-primary {
+  padding: 10px 24px;
+  color: #fff;
+  font-weight: 500;
+  background: #059669;
+  border-color: #059669;
+}
+
+.manager-button-danger {
+  color: #fff;
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.manager-link {
+  padding: 4px 8px;
+  color: #2563eb;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.manager-link-danger {
+  color: #dc2626;
+}
+
+.manager-index-delete {
+  margin-bottom: 16px;
+}
+
+.manager-index-delete label,
+.manager-editor label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.manager-index-delete > div {
+  display: flex;
+  gap: 8px;
+}
+
+.manager-index-delete input {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+}
+
+.manager-subtitle {
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.manager-index-list,
+.manager-document-list {
+  display: grid;
+  gap: 12px;
+}
+
+.manager-index-row {
+  padding: 8px 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.manager-empty {
+  color: #666;
+  font-style: italic;
+}
+
+.manager-document {
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.manager-document-header {
+  margin-bottom: 8px;
+}
+
+.manager-document pre {
+  padding: 8px;
+  margin: 0;
+  overflow-x: auto;
+  font-size: 12px;
+  background: #f9fafb;
+  border-radius: 4px;
+}
+
+.manager-editor {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.manager-editor h2 {
+  margin-bottom: 16px;
+}
+
+.manager-editor textarea {
+  flex: 1;
+  min-height: 400px;
+  padding: 12px;
+  margin-bottom: 16px;
+  font-family: monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+
+.manager-actions {
+  display: flex;
+  gap: 12px;
+}
+
 .request-section {
   background: white;
   border-radius: 8px;
@@ -198,8 +381,6 @@ body {
   font-weight: 600;
   color: #333;
 }
-
-/* 移除 toggle-btn 样式，因为不再需要 */
 
 .request-body-container {
   display: flex;
@@ -242,16 +423,6 @@ body {
   border-bottom: 1px solid #333;
 }
 
-.curl-code {
-  padding: 12px;
-  color: #f8f8f2;
-  font-family: 'Monaco', 'Menlo', monospace;
-  font-size: 11px;
-  overflow-x: auto;
-  margin: 0;
-  white-space: pre;
-}
-
 .curl-editor {
   width: 100%;
   min-height: 200px;
@@ -291,7 +462,6 @@ body {
   cursor: not-allowed;
 }
 
-/* 错误区域 */
 .error-section {
   background: #fff5f5;
   border: 1px solid #feb2b2;
@@ -308,7 +478,6 @@ body {
   overflow-x: auto;
 }
 
-/* 结果区域 */
 .result-section {
   background: white;
   border-radius: 8px;
@@ -421,7 +590,6 @@ body {
   border-radius: 4px;
 }
 
-/* Browser Page Modernization */
 .browser-page {
   min-height: calc(100vh - 40px);
   display: flex;
@@ -439,25 +607,17 @@ body {
   border-bottom: 1px solid #eaeaea;
 }
 
-.browser-tabs {
-  display: flex;
-  gap: 12px;
-}
-
 .browser-tab {
   padding: 6px 16px;
   border-radius: 20px;
   font-size: 14px;
   font-weight: 500;
   color: #5f6368;
-  cursor: pointer;
-  transition: all 0.2s;
 }
 
 .browser-tab.active {
   background: #e8f0fe;
   color: #1a73e8;
-  border: none;
 }
 
 .browser-actions {
@@ -656,14 +816,9 @@ body {
 .browser-hit-title {
   font-size: 18px;
   color: #1a0dab;
-  cursor: pointer;
   line-height: 1.3;
   margin-bottom: 4px;
   font-weight: 400;
-}
-
-.browser-hit-title:hover {
-  text-decoration: underline;
 }
 
 .browser-hit-url {
@@ -758,7 +913,6 @@ body {
   line-height: 1.5;
 }
 
-/* 响应式 */
 @media (max-width: 768px) {
   .main-container {
     flex-direction: column;

@@ -1,21 +1,30 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { search, SearchRequest, SearchResponse, SearchHit } from '../api'
+import { useEffect, useState } from 'react'
+import { search } from '../api'
+import type { SearchHit, SearchRequest, SearchResponse } from '../api'
+import { buildSearchCurl, renderHighlight } from '../searchUtils'
 
-const DEFAULT_TOKEN =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfbmFtZSI6ImxpYmlhbyIsInNjb3BlcyI6WyJzZWFyY2g6cmVhZCJdLCJleHAiOjE4MDE1MjYzOTcsImlhdCI6MTc3MDc4ODk3NiwianRpIjoiMTBhNDhjYmEtMmRkZC00M2Y4LTg4OTgtOGY3ZWFlYzI3MDljIn0.Bf2E51dWPIbgsJlAjkBvzZV7pn2oKUJjg70r8Holr1M'
-const DEFAULT_BASE_URL = 'http://10.32.129.188:8091'
-// 默认从当前页面的后端域名获取在线代理列表
-const AGENTS_API_BASE = 'http://10.32.129.188:8080'
+const DEFAULT_API_KEY = import.meta.env.VITE_DEFAULT_API_KEY ?? ''
+const DEFAULT_BASE_URL = import.meta.env.VITE_DEFAULT_SEARCH_BASE_URL?.trim() || 'http://127.0.0.1:8091'
+const AGENTS_API_BASE = import.meta.env.VITE_AGENTS_API_BASE?.trim() || window.location.origin
+const AGENTS_ENDPOINT = `${AGENTS_API_BASE.replace(/\/$/, '')}/api/v1/agents/online`
 
 interface OnlineAgent {
+  id?: string
   ip: string
   port: number
   hostname?: string
+  base_url?: string
+  region?: string
+  status?: string
+  weight?: number
 }
 
-const BrowserSearchPage: React.FC = () => {
+const formatAgentBaseUrl = (agent: OnlineAgent) =>
+  agent.base_url?.trim().replace(/\/$/, '') || `http://${agent.ip}:${agent.port}`
+
+const BrowserSearchPage = () => {
   const [baseUrl, setBaseUrl] = useState(DEFAULT_BASE_URL)
-  const [token, setToken] = useState(DEFAULT_TOKEN)
+  const [apiKey, setApiKey] = useState(DEFAULT_API_KEY)
   const [query, setQuery] = useState('电源')
   const [filter, setFilter] = useState('')
   const [highlight, setHighlight] = useState(false)
@@ -29,27 +38,17 @@ const BrowserSearchPage: React.FC = () => {
   const [agentsError, setAgentsError] = useState<string | null>(null)
   const [autoSelectBaseUrl, setAutoSelectBaseUrl] = useState(true)
 
-  const agentsEndpoint = useMemo(() => {
-    const base =
-      AGENTS_API_BASE ||
-      (typeof window !== 'undefined' ? window.location.origin : '')
-    const normalized = base.replace(/\/$/, '')
-    return `${normalized}/api/v1/agents/online`
-  }, [])
-
-  const formatAgentBaseUrl = (agent: OnlineAgent) => `http://${agent.ip}:${agent.port}`
-
   useEffect(() => {
-    if (!token.trim()) return
+    if (!apiKey.trim()) return
     const controller = new AbortController()
     const loadAgents = async () => {
       setAgentsLoading(true)
       setAgentsError(null)
       try {
-        const response = await fetch(agentsEndpoint, {
+        const response = await fetch(AGENTS_ENDPOINT, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${apiKey}`,
           },
           signal: controller.signal,
         })
@@ -57,10 +56,8 @@ const BrowserSearchPage: React.FC = () => {
           const errorText = await response.text()
           throw new Error(`HTTP ${response.status}: ${errorText}`)
         }
-        const payload = await response.json() as any
-        const list: OnlineAgent[] = Array.isArray(payload?.data)
-          ? payload.data
-          : (Array.isArray(payload) ? payload : [])
+        const payload = await response.json() as { data?: OnlineAgent[] } | OnlineAgent[]
+        const list = Array.isArray(payload) ? payload : payload.data ?? []
         setAgents(list)
         if (list.length > 0 && autoSelectBaseUrl) {
           const nextBaseUrl = formatAgentBaseUrl(list[0])
@@ -75,58 +72,27 @@ const BrowserSearchPage: React.FC = () => {
     }
     loadAgents()
     return () => controller.abort()
-  }, [agentsEndpoint, autoSelectBaseUrl, token])
+  }, [autoSelectBaseUrl, apiKey])
 
-  const buildCurl = (): string => {
-    let url = `${baseUrl.replace(/\/$/, '')}/search`
-    const displayToken = token.trim() || '<YOUR_JWT>'
-    
-    const req: SearchRequest = {}
-    if (query.trim()) req.q = query.trim()
-    if (highlight) req.attributesToHighlight = ['*']
-    req.attributesToCrop = ['content']
-    req.cropLength = 60
-    if (filter.trim()) req.filter = [filter.trim()]
-    if (collection.trim()) req.collection = collection.trim()
-
-    const { collection: coll, ...body } = req
-    if (coll) {
-      const encoded = encodeURIComponent(coll)
-      const sep = url.includes('?') ? '&' : '?'
-      url = `${url}${sep}collection=${encoded}`
+  const buildRequest = (): SearchRequest => {
+    const trimmedQuery = query.trim()
+    const trimmedFilter = filter.trim()
+    const trimmedCollection = collection.trim()
+    return {
+      ...(trimmedQuery && { q: trimmedQuery }),
+      ...(highlight && { attributesToHighlight: ['*'] }),
+      attributesToCrop: ['content'],
+      cropLength: 60,
+      ...(trimmedFilter && { filter: [trimmedFilter] }),
+      ...(trimmedCollection && { collection: trimmedCollection }),
     }
-
-    let prettyBody = JSON.stringify(body, null, 2)
-    const safeBody = prettyBody.replace(/'/g, `'\"'\"'`)
-    
-    return [
-      `curl -X POST "${url}" \\`,
-      `  -H "Content-Type: application/json" \\`,
-      `  -H "Authorization: Bearer ${displayToken}" \\`,
-      `  --data-raw '${safeBody}'`,
-    ].join('\n')
   }
 
   const handleSearch = async () => {
     setError(null)
     setLoading(true)
     try {
-      const req: SearchRequest = {}
-      if (query.trim()) {
-        req.q = query.trim()
-      }
-      if (highlight) {
-        req.attributesToHighlight = ['*']
-      }
-      req.attributesToCrop = ['content']
-      req.cropLength = 60
-      if (filter.trim()) {
-        req.filter = [filter.trim()]
-      }
-      if (collection.trim()) {
-        req.collection = collection.trim()
-      }
-      const result = await search(baseUrl, token, req)
+      const result = await search(baseUrl, apiKey, buildRequest())
       setResponse(result)
     } catch (e) {
       setError(e instanceof Error ? e.message : '未知错误')
@@ -136,42 +102,10 @@ const BrowserSearchPage: React.FC = () => {
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       handleSearch()
     }
-  }
-
-  // Parse highlighting tags <em>...</em>
-  const parseHighlight = (text: string, enableHighlight: boolean): React.ReactNode[] => {
-    if (!text) return []
-    const parts: React.ReactNode[] = []
-    // Match <em>content</em> lazily
-    const regex = /<em>(.*?)<\/em>/g
-    let lastIndex = 0
-    let match: RegExpExecArray | null
-
-    while ((match = regex.exec(text)) !== null) {
-      // Text before match
-      const beforeText = text.slice(lastIndex, match.index)
-      if (beforeText) {
-        parts.push(beforeText)
-      }
-      // Content inside <em>
-      const content = match[1] // group 1
-      if (enableHighlight) {
-        parts.push(<em key={match.index}>{content}</em>)
-      } else {
-        parts.push(content)
-      }
-      lastIndex = regex.lastIndex
-    }
-    // Remaining text
-    const remaining = text.slice(lastIndex)
-    if (remaining) {
-      parts.push(remaining)
-    }
-    return parts.length > 0 ? parts : [text]
   }
 
   const renderHit = (hit: SearchHit) => {
@@ -179,19 +113,15 @@ const BrowserSearchPage: React.FC = () => {
       hit._formatted?.name ||
       hit.name ||
       hit._formatted?.title ||
-      (hit as any).title ||
-      (hit as any).author ||
+      hit.title ||
+      hit.author ||
       ''
     const summary =
       hit._formatted?.summary ||
       hit.summary ||
       ''
-    const content =
-      (hit as any)._formatted?.content ||
-      (hit as any).content ||
-      ''
+    const description = summary || hit._formatted?.content || hit.content
     const rawUrl = typeof hit.ext_id === 'string' ? hit.ext_id : ''
-    // Mocking a domain for visual purpose if ext_id is just a path or ID
     const displayUrl = rawUrl && rawUrl.startsWith('http')
       ? rawUrl
       : `test-case-repository > ${rawUrl || hit.id}`
@@ -208,21 +138,16 @@ const BrowserSearchPage: React.FC = () => {
            </div>
         </div>
         <div className="browser-hit-title">
-            {parseHighlight(name, highlight)}
+            {renderHighlight(name, highlight)}
         </div>
-        {summary && (
+        {description && (
           <div className="browser-hit-summary">
-              {parseHighlight(summary, highlight)}
+              {renderHighlight(description, highlight)}
           </div>
         )}
-        {!summary && content && (
+        {hit.author && (
           <div className="browser-hit-summary">
-              {parseHighlight(content, highlight)}
-          </div>
-        )}
-        {(hit as any).author && (
-          <div className="browser-hit-summary">
-              作者：{(hit as any).author}
+              作者：{hit.author}
           </div>
         )}
         <div className="browser-hit-tags">
@@ -239,10 +164,7 @@ const BrowserSearchPage: React.FC = () => {
   return (
     <div className="browser-page">
       <div className="browser-topbar">
-        <div className="browser-tabs">
-          <div className="browser-tab active">测试用例（Mock）</div>
-          <div className="browser-tab">Bug 信息（Mock）</div>
-        </div>
+        <div className="browser-tab active">测试用例（Mock）</div>
         <div className="browser-actions">
           <select
             className="browser-config-input"
@@ -265,11 +187,12 @@ const BrowserSearchPage: React.FC = () => {
             )}
             {agents.map((agent) => {
               const url = formatAgentBaseUrl(agent)
-              const label = agent.hostname
+              const nodeLabel = agent.hostname
                 ? `${agent.hostname} (${agent.ip}:${agent.port})`
                 : `${agent.ip}:${agent.port}`
+              const label = agent.region ? `${nodeLabel} · ${agent.region}` : nodeLabel
               return (
-                <option key={url} value={url}>
+                <option key={agent.id || url} value={url}>
                   {label}
                 </option>
               )
@@ -288,7 +211,7 @@ const BrowserSearchPage: React.FC = () => {
         <button
           className="browser-go-btn"
           onClick={handleSearch}
-          disabled={loading || !token}
+          disabled={loading || !apiKey}
         >
           {loading ? '搜索中...' : '搜索'}
         </button>
@@ -325,12 +248,12 @@ const BrowserSearchPage: React.FC = () => {
           </label>
         </div>
         <div className="browser-subfield">
-          <span>JWT</span>
+          <span>API Key</span>
           <input
             className="browser-sub-input"
             type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
           />
         </div>
         <button 
@@ -343,7 +266,7 @@ const BrowserSearchPage: React.FC = () => {
       </div>
       {showCurl && (
         <div className="browser-curl-box">
-            <pre>{buildCurl()}</pre>
+            <pre>{buildSearchCurl(baseUrl, apiKey, buildRequest())}</pre>
         </div>
       )}
       <div className="browser-content">
