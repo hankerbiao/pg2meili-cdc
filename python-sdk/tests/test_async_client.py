@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 
-from unidata_sdk import AsyncUniDataClient, ServiceUnavailableError
+from unidata_sdk import AsyncUniDataClient, ServiceUnavailableError, ValidationError
 
 
 @pytest.mark.asyncio
@@ -59,6 +59,40 @@ async def test_async_client_matches_document_and_search_contracts() -> None:
 
     await client.aclose()
     assert not http_client.is_closed
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_generic_request_uses_control_contract() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/api/v1/data/articles"
+        assert json.loads(request.content) == {"id": "async-1"}
+        assert request.headers["X-Trace"] == "sdk-test"
+        assert request.headers["Authorization"] == "Bearer api-key"
+        return httpx.Response(
+            201,
+            json={"data": {"id": "async-1"}, "message": "ok"},
+            request=request,
+        )
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = AsyncUniDataClient(
+        "https://control.test", "api-key", http_client=http_client
+    )
+
+    assert await client.request(
+        "POST",
+        "/api/v1/data/articles",
+        json={"id": "async-1"},
+        headers={"X-Trace": "sdk-test"},
+    ) == {"id": "async-1"}
+    with pytest.raises(ValidationError):
+        await client.request("GET", "//other.test/path")
+    with pytest.raises(ValidationError, match="managed by the UniData SDK"):
+        await client.request("GET", "/health", headers={"User-Agent": "other"})
+
+    await client.aclose()
     await http_client.aclose()
 
 

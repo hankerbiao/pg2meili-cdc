@@ -35,7 +35,7 @@ class ClientState:
     def __init__(
         self,
         base_url: str,
-        token: str,
+        api_key: str,
         *,
         search_url: str | None,
         region: str | None,
@@ -48,8 +48,8 @@ class ClientState:
             if search_url is not None
             else None
         )
-        if not isinstance(token, str) or not token.strip():
-            raise ValidationError("token must be a non-empty string")
+        if not isinstance(api_key, str) or not api_key.strip():
+            raise ValidationError("api_key must be a non-empty string")
         if region is not None and (not isinstance(region, str) or not region.strip()):
             raise ValidationError("region must be a non-empty string when provided")
         if (
@@ -61,7 +61,7 @@ class ClientState:
         if not isinstance(agent_cache_ttl, (int, float)) or agent_cache_ttl < 0:
             raise ValidationError("agent_cache_ttl must be non-negative")
 
-        self.token = token.strip()
+        self.api_key = api_key.strip()
         self.region = region.strip() if region is not None else None
         self.max_retries = max_retries
         self.agent_pool = AgentPool(
@@ -71,9 +71,29 @@ class ClientState:
     @property
     def headers(self) -> dict[str, str]:
         return {
-            "Authorization": f"Bearer {self.token}",
+            "Authorization": f"Bearer {self.api_key}",
             "User-Agent": f"unidata-sdk/{__version__}",
         }
+
+    def request_headers(
+        self, custom_headers: Mapping[str, str] | None = None
+    ) -> dict[str, str]:
+        headers = self.headers
+        if custom_headers is not None and not isinstance(custom_headers, Mapping):
+            raise ValidationError("headers must be a mapping")
+        for name, value in (custom_headers or {}).items():
+            if (
+                not isinstance(name, str)
+                or not name.strip()
+                or not isinstance(value, str)
+            ):
+                raise ValidationError(
+                    "headers must contain non-empty string names and string values"
+                )
+            if name.lower() in {"authorization", "user-agent"}:
+                raise ValidationError(f"{name} header is managed by the UniData SDK")
+            headers[name] = value
+        return headers
 
     def control_url(self, path: str) -> str:
         return f"{self.base_url}{path}"

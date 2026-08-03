@@ -30,9 +30,15 @@ from ._validation import (
     validate_document,
     validate_documents,
     validate_page,
+    validate_request_path,
     validate_string_list,
 )
-from .exceptions import NoSearchAgentError, TransportError, UniDataError
+from .exceptions import (
+    NoSearchAgentError,
+    TransportError,
+    UniDataError,
+    ValidationError,
+)
 from .models import (
     Agent,
     BatchUpsertResult,
@@ -49,7 +55,7 @@ class AsyncUniDataClient:
     def __init__(
         self,
         base_url: str,
-        token: str,
+        api_key: str,
         *,
         search_url: str | None = None,
         region: str | None = None,
@@ -61,7 +67,7 @@ class AsyncUniDataClient:
     ) -> None:
         self._state = ClientState(
             base_url,
-            token,
+            api_key,
             search_url=search_url,
             region=region,
             max_retries=max_retries,
@@ -81,6 +87,26 @@ class AsyncUniDataClient:
     async def aclose(self) -> None:
         if self._owns_http_client:
             await self._http.aclose()
+
+    async def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        json: Any = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> Any:
+        """Call a UniData control-plane API and return its response data."""
+        if not isinstance(method, str) or not method.strip():
+            raise ValidationError("method must be a non-empty string")
+        return await self._control_request(
+            method.strip().upper(),
+            validate_request_path(path),
+            params=params,
+            json=json,
+            headers=headers,
+        )
 
     async def health(self) -> dict[str, Any]:
         data = await self._control_request("GET", "/health")
@@ -241,13 +267,14 @@ class AsyncUniDataClient:
         *,
         params: Mapping[str, Any] | None = None,
         json: Any = None,
+        headers: Mapping[str, str] | None = None,
     ) -> Any:
         for attempt in range(self._state.max_retries + 1):
             try:
                 response = await self._http.request(
                     method,
                     self._state.control_url(path),
-                    headers=self._state.headers,
+                    headers=self._state.request_headers(headers),
                     params=params,
                     json=json,
                     timeout=self._timeout,

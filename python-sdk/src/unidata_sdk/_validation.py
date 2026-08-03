@@ -25,6 +25,15 @@ def normalize_base_url(value: str, *, field_name: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, path, "", ""))
 
 
+def validate_request_path(path: str) -> str:
+    if not isinstance(path, str) or not path.startswith("/") or path.startswith("//"):
+        raise ValidationError("path must be a relative API path starting with one '/'")
+    parts = urlsplit(path)
+    if parts.scheme or parts.netloc or parts.query or parts.fragment:
+        raise ValidationError("path must not contain a URL, query, or fragment")
+    return path
+
+
 def validate_collection(collection: str) -> str:
     if not isinstance(collection, str) or not _COLLECTION_PATTERN.fullmatch(collection):
         raise ValidationError(

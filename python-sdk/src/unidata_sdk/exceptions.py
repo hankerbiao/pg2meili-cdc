@@ -69,11 +69,11 @@ class ApiError(UniDataError):
 
 
 class AuthenticationError(ApiError):
-    """The supplied token is missing, invalid, or expired."""
+    """The supplied API key is missing, invalid, or expired."""
 
 
 class PermissionDeniedError(ApiError):
-    """The token does not have the required scope."""
+    """The API key does not have the required scope."""
 
 
 class NotFoundError(ApiError):

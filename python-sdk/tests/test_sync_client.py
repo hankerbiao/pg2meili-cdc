@@ -212,6 +212,42 @@ def test_fixed_search_url_uses_versioned_contract_and_preserves_meta() -> None:
     http_client.close()
 
 
+def test_generic_request_uses_control_contract_and_custom_request_values() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PATCH"
+        assert request.url.path == "/api/v1/data/articles/a-1"
+        assert dict(request.url.params) == {"refresh": "true"}
+        assert json.loads(request.content) == {"title": "Updated"}
+        assert request.headers["X-Request-ID"] == "req-custom"
+        assert request.headers["Authorization"] == "Bearer api-key"
+        assert request.headers["User-Agent"].startswith("unidata-sdk/")
+        return response(200, {"data": {"id": "a-1"}, "message": "ok"}, request)
+
+    http_client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = UniDataClient("https://control.test", "api-key", http_client=http_client)
+
+    assert client.request(
+        "patch",
+        "/api/v1/data/articles/a-1",
+        params={"refresh": "true"},
+        json={"title": "Updated"},
+        headers={"X-Request-ID": "req-custom"},
+    ) == {"id": "a-1"}
+
+    for path in (
+        "api/v1/data/articles",
+        "//other.test/path",
+        "https://other.test/path",
+    ):
+        with pytest.raises(ValidationError):
+            client.request("GET", path)
+    with pytest.raises(ValidationError, match="managed by the UniData SDK"):
+        client.request("GET", "/health", headers={"authorization": "Bearer other"})
+
+    client.close()
+    http_client.close()
+
+
 def test_agent_discovery_filters_region_and_fails_over_once() -> None:
     attempted_hosts: list[str] = []
 
@@ -457,6 +493,7 @@ def test_sync_and_async_clients_expose_the_same_business_methods() -> None:
         "update_index_settings",
         "list_agents",
         "search",
+        "request",
     }
     assert methods <= set(dir(UniDataClient))
     assert methods <= set(dir(AsyncUniDataClient))
