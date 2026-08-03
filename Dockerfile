@@ -26,7 +26,6 @@ COPY --from=uv-source /usr/local/bin/uv /usr/local/bin/uvx /bin/
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
-    UV_DEFAULT_INDEX=${PYTHON_PACKAGE_INDEX} \
     UV_INDEX_URL=${PYTHON_PACKAGE_INDEX}
 WORKDIR /build/UniData
 COPY UniData/pyproject.toml UniData/uv.lock UniData/README.md ./

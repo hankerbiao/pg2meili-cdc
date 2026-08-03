@@ -23,12 +23,6 @@ create_topic() {
 }
 
 create_topic "${KAFKA_API_KEY_TOPIC:-api_keys.events}" --config cleanup.policy=compact
-"${KAFKA_BIN}/kafka-configs.sh" \
-  --bootstrap-server "${BROKER}" \
-  --alter \
-  --entity-type topics \
-  --entity-name "${KAFKA_API_KEY_TOPIC:-api_keys.events}" \
-  --add-config cleanup.policy=compact
 
 create_topic "${KAFKA_COMMAND_TOPIC:-meili.commands}"
 create_topic "${KAFKA_DLQ_TOPIC:-meili.dlq}"

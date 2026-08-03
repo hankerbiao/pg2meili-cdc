@@ -109,6 +109,31 @@ docker compose --env-file .env.docker up -d --build
 docker compose ps
 ```
 
+## CDC 连接器自动注册
+
+启动后 `connect-init` 服务会向 Kafka Connect 注册 Debezium PostgreSQL CDC connector，
+打通「PostgreSQL → Kafka → Meilisearch」同步链路。监控的表由 `.env.docker` 的
+`CDC_TABLE_INCLUDE_LIST` 控制（默认仅 `public.uni_documents`）。
+
+检查注册状态：
+
+```bash
+curl -s http://localhost:8083/connectors/pg-cdc-connector/status | jq
+```
+
+如需调整监控表或重建 connector，修改 `CDC_TABLE_INCLUDE_LIST` 后重跑：
+
+```bash
+docker compose --env-file .env.docker up -d connect-init
+```
+
+调试工具（Kafka UI 管理台）默认不启动，需要时通过 `debug` profile 单独拉起：
+
+```bash
+docker compose --env-file .env.docker --profile debug up -d kafka-ui
+# 访问 http://localhost:8085
+```
+
 服务入口：
 
 - 开放平台：`http://localhost:8080/open-platform`
