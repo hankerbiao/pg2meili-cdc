@@ -2,8 +2,9 @@
 # Environment Variables (SENSITIVE)
 # ===========================================
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.*.example
 *.local
 
 # ===========================================
@@ -68,6 +69,8 @@ pip_graph.png
 
 # UV
 uv.lock
+!UniData/uv.lock
+!python-sdk/uv.lock
 
 # ===========================================
 # Go
@@ -84,6 +87,10 @@ uv.lock
 
 # Output of go coverage
 *.out
+
+# Local service artifacts
+/meilisearch-sync-service/meilisearch-sync-service_go
+*.pid
 
 # Go workspace
 go.work
@@ -164,4 +171,18 @@ temp/
 *~
 .cache/node_modules/
 node_modules/
-docs/.vitepress/cache/
+open-platform-web/test-results/
+open-platform-web/e2e/test-results/
+open-platform-web/e2e/.auth/
+open-platform-web/playwright-report/
+*.tsbuildinfo
+
+# ===========================================
+# Agent / IDE / Local tooling (DO NOT COMMIT)
+# ===========================================
+# WorkBuddy 项目记忆与用户资料（含个人信息，须本地私有）
+.workbuddy/
+# 代码索引缓存
+.codegraph/
+# Cursor IDE 配置
+.cursor/

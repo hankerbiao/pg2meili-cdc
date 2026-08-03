@@ -1,0 +1,224 @@
+name: pg2meili
+
+x-unidata-environment: &unidata-environment
+  PG_CONN_STRING: ${PG_CONN_STRING:-postgresql://postgres:change-me@postgres:5432/postgres}
+  SERVER_PORT: :8080
+  CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:8080}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_JSON: ${LOG_JSON:-false}
+  LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-false}
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+  KAFKA_API_KEY_TOPIC: ${KAFKA_API_KEY_TOPIC:-api_keys.events}
+  KAFKA_MEILI_COMMAND_TOPIC: ${KAFKA_COMMAND_TOPIC:-meili.commands}
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=5
+      - -c
+      - max_wal_senders=5
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  zookeeper:
+    image: quay.io/debezium/zookeeper:2.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${ZOOKEEPER_PORT:-2181}:2181"
+
+  kafka:
+    image: quay.io/debezium/kafka:2.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${KAFKA_PORT:-9092}:9092"
+    environment:
+      ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+      KAFKA_LISTENERS: INSIDE://0.0.0.0:9093,OUTSIDE://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka:9093,OUTSIDE://${KAFKA_EXTERNAL_HOST:-localhost}:${KAFKA_PORT:-9092}
+      KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    depends_on:
+      zookeeper:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9093 --list >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
+
+  kafka-init:
+    image: quay.io/debezium/kafka:2.4
+    restart: "no"
+    environment:
+      KAFKA_BOOTSTRAP_SERVER: kafka:9093
+      KAFKA_API_KEY_TOPIC: ${KAFKA_API_KEY_TOPIC:-api_keys.events}
+      KAFKA_COMMAND_TOPIC: ${KAFKA_COMMAND_TOPIC:-meili.commands}
+      KAFKA_DLQ_TOPIC: ${KAFKA_DLQ_TOPIC:-meili.dlq}
+      KAFKA_TOPIC_PARTITIONS: ${KAFKA_TOPIC_PARTITIONS:-3}
+      KAFKA_TOPIC_REPLICATION_FACTOR: ${KAFKA_TOPIC_REPLICATION_FACTOR:-1}
+    volumes:
+      - ./docker/kafka-init.sh:/opt/unidata/kafka-init.sh:ro
+    entrypoint: ["/bin/bash", "/opt/unidata/kafka-init.sh"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  connect:
+    image: quay.io/debezium/connect:2.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${CONNECT_PORT:-8083}:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9093
+      GROUP_ID: "1"
+      CONFIG_STORAGE_TOPIC: my_connect_configs
+      OFFSET_STORAGE_TOPIC: my_connect_offsets
+      STATUS_STORAGE_TOPIC: my_connect_statuses
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${KAFKA_UI_PORT:-8085}:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9093
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.8
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MEILI_PORT:-7700}:7700"
+    volumes:
+      - meili_data:/meili_data
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-change-me-meilisearch-key}
+
+  unidata-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: ${UNIDATA_IMAGE:-unidata:local}
+    restart: "no"
+    env_file:
+      - path: ./.env.docker
+        required: false
+    environment:
+      <<: *unidata-environment
+    command: ["python", "-m", "migrations.migrate_open_platform"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  unidata:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: ${UNIDATA_IMAGE:-unidata:local}
+    restart: unless-stopped
+    init: true
+    env_file:
+      - path: ./.env.docker
+        required: false
+    environment:
+      <<: *unidata-environment
+      OPEN_PLATFORM_COOKIE_SECURE: ${OPEN_PLATFORM_COOKIE_SECURE:-false}
+    ports:
+      - "${UNIDATA_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      unidata-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./UniData/app
+          target: /opt/unidata/UniData/app
+          ignore:
+            - "**/__pycache__"
+            - "**/*.pyc"
+        - action: sync+restart
+          path: ./UniData/scripts
+          target: /opt/unidata/UniData/scripts
+          ignore:
+            - "**/__pycache__"
+        - action: sync+restart
+          path: ./UniData/migrations
+          target: /opt/unidata/UniData/migrations
+          ignore:
+            - "**/__pycache__"
+        - action: rebuild
+          path: ./UniData/pyproject.toml
+        - action: rebuild
+          path: ./UniData/uv.lock
+        - action: rebuild
+          path: ./open-platform-web
+          ignore:
+            - node_modules
+            - dist
+            - test-results
+            - playwright-report
+        - action: rebuild
+          path: ./python-sdk
+          ignore:
+            - .venv
+            - "**/__pycache__"
+        - action: rebuild
+          path: ./Dockerfile
+
+volumes:
+  pgdata:
+  redis_data:
+  meili_data:

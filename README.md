@@ -23,7 +23,7 @@
 - **多区域搜索**: 各区域部署 Meilisearch 节点，搜索就近访问
 - **软删除机制**: 通过 `is_delete` 字段标记删除状态
 - **高性能搜索**: Meilisearch 提供亚毫秒级搜索延迟
-- **现代化文档**: 集成 VitePress 文档中心
+- **开放平台门户**: React 文档中心、Python SDK 下载与 API Key 管理控制台
 
 ## 项目结构
 
@@ -42,7 +42,7 @@
 │   │   │   └── document.py           # Document ORM 模型
 │   │   ├── services/                 # 业务逻辑层
 │   │   │   └── document_service.py
-│   │   └── templates/                # HTML 模板 (Token 申请等)
+│   ├── migrations/                   # 版本化数据库迁移
 │   ├── tests/                        # 测试用例
 │   ├── pyproject.toml
 │   └── README.md
@@ -54,49 +54,31 @@
 │   ├── go.mod                        # Go 模块定义
 │   └── go.sum
 │
-├── docs/                             # VitePress 文档中心
-│   ├── .vitepress/
-│   ├── deployment/                   # 部署指南
-│   ├── guide/                        # 使用指南
-│   └── index.md
-│
-├── frontend/                         # 前端演示应用 (React)
-├── libs/                             # 静态资源库 (Layui 等)
+├── frontend/                         # 数据与搜索调试工具 (React)
+├── open-platform-web/               # 开放平台文档与管理控制台 (React + TypeScript)
+├── python-sdk/                       # 独立 Python 客户端 SDK
+├── docker/                           # 容器初始化脚本
+├── Dockerfile                        # UniData 与开放平台镜像
 ├── docker-compose.yml                # 核心中间件部署配置
 └── README.md
 ```
 
-## 文档中心 (VitePress)
+## 开放平台文档
 
-本项目使用 VitePress 构建了现代化的文档中心，包含：
-- **详细 API 接口说明**: 包含通用文档 CRUD、Token 申请等完整接口定义
-- **环境部署指南**: PostgreSQL, Debezium, Kafka, Meilisearch 等组件的详细部署方案
-- **开发使用手册**: Token 申请流程、SDK 使用示例等
+API 使用文档、认证说明、Python SDK 和公开 API Reference 已统一到
+`open-platform-web`。生产环境由 UniData 同源托管，入口为
+`/open-platform`；FastAPI 自动生成的 OpenAPI 页面保留在 `/docs`。
 
-详细的接口文档和部署说明请参考 VitePress 文档。
+本地开发开放平台前端：
 
-### 部署与使用
+```bash
+cd open-platform-web
+npm ci
+npm run dev
+```
 
-1. **环境准备**
-   确保本地已安装 Node.js (推荐 v18+)。
-
-2. **安装依赖**
-   ```bash
-   # 在项目根目录下执行
-   npm install
-   ```
-
-3. **启动本地预览**
-   ```bash
-   npm run docs:dev
-   ```
-   启动后访问 `http://localhost:5173` 即可查看完整文档。
-
-4. **构建静态站点**
-   ```bash
-   npm run docs:build
-   ```
-   构建产物位于 `docs/.vitepress/dist`，可部署至 Nginx 或 GitHub Pages。
+生产构建通过根目录 `Dockerfile` 自动执行，也可以在该目录运行
+`npm run build` 单独验证。
 
 ## 快速开始
 
@@ -108,6 +90,39 @@
 - Meilisearch
 - Apache Kafka
 - Debezium Connector
+
+### Docker 启动 UniData 与开放平台（推荐）
+
+Go Agent 保持在各区域独立部署，不包含在中心 Docker Compose 中。
+
+```bash
+cp .env.docker.example .env.docker
+
+# 生成管理员密码摘要，将输出写入 .env.docker
+docker compose --env-file .env.docker run --rm unidata \
+  python scripts/hash_admin_password.py
+
+# 摘要包含 $，在 .env.docker 中必须用单引号包住
+# OPEN_PLATFORM_ADMIN_PASSWORD_HASH='$argon2id$...'
+
+docker compose --env-file .env.docker up -d --build
+docker compose ps
+```
+
+服务入口：
+
+- 开放平台：`http://localhost:8080/open-platform`
+- API 文档：`http://localhost:8080/docs`
+- 存活检查：`http://localhost:8080/health`
+- 就绪检查：`http://localhost:8080/ready`
+
+后端源码修改可通过 Compose Watch 同步到容器并自动重启：
+
+```bash
+docker compose --env-file .env.docker watch unidata
+```
+
+前端、Python 依赖或 SDK 变化会触发镜像重建。生产环境必须通过 HTTPS 反向代理访问，并将 `OPEN_PLATFORM_COOKIE_SECURE` 设置为 `true`。
 
 ### 1. 安装 Python 依赖 (UniData)
 
@@ -132,12 +147,15 @@ go mod tidy
 ### 3. 配置环境变量
 
 ```bash
-# 复制环境变量模板
-cp .env.example .env
+# UniData 服务
+cp UniData/.env.example UniData/.env
 
-# 编辑配置
-vim .env
+# Go 同步服务
+cp meilisearch-sync-service/.env.example meilisearch-sync-service/.env
 ```
+
+Docker 部署使用根目录的 `.env.docker.example`；前端调试配置见
+`frontend/.env.example`。所有实际 `.env` 文件均为本地配置，不应提交。
 
 ### 4. 启动服务
 
@@ -204,6 +222,11 @@ pip install ./python-sdk
 
 ## 部署拓扑
 
+多区域部署中，每个区域的 Sync Service 使用独立 Kafka consumer group，组名由
+`KAFKA_GROUP_PREFIX` 与 `REGION_ID` 自动生成。同一区域的多个副本共享
+group 以实现故障转移，不同区域使用不同 group，以保证每个区域都收到完整数据流。
+未配置 `REGION_ID` 的单区域旧部署会继续沿用 `KAFKA_GROUP_ID` 或消费者组前缀。
+
 ```
                         ┌─────────────────┐
                         │   PostgreSQL    │
@@ -239,5 +262,5 @@ pip install ./python-sdk
 - **Go Modules**: 依赖管理
 
 ### 文档 & 前端
-- **VitePress**: 静态文档站点
-- **React + Vite**: 演示前端
+- **React + TypeScript + Vite**: 开放平台文档与管理控制台
+- **React + Vite**: 数据与搜索调试工具
