@@ -5,7 +5,9 @@ SERVICE_NAME="UniData"
 PID_FILE="unidata.pid"
 LOG_FILE="app.log"
 HOST="0.0.0.0"
-PORT="8000"
+# 与 docker-compose / vite 开发代理 / config 默认保持一致（8080）；
+# 若 .env 中存在 SERVER_PORT，启动时会覆盖此默认值。
+PORT="8080"
 
 # 获取脚本所在目录的绝对路径
 WORK_DIR=$(cd "$(dirname "$0")" && pwd)

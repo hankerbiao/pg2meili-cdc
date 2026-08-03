@@ -1,20 +1,32 @@
 """应用的配置管理模块。"""
+
 from functools import lru_cache
+import os
+from pathlib import Path
 from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+SECRET_FILE_FIELDS = (
+    "pg_conn_string",
+    "open_platform_admin_password_hash",
+    "open_platform_session_secret",
+    "agent_registration_token",
+    "kafka_sasl_password",
+)
 
 
 class Settings(BaseSettings):
     """从环境变量和 .env 文件加载的应用配置。"""
 
-    # PostgreSQL 连接字符串
-    pg_conn_string: str = "postgres://postgres:kk123123@10.17.154.252:5432/postgres"
+    # PostgreSQL 连接字符串（必填，通过 .env 或环境变量提供）
+    pg_conn_string: str
 
     # 服务端口
     server_port: str = ":8080"
 
-    # CORS 配置，逗号分隔。使用 "*" 表示允许所有来源
-    cors_allow_origins: str = "*"
+    # CORS 配置，逗号分隔。留空则不启用 CORS 中间件（仅同源访问）
+    cors_allow_origins: str = ""
 
     # 日志配置
     log_level: str = "INFO"
@@ -24,38 +36,70 @@ class Settings(BaseSettings):
     log_backtrace: bool = False
     log_diagnose: bool = False
     log_json: bool = False
+    log_file_enabled: bool = True
+
+    # 容器运行时资源目录；留空时自动使用仓库内的开发路径
+    open_platform_dist_dir: str = ""
+    python_sdk_archive: str = ""
 
     # 代理节点健康检查配置
     agent_health_path: str = "/health"
     agent_scan_interval_seconds: int = 5
     agent_health_timeout_seconds: int = 5
     agent_online_ttl_seconds: int = 120
+    agent_registration_token: str = ""
 
-    # JWT 签名秘钥（HS256）
-    jwt_secret: str = "dYAj4kPbhIdCM35XhcDW9HJX53xT3iux"
+    # 开放平台管理员与会话配置
+    open_platform_admin_username: str = "admin"
+    open_platform_admin_password_hash: str = ""
+    open_platform_session_secret: str = ""
+    open_platform_session_ttl_seconds: int = 28800
+    # Cookie 是否标记为 Secure。
+    # HTTP（含本地 / 容器 localhost）下浏览器不会发送 Secure Cookie，会导致开放平台
+    # 管理员登录会话失效，因此默认关闭。若服务前置 HTTPS / TLS 终止，请改为 true。
+    open_platform_cookie_secure: bool = False
+    api_key_max_ttl_days: int = 365
 
-    # Kafka 配置
-    kafka_bootstrap_servers: str = "10.17.154.252:9092"  # Kafka 集群地址，格式如 "host1:9092,host2:9092"
+    # Kafka 配置（必填，通过 .env 或环境变量提供）
+    kafka_bootstrap_servers: str
     kafka_client_id: str = "unidata-producer"  # 客户端标识符，用于区分不同的生产者
-    kafka_security_protocol: str = "PLAINTEXT"  # 安全协议，可选 PLAINTEXT, SASL_PLAINTEXT, SASL_SSL, SSL
-    kafka_sasl_mechanism: Optional[str] = None  # SASL 认证机制，如 PLAIN, SCRAM-SHA-256 等
+    kafka_security_protocol: str = (
+        "PLAINTEXT"  # 安全协议，可选 PLAINTEXT, SASL_PLAINTEXT, SASL_SSL, SSL
+    )
+    kafka_sasl_mechanism: Optional[str] = (
+        None  # SASL 认证机制，如 PLAIN, SCRAM-SHA-256 等
+    )
     kafka_sasl_username: Optional[str] = None  # SASL 认证用户名
     kafka_sasl_password: Optional[str] = None  # SASL 认证密码
-    kafka_acks: str = "all"  # 消息确认机制：'0'(不等待), '1'(Leader确认), 'all'(ISR全部确认)
+    kafka_acks: str = (
+        "all"  # 消息确认机制：'0'(不等待), '1'(Leader确认), 'all'(ISR全部确认)
+    )
     kafka_retries: int = 3  # 发送失败重试次数
     kafka_linger_ms: int = 10  # 批量发送延迟时间(ms)，增加吞吐量但增加延迟
-    kafka_batch_size: int = 16384  # 批量发送大小(bytes)，达到此大小或 linger_ms 超时触发发送
+    kafka_batch_size: int = (
+        16384  # 批量发送大小(bytes)，达到此大小或 linger_ms 超时触发发送
+    )
     kafka_request_timeout_ms: int = 30000  # 请求超时时间(ms)
     kafka_meili_command_topic: str = "meili.commands"  # Meilisearch 指令专用 Topic
-    kafka_token_revoke_topic: str = "token.revocations"  # Token 撤销广播 Topic
-
-    gquan_base_url: Optional[str] = "http://10.32.129.1/springboard_v3"
+    kafka_api_key_topic: str = "api_keys.events"
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    def __init__(self, **values):
+        for field_name in SECRET_FILE_FIELDS:
+            secret_file = os.getenv(f"{field_name.upper()}_FILE", "").strip()
+            if not secret_file:
+                continue
+            try:
+                secret = Path(secret_file).read_text(encoding="utf-8").strip()
+            except OSError as exc:
+                raise ValueError(f"无法读取 {field_name.upper()}_FILE") from exc
+            values[field_name] = secret
+        super().__init__(**values)
 
 
 @lru_cache

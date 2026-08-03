@@ -1,6 +1,19 @@
 """统一响应封装。"""
+from typing import Generic, TypeVar
+
+from pydantic import BaseModel
 
 
-def ok(data):
+T = TypeVar("T")
+
+
+class ApiResponse(BaseModel, Generic[T]):
+    """API 成功响应。"""
+
+    data: T
+    message: str = "ok"
+
+
+def ok(data: T) -> ApiResponse[T]:
     """统一成功返回格式。"""
-    return {"data": data, "message": "ok"}
+    return ApiResponse(data=data)

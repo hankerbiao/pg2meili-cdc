@@ -32,12 +32,11 @@ UniData 处于这条链路的“入口”位置，主要职责是：
 
 - 提供统一的 HTTP API，让上层业务以标准 JSON 格式写入数据；
 - 对输入数据做基础校验与补全（例如确保 `id` 存在、`is_delete` 字段正确）；
-- 将数据写入 PostgreSQL 的通用 `documents` 表，作为 CDC 的源表；
-- 对外暴露应用级 JWT 认证能力，控制谁可以写入数据。
+- 将数据写入 PostgreSQL 的通用 `uni_documents` 表，作为 CDC 的源表；
+- 对外暴露开放平台 API Key 认证能力，控制谁可以写入数据。
 
-关于 Debezium + Kafka + Meilisearch 的完整部署与 CDC 流程，可参考仓库文档：
-
-- [部署指南](../docs/deployment/installation.md)
+关于 Debezium + Kafka + Meilisearch 的部署与 CDC 流程，可参考
+[仓库根目录说明](../README.md)。
 
 ---
 
@@ -53,10 +52,10 @@ UniData 处于这条链路的“入口”位置，主要职责是：
   - 接收 HTTP 请求；
   - 校验并组装 JSON payload；
   - 调用业务 Service 与 Repository，将数据写入 PostgreSQL；
-  - 根据 JWT 中的应用身份，将数据归属到对应 app。
+  - 根据 API Key 关联的应用身份，将数据归属到对应 app。
 
 - **PostgreSQL**  
-  存储通用文档数据（`documents` 表），按 `collection + app_name` 隔离业务数据。
+  存储通用文档数据（`uni_documents` 表），按不可变的 `app_id + collection + id` 隔离业务数据。
 
 - **Debezium + Kafka**  
   监听 PostgreSQL 的 WAL 日志，把表的变更转成标准 CDC 事件推入 Kafka 主题。
@@ -101,7 +100,8 @@ Pydantic 模型见：
 - 所有通用文档共享一个基础字段：
   - `id: str`：文档唯一标识；
   - 其他字段通过 `extra = "allow"` 自由扩展；
-- 通过 `collection` + `app_name` 维度划分不同业务的文档空间；
+- 内部使用 `row_id` 作为数据库主键，对外业务 ID 使用 `app_id + collection + id` 复合唯一约束；
+- `app_name` 保留用于 CDC 路由和兼容现有 `{app_name}_{collection}` 搜索索引；
 - 适合管理测试用例、需求、缺陷、配置等多种类型的异构数据。
 
 ---
@@ -117,7 +117,9 @@ Pydantic 模型见：
 
 - `GET /health`：基础探活，返回 `{ "status": "healthy" }`。
 
-下面分块说明核心接口（鉴权细节请参考 [用户引导手册](../docs/guide/user-manual.md)）。
+下面分块说明核心接口。运行服务后，可在
+`/open-platform/docs/quickstart` 查看接入说明，在
+`/open-platform/docs/api-reference` 查看公开 API Reference。
 
 ---
 
@@ -138,7 +140,7 @@ Pydantic 模型见：
 ```bash
 curl -X POST "http://localhost:8080/api/v1/data/requirements" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <jwt>" \
+  -H "Authorization: Bearer <api_key>" \
   -d '{
     "id": "REQ-001",
     "title": "支付重构需求",
@@ -150,7 +152,7 @@ curl -X POST "http://localhost:8080/api/v1/data/requirements" \
 约束：
 
 - `collection` 不允许包含空格；
-- 实际写入会携带当前应用名 `app_name`，保证不同应用之间的文档隔离。
+- 实际写入会携带 API Key 对应的 `app_id`，不同应用可以安全复用相同的 collection 和文档 ID。
 
 ### 6.2 获取文档详情
 
@@ -182,12 +184,12 @@ curl -X POST "http://localhost:8080/api/v1/data/requirements" \
 
 ---
 
-## 7. 认证与 Token 机制
+## 7. API Key 认证
 
-所有需要写入/管理数据的接口都要求携带 `Authorization: Bearer <token>`。  
-详细的 Token 获取方式与认证说明请参考：
-
-- [用户引导手册](../docs/guide/user-manual.md)
+所有需要写入、读取或管理数据的调用方接口都要求携带
+`Authorization: Bearer <api_key>`。应用和 API Key 由开放平台控制台管理，
+scope、轮换、撤销和错误码说明见运行时页面
+`/open-platform/docs/authentication`。
 
 ---
 
@@ -201,22 +203,22 @@ curl -X POST "http://localhost:8080/api/v1/data/requirements" \
   - 提供 `main()` 启动函数，方便通过命令行启动服务。
 
 - `app/api/v1`  
-  - `endpoints/`: 具体业务路由（documents、indexes、auth）；  
+  - `endpoints/`: 具体业务路由（documents、indexes、open_platform）；
   - `router.py`: 聚合 v1 版本下所有路由，并挂载在 `/api/v1`。
 
 - `app/core`  
-  - `config.py`: 使用 `pydantic-settings` 读取 `.env` 中的配置，如 PostgreSQL 连接串、服务端口、JWT 秘钥等；  
+  - `config.py`: 使用 `pydantic-settings` 读取 `.env` 中的配置，如 PostgreSQL 连接串、服务端口、开放平台管理员与 Kafka 配置等；
   - `database.py`: 管理 SQLAlchemy AsyncEngine 和 AsyncSession，提供 `get_db` 依赖和 `close_db` 生命周期钩子；  
-  - `auth.py`: 实现 JWT 生成与解析。
+  - `auth.py`: 实现开放平台 API Key 解析、摘要校验与 scope 校验。
 
 - `app/models`  
-  - ORM 模型层（测试用例、通用文档、令牌记录等）。
+  - ORM 模型层（测试用例、通用文档、开放平台应用、API Key、审计与 outbox 等）。
 
 - `app/repositories`  
-  - 直接与数据库交互的 SQL 封装，如 `testcase_repository`、`document_repository`、`token_repository`。
+  - 直接与数据库交互的 SQL 封装，如 `testcase_repository`、`document_repository`。
 
 - `app/services`  
-  - 业务逻辑层，如 `TestCaseService`、`DocumentService`、`TokenService`，负责校验、补全字段、调用 Repository。
+  - 业务逻辑层，如 `TestCaseService`、`DocumentService`、`OpenPlatformService`，负责校验、补全字段、调用 Repository。
 
 - `tests`  
   - 使用 `pytest` + `pytest-asyncio`；  
@@ -225,6 +227,16 @@ curl -X POST "http://localhost:8080/api/v1/data/requirements" \
 ---
 
 ## 9. 环境配置与运行
+
+开放平台页面由仓库根目录下的 `open-platform-web` 构建并由 UniData 同源托管。首次启动或前端变更后先执行：
+
+```bash
+cd ../open-platform-web
+npm install
+npm run build
+```
+
+使用仓库根目录的 Docker Compose 时，React 构建会在多阶段镜像中自动完成，不需要在宿主机安装 Node.js。镜像同时预构建 Python SDK 下载包，并通过固定的容器资源目录交给 UniData 托管。
 
 ### 9.1 配置项
 
@@ -241,9 +253,14 @@ curl -X POST "http://localhost:8080/api/v1/data/requirements" \
   ```
 
 - `server_port`：服务端口，形如 `:8080`，启动时会自动去掉前缀冒号；
-- `meili_default_url` / `meili_default_api_key`：默认 Meilisearch 端点与密钥；
-- `jwt_secret`：JWT 签名秘钥（HS256）；
-- `gquan_base_url` / `gquan_app_name`：用于发送 token 审核通知的内部系统配置。
+- `agent_registration_token`：Go Agent 注册与内部快照接口访问凭证；
+- `open_platform_admin_username` / `open_platform_admin_password_hash` / `open_platform_session_secret`：开放平台管理员与会话配置；
+- `kafka_api_key_topic`：开放平台应用与 API Key 变更事件 topic。
+- `open_platform_dist_dir`：预构建开放平台静态资源目录；容器默认 `/opt/unidata/open-platform`；
+- `python_sdk_archive`：可下载 Python SDK ZIP；容器默认 `/opt/unidata/downloads/unidata-sdk.zip`；
+- `log_file_enabled`：容器中建议关闭，仅写 stdout。
+
+敏感配置支持对应的 `*_FILE` 变量，例如 `OPEN_PLATFORM_SESSION_SECRET_FILE=/run/secrets/open_platform_session_secret`。
 
 ### 9.2 本地启动
 
@@ -278,7 +295,23 @@ python main.py
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
 ```
 
-### 9.3 运行测试
+### 9.3 Docker 启动与代码同步
+
+```bash
+cd ..
+cp .env.docker.example .env.docker
+docker compose --env-file .env.docker up -d --build
+docker compose --env-file .env.docker watch unidata
+```
+
+管理员 Argon2 摘要写入 `.env.docker` 时必须使用单引号，例如
+`OPEN_PLATFORM_ADMIN_PASSWORD_HASH='$argon2id$...'`，避免摘要中的 `$` 被 Compose 解释为变量。
+
+Compose 会先等待 PostgreSQL，运行 `migrations/` 中带版本记录的数据库迁移，再初始化 Kafka topics，最后启动单 worker UniData。Python `app/`、`scripts/` 和 `migrations/` 使用 `sync+restart`；前端、SDK、依赖锁文件和 Dockerfile 变化使用 `rebuild`。
+
+文档租户迁移会为历史记录回填 `app_id`；无法识别的空应用名归入自动创建的 `legacy` 应用。迁移会把文档主键切换为内部 `row_id`，并设置 `REPLICA IDENTITY FULL` 以保留 Debezium 删除事件所需的路由字段。生产执行前必须备份数据库并确认 Debezium Connector 正常；新版本开始写入跨租户重复业务 ID 后，不能直接回退到旧的全局 ID 主键模型。
+
+### 9.4 运行测试
 
 确保 Python 依赖已安装（推荐使用虚拟环境）：
 
@@ -286,14 +319,12 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
 cd UniData
 pip install -e .
 pip install pytest pytest-asyncio httpx
+export TEST_PG_CONN_STRING=postgresql://postgres:change-me@127.0.0.1:5432/unidata_test
 pytest
 ```
 
-测试会使用 `Settings.pg_conn_string` 指向的 PostgreSQL，  
-并在测试会话中自动创建相关表进行验证。
-
-> 建议为测试准备一个单独的数据库（例如 `unidata_test`），  
-> 以避免测试数据污染生产库。
+数据库用例只读取 `TEST_PG_CONN_STRING`，且数据库名必须包含 `test`；未配置时
+相关用例会跳过。测试夹具会自动建表并写入测试数据，不得指向开发或生产数据库。
 
 ---
 
@@ -302,8 +333,8 @@ pytest
 本项目只负责将数据稳定、规范地写入 PostgreSQL。  
 CDC 与搜索同步的部分在仓库其他目录中实现：
 
-- Debezium 与 Kafka 部署文档：  
-  - [部署指南](../docs/deployment/installation.md)
+- Debezium、Kafka 与 Docker Compose 部署说明：
+  - [仓库根目录说明](../README.md)
 - Go 消费者与 Meilisearch 同步程序：  
   - [meilisearch-sync-service](../meilisearch-sync-service/main.go)
 

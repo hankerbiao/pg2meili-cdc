@@ -10,20 +10,30 @@ UniData 生产者服务入口。
 
 from contextlib import asynccontextmanager
 from typing import Optional
-import json
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
-from fastapi.routing import APIRoute
+from fastapi.responses import JSONResponse
 from loguru import logger
+from sqlalchemy import text
 
+from app.api.v1.endpoints.sdk import (
+    python_sdk_available,
+    validate_python_sdk_archive,
+)
+from app.api.v1.response import ok
 from app.core.config import Settings, get_settings
-from app.core.database import close_db
+from app.core.database import close_db, get_db_context
 from app.core.logging import init_logging
-from app.api.v1.router import api_router
-from app.web.static import mount_static, register_pages
+from app.api.v1.router import include_api_routes
+from app.web.static import (
+    mount_static,
+    open_platform_assets_ready,
+    register_pages,
+    validate_runtime_assets,
+)
 from app.services.agent_monitor import scan_agents_loop
+from app.services.open_platform_service import publish_outbox_loop
 
 
 def parse_cors_origins(value: str) -> list[str]:
@@ -45,7 +55,15 @@ def mask_pg_conn_string(conn: str) -> str:
         if ":" in userinfo:
             user, _ = userinfo.split(":", 1)
             userinfo = f"{user}:***"
-        return urlunsplit((parts.scheme, f"{userinfo}@{hostinfo}", parts.path, parts.query, parts.fragment))
+        return urlunsplit(
+            (
+                parts.scheme,
+                f"{userinfo}@{hostinfo}",
+                parts.path,
+                parts.query,
+                parts.fragment,
+            )
+        )
     except Exception:
         return conn
 
@@ -71,6 +89,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         在这里打印关键信息，便于排查环境问题，同时在应用退出时
         负责关闭数据库连接等共享资源。
         """
+        validate_runtime_assets(settings)
+        validate_python_sdk_archive(settings)
         logger.info("PostgreSQL 连接: {}", mask_pg_conn_string(settings.pg_conn_string))
         logger.info("服务端口: {}", settings.server_port)
 
@@ -79,6 +99,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
         stop_event = asyncio.Event()
         task = asyncio.create_task(scan_agents_loop(stop_event))
+        outbox_task = asyncio.create_task(publish_outbox_loop(stop_event))
 
         # 应用运行期
         yield
@@ -86,6 +107,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         # 结束后台任务
         stop_event.set()
         await task
+        await outbox_task
 
         # 应用关闭阶段：清理资源
         logger.info("正在关闭服务...")
@@ -100,53 +122,18 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         lifespan=lifespan,
     )
 
-    class StandardizedRoute(APIRoute):
-        """统一接口返回格式：{ data, message }。"""
-
-        def get_route_handler(self):
-            original_handler = super().get_route_handler()
-
-            async def custom_route_handler(request: Request) -> Response:
-                response: Response = await original_handler(request)
-
-                # 非 JSON 响应（如 HTML / 文件）不做包装
-                content_type = response.headers.get("content-type", "")
-                if "application/json" not in content_type:
-                    return response
-
-                try:
-                    body_bytes = getattr(response, "body", b"")
-                    if not body_bytes:
-                        return JSONResponse(
-                            status_code=response.status_code,
-                            content={"data": None, "message": "ok"},
-                        )
-                    payload = json.loads(body_bytes)
-                    if isinstance(payload, dict) and "data" in payload and "message" in payload:
-                        return response
-                    return JSONResponse(
-                        status_code=response.status_code,
-                        content={"data": payload, "message": "ok"},
-                    )
-                except Exception:
-                    return response
-
-            return custom_route_handler
-
-    app.router.route_class = StandardizedRoute
-
-    # 全局 CORS 配置：
-    # 当前放开所有来源，方便本地及多环境联调，生产环境可以按需收紧
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=parse_cors_origins(settings.cors_allow_origins),
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # 全局 CORS 配置：留空时不注册中间件（仅同源访问），显式配置后按需放开
+    if settings.cors_allow_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=parse_cors_origins(settings.cors_allow_origins),
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     # 挂载 API v1 的所有业务路由到统一前缀 /api/v1
-    app.include_router(api_router, prefix="/api/v1")
+    include_api_routes(app)
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
@@ -162,13 +149,44 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             content={"data": None, "message": "内部服务器错误"},
         )
 
-    mount_static(app)
-    register_pages(app)
+    mount_static(app, settings)
+    register_pages(app, settings)
 
     # 简单的健康检查端点，方便 K8s/监控系统探测服务状态
     @app.get("/health", tags=["health"])
     async def health_check():
-        return {"status": "healthy"}
+        return ok({"status": "healthy"})
+
+    @app.get("/ready", tags=["health"])
+    async def readiness_check():
+        checks = {
+            "database": False,
+            "open_platform": open_platform_assets_ready(settings),
+            "python_sdk": python_sdk_available(settings),
+            "admin_session": bool(
+                settings.open_platform_admin_password_hash.strip()
+                and len(settings.open_platform_session_secret.strip()) >= 32
+            ),
+            "agent_registration": bool(settings.agent_registration_token.strip()),
+        }
+        try:
+            async with get_db_context() as db:
+                await db.execute(text("SELECT 1"))
+            checks["database"] = True
+        except Exception as exc:
+            logger.warning("readiness 数据库检查失败: {}", exc)
+
+        ready = all(checks.values())
+        return JSONResponse(
+            status_code=200 if ready else 503,
+            content={
+                "data": {
+                    "status": "ready" if ready else "not_ready",
+                    "checks": checks,
+                },
+                "message": "ok" if ready else "服务尚未就绪",
+            },
+        )
 
     return app
 

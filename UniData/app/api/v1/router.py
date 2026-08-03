@@ -1,32 +1,27 @@
-"""API v1 路由配置模块。
-"""
+"""API v1 路由配置。"""
+from fastapi import FastAPI
 
-from fastapi import APIRouter
-
-from app.api.v1.endpoints import auth_router, documents_router, indexes_router, agents_router
-
-api_router = APIRouter()
-
-api_router.include_router(
-    auth_router,
-    prefix="/auth",
-    tags=["auth"],
-)
-
-api_router.include_router(
-    indexes_router,
-    prefix="/indexes",
-    tags=["indexes"],
-)
-
-api_router.include_router(
-    documents_router,
-    prefix="/data",
-    tags=["generic-data"],
-)
-
-api_router.include_router(
+from app.api.v1.endpoints import (
     agents_router,
-    prefix="/agents",
-    tags=["agents"],
+    documents_router,
+    indexes_router,
+    internal_router,
+    open_platform_router,
+    sdk_router,
 )
+
+
+ROUTERS = (
+    (open_platform_router, "/open-platform", "open-platform"),
+    (internal_router, "/internal", "internal"),
+    (indexes_router, "/indexes", "indexes"),
+    (documents_router, "/data", "generic-data"),
+    (agents_router, "/agents", "agents"),
+    (sdk_router, "/sdk", "sdk"),
+)
+
+
+def include_api_routes(app: FastAPI) -> None:
+    """将业务路由直接挂载到应用，避免嵌套 router 的兼容性差异。"""
+    for router, prefix, tag in ROUTERS:
+        app.include_router(router, prefix=f"/api/v1{prefix}", tags=[tag])

@@ -101,8 +101,7 @@ def _make_async_conn_string(conn_string: str) -> str:
     return urlunsplit(sanitized_url)
 
 
-# 向后兼容性：暴露引擎和 AsyncSessionLocal 以便直接访问
-# 这些将在首次访问时延迟初始化
+# 暴露延迟初始化的引擎，供数据库初始化脚本使用。
 class _LazyEngine:
     """引擎的延迟代理。
 
@@ -117,19 +116,6 @@ class _LazyEngine:
 
 
 engine = _LazyEngine()
-
-
-class _LazySessionLocal:
-    """AsyncSessionLocal 的延迟代理。
-
-    用与 _LazyEngine 类似的方式延迟创建 sessionmaker。
-    """
-
-    def __getattr__(self, name):
-        return getattr(_get_session_local(), name)
-
-
-AsyncSessionLocal = _LazySessionLocal()
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

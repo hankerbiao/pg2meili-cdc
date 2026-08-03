@@ -1,7 +1,12 @@
 """通用接口与健康检查的测试模块。"""
+import pytest
+from fastapi import HTTPException
 from httpx import AsyncClient
+from pydantic import ValidationError
 
+from app.api.v1.validation import valid_collection_name
 from app.main import app
+from app.schemas.document import DocumentBatchUpsertRequest, DocumentCreateRequest
 
 
 class TestHealthCheck:
@@ -13,9 +18,45 @@ class TestHealthCheck:
 
 class TestAPIRoutes:
     def test_generic_documents_endpoint_exists(self):
-        routes = [r for r in app.routes if hasattr(r, "path")]
-        documents_routes = [r for r in routes if "/api/v1/data" in r.path]
-        assert len(documents_routes) > 0
+        assert "/api/v1/data/{collection}" in app.openapi()["paths"]
+
+    async def test_agents_online_requires_search_token(self, clean_client: AsyncClient):
+        response = await clean_client.get("/api/v1/agents/online")
+        assert response.status_code == 401
+
+    async def test_agent_registration_requires_service_token(self, clean_client: AsyncClient):
+        response = await clean_client.post(
+            "/api/v1/agents/register",
+            json={"ip": "127.0.0.1", "port": 8091},
+        )
+        assert response.status_code == 503
+
+
+class TestCollectionValidation:
+    def test_accepts_supported_collection_name(self):
+        assert valid_collection_name("release_notes-2026") == "release_notes-2026"
+
+    def test_rejects_path_like_collection_name(self):
+        with pytest.raises(HTTPException) as exc_info:
+            valid_collection_name("../private")
+        assert exc_info.value.status_code == 400
+
+    def test_rejects_empty_document_id(self):
+        with pytest.raises(ValidationError):
+            DocumentCreateRequest(id="")
+
+    def test_rejects_empty_batch(self):
+        with pytest.raises(ValidationError):
+            DocumentBatchUpsertRequest(items=[])
+
+    def test_rejects_duplicate_batch_document_ids(self):
+        with pytest.raises(ValidationError, match="文档 id 不能重复"):
+            DocumentBatchUpsertRequest(
+                items=[
+                    DocumentCreateRequest(id="duplicate"),
+                    DocumentCreateRequest(id="duplicate"),
+                ]
+            )
 
 
 class TestGenericDocumentsEndpoints:

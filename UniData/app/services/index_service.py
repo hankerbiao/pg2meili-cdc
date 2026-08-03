@@ -10,8 +10,14 @@ class IndexService:
     """索引管理服务，负责发送索引相关的 Kafka 命令。"""
 
     @staticmethod
-    def _send_command(index_uid: str, action: str, payload: Dict[str, Any]) -> None:
+    def _send_command(
+        app_name: str,
+        collection: str,
+        action: str,
+        payload: Dict[str, Any],
+    ) -> str:
         # 统一构造并发送 Kafka 命令，避免接口层重复逻辑
+        index_uid = f"{app_name}_{collection}"
         settings = get_settings()
         kafka = get_kafka_manager()
         now_ts = int(time.time())
@@ -28,6 +34,7 @@ class IndexService:
             },
         )
         kafka.flush()
+        return index_uid
 
     @staticmethod
     def update_index_settings(
@@ -36,26 +43,24 @@ class IndexService:
         filterable: List[str],
         sortable: List[str],
     ) -> str:
-        index_uid = f"{app_name}_{collection}"
-        IndexService._send_command(
-            index_uid=index_uid,
+        return IndexService._send_command(
+            app_name=app_name,
+            collection=collection,
             action="update_settings",
             payload={
                 "filterableAttributes": filterable,
                 "sortableAttributes": sortable,
             },
         )
-        return index_uid
 
     @staticmethod
     def delete_index(app_name: str, collection: str) -> str:
-        index_uid = f"{app_name}_{collection}"
-        IndexService._send_command(
-            index_uid=index_uid,
+        return IndexService._send_command(
+            app_name=app_name,
+            collection=collection,
             action="delete_index",
             payload={},
         )
-        return index_uid
 
 
 index_service = IndexService()

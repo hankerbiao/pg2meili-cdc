@@ -1,4 +1,5 @@
 """应用日志初始化模块。"""
+
 from pathlib import Path
 import sys
 from typing import Optional
@@ -40,17 +41,18 @@ def init_logging(settings: Optional[Settings] = None) -> None:
         format=fmt if not settings.log_json else None,
     )
 
-    log_dir = Path(settings.log_dir)
-    log_dir.mkdir(parents=True, exist_ok=True)
-    logger.add(
-        log_dir / "unidata.log",
-        level=settings.log_level,
-        rotation=settings.log_rotation,
-        retention=settings.log_retention,
-        backtrace=settings.log_backtrace,
-        diagnose=settings.log_diagnose,
-        serialize=settings.log_json,
-        format=fmt if not settings.log_json else None,
-        enqueue=True,
-    )
+    if settings.log_file_enabled:
+        log_dir = Path(settings.log_dir)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        logger.add(
+            log_dir / "unidata.log",
+            level=settings.log_level,
+            rotation=settings.log_rotation,
+            retention=settings.log_retention,
+            backtrace=settings.log_backtrace,
+            diagnose=settings.log_diagnose,
+            serialize=settings.log_json,
+            format=fmt if not settings.log_json else None,
+            enqueue=True,
+        )
     _configured = True

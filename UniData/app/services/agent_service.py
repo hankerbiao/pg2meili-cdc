@@ -46,12 +46,6 @@ class AgentService:
         return agents
 
     @staticmethod
-    async def list_all(db: AsyncSession) -> List[AgentNode]:
-        agents = await agent_repository.list_all(db)
-        logger.debug("代理注册总数={}", len(agents))
-        return agents
-
-    @staticmethod
     async def check_health(agent: AgentNode) -> bool:
         settings = get_settings()
         url = f"http://{agent.ip}:{agent.port}{settings.agent_health_path}"

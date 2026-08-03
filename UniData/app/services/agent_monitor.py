@@ -20,7 +20,6 @@ async def scan_agents_loop(stop_event: asyncio.Event) -> None:
     while not stop_event.is_set():
         try:
             async with get_db_context() as db:
-                await agent_service.list_all(db)
                 agents = await agent_service.list_online(db)
                 logger.debug("健康扫描开始，在线候选数={}", len(agents))
                 for agent in agents:

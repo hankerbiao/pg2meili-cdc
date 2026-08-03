@@ -1,11 +1,12 @@
 """通用文档的 Pydantic 模式定义模块。"""
+from datetime import datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class DocumentBase(BaseModel):
     """通用文档请求的基础字段。"""
-    id: str = Field(..., description="文档唯一标识")
+    id: str = Field(..., min_length=1, description="文档唯一标识")
     model_config = ConfigDict(extra="allow")
 
 
@@ -16,7 +17,14 @@ class DocumentCreateRequest(DocumentBase):
 
 class DocumentBatchUpsertRequest(BaseModel):
     """批量创建/更新文档的请求模型。"""
-    items: List[DocumentCreateRequest] = Field(..., description="文档列表")
+    items: List[DocumentCreateRequest] = Field(..., min_length=1, description="文档列表")
+
+    @model_validator(mode="after")
+    def validate_unique_document_ids(self):
+        ids = [item.id for item in self.items]
+        if len(ids) != len(set(ids)):
+            raise ValueError("批量请求中的文档 id 不能重复")
+        return self
 
 
 class DocumentBatchUpsertResponse(BaseModel):
@@ -40,6 +48,13 @@ class IndexSettingsResponse(BaseModel):
     index_uid: str
 
 
+class IndexDeleteResponse(BaseModel):
+    """索引删除响应。"""
+    status: str = "success"
+    collection: str
+    deleted_count: int
+
+
 class AgentRegisterRequest(BaseModel):
     """代理节点注册请求。"""
     ip: str = Field(..., description="代理节点 IP")
@@ -59,9 +74,16 @@ class AgentRegisterResponse(BaseModel):
 
 class AgentOnlineResponse(BaseModel):
     """在线代理信息返回模型。"""
+    id: str
     ip: str
     port: int
     hostname: Optional[str] = None
+    base_url: str
+    region: str
+    status: str = "ready"
+    weight: int = 100
+    version: Optional[str] = None
+    last_seen_at: Optional[datetime] = None
 
 
 class DocumentResponse(BaseModel):
@@ -69,5 +91,3 @@ class DocumentResponse(BaseModel):
     status: str = "success"
     id: str
     collection: str
-
-

@@ -54,11 +54,6 @@ class AgentRepository:
         return existing
 
     @staticmethod
-    async def list_all(db: AsyncSession) -> List[AgentNode]:
-        result = await db.execute(select(AgentNode))
-        return list(result.scalars().all())
-
-    @staticmethod
     async def list_online(db: AsyncSession, ttl_seconds: int) -> List[AgentNode]:
         deadline = datetime.now(timezone.utc) - timedelta(seconds=ttl_seconds)
         stmt = select(AgentNode).where(AgentNode.last_seen_at.isnot(None), AgentNode.last_seen_at >= deadline)
