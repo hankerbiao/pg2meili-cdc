@@ -34,7 +34,7 @@ JSON=$(cat <<EOF
 {
   "name": "${CONNECTOR_NAME}",
   "config": {
-    "connector.class": "io.debezium.connector.postgresql.PostgresqlConnector",
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
     "database.hostname": "${PG_HOST}",
     "database.port": "${PG_PORT}",
     "database.user": "${PG_USER}",
