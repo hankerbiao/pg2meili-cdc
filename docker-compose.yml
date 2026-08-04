@@ -1,3 +1,5 @@
+# ⚠️ 开发阶段配置：所有服务端口绑定 0.0.0.0（局域网可访问）。
+# 生产环境务必恢复为 127.0.0.1 绑定（仅本机），并前置 HTTPS 反向代理。
 name: pg2meili
 
 x-unidata-environment: &unidata-environment
@@ -16,7 +18,7 @@ services:
     image: postgres:16
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -41,13 +43,13 @@ services:
     image: quay.io/debezium/zookeeper:2.4
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${ZOOKEEPER_PORT:-2181}:2181"
+      - "${ZOOKEEPER_PORT:-2181}:2181"
 
   kafka:
     image: quay.io/debezium/kafka:2.4
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${KAFKA_PORT:-9092}:9092"
+      - "${KAFKA_PORT:-9092}:9092"
     environment:
       ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
@@ -86,7 +88,7 @@ services:
     image: quay.io/debezium/connect:2.4
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${CONNECT_PORT:-8083}:8083"
+      - "${CONNECT_PORT:-8083}:8083"
     environment:
       BOOTSTRAP_SERVERS: kafka:9093
       GROUP_ID: "1"
@@ -105,7 +107,7 @@ services:
     profiles: ["debug"]
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${KAFKA_UI_PORT:-8085}:8080"
+      - "${KAFKA_UI_PORT:-8085}:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9093
@@ -143,7 +145,7 @@ services:
     image: getmeili/meilisearch:v1.8
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${MEILI_PORT:-7700}:7700"
+      - "${MEILI_PORT:-7700}:7700"
     volumes:
       - meili_data:/meili_data
     healthcheck:
