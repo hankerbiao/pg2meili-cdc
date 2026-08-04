@@ -51,6 +51,24 @@ export interface AuditLog {
   created_at: string
 }
 
+export type AgentStatus = 'online' | 'offline'
+
+export interface AgentNode {
+  id: string
+  ip: string
+  port: number
+  hostname: string | null
+  version: string | null
+  region: string
+  base_url: string
+  weight: number
+  status: AgentStatus
+  is_online: boolean
+  last_seen_at: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
 export interface AppCreateInput {
   app_name: string
   display_name: string

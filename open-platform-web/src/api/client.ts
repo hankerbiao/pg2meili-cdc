@@ -1,4 +1,5 @@
 import type {
+  AgentNode,
   ApiKeyRecord,
   ApiKeySecret,
   AppBootstrapInput,
@@ -70,4 +71,5 @@ export const platformApi = {
   revokeKey: (keyId: string, csrf: string) =>
     request<ApiKeyRecord>(`${base}/keys/${encodeURIComponent(keyId)}/revoke`, { method: 'POST' }, csrf),
   listAuditLogs: (params: URLSearchParams) => request<AuditLog[]>(`${base}/audit-logs?${params.toString()}`),
+  listAgents: () => request<AgentNode[]>(`${base}/agents`),
 }

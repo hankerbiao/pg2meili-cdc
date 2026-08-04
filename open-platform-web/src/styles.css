@@ -188,6 +188,10 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .status-badge.active i { background: var(--primary-deep); }
 .status-badge.disabled, .status-badge.revoked { color: #8a3a32; border-color: #efd0cc; background: var(--danger-soft); }
 .status-badge.disabled i, .status-badge.revoked i { background: var(--danger); }
+.status-badge.online { color: #20704d; border-color: #bcebd5; background: #f3fff9; }
+.status-badge.online i { background: var(--primary-deep); }
+.status-badge.offline { color: #6b7280; border-color: #e2e2e2; background: #f7f7f7; }
+.status-badge.offline i { background: #a0a6ad; }
 .loading-row, .empty-state { min-height: 180px; padding: 32px; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--muted); font-size: 13px; }
 .empty-state { flex-direction: column; text-align: center; }
 .empty-state.compact { min-height: 230px; }

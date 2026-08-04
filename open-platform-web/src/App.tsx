@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext'
 import { ConsoleLayout } from './components/ConsoleLayout'
 import { SiteLayout } from './components/SiteLayout'
+import { AgentsPage } from './pages/AgentsPage'
 import { ApiReferencePage } from './pages/ApiReferencePage'
 import { AppDetailPage } from './pages/AppDetailPage'
 import { AppsPage } from './pages/AppsPage'
@@ -34,6 +35,7 @@ export function App() {
           <Route index element={<Navigate to="apps" replace />} />
           <Route path="apps" element={<AppsPage />} />
           <Route path="apps/:appId" element={<AppDetailPage />} />
+          <Route path="agents" element={<AgentsPage />} />
           <Route path="audit" element={<AuditPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/docs/quickstart" replace />} />
