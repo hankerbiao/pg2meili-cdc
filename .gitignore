@@ -89,7 +89,6 @@ uv.lock
 *.out
 
 # Local service artifacts
-/meilisearch-sync-service/meilisearch-sync-service_go
 *.pid
 
 # Go workspace
