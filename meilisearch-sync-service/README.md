@@ -21,6 +21,7 @@
 - Go 1.25.4+
 - Kafka 集群
 - Meilisearch 实例
+- Redis 实例（区域 API Key 注册表，需各区域自行部署，见下方 `REDIS_*` 配置）
 
 ### 配置
 
@@ -43,6 +44,9 @@ cp .env.example .env
 | `MEILI_API_KEY` | Meilisearch API 密钥 | 空 |
 | `AGENT_PUBLIC_URL` | 外部服务访问 Agent 的稳定地址 | 自动使用 Agent IP 和端口 |
 | `AGENT_REGISTRATION_TOKEN` | 向 UniData 注册时使用的共享凭证 | 无 |
+| `REDIS_ADDR` | 区域 Redis 地址（API Key 注册表） | `127.0.0.1:6379` |
+| `REDIS_PASSWORD` | Redis 密码 | 空 |
+| `REDIS_DB` | Redis DB 编号 | `0` |
 
 最终消费者组由程序生成：
 
