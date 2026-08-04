@@ -39,6 +39,12 @@ class AgentService:
         )
 
     @staticmethod
+    async def list_all(db: AsyncSession) -> List[AgentNode]:
+        agents = await agent_repository.list_all(db)
+        logger.debug("全量代理查询 count={}", len(agents))
+        return agents
+
+    @staticmethod
     async def list_online(db: AsyncSession) -> List[AgentNode]:
         settings = get_settings()
         agents = await agent_repository.list_online(db, settings.agent_online_ttl_seconds)

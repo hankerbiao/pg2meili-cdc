@@ -54,6 +54,16 @@ class AgentRepository:
         return existing
 
     @staticmethod
+    async def list_all(db: AsyncSession) -> List[AgentNode]:
+        """按最近心跳倒序返回全部注册节点（含离线）。"""
+        stmt = select(AgentNode).order_by(
+            AgentNode.last_seen_at.desc().nulls_last(),
+            AgentNode.id,
+        )
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
     async def list_online(db: AsyncSession, ttl_seconds: int) -> List[AgentNode]:
         deadline = datetime.now(timezone.utc) - timedelta(seconds=ttl_seconds)
         stmt = select(AgentNode).where(AgentNode.last_seen_at.isnot(None), AgentNode.last_seen_at >= deadline)

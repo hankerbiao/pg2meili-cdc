@@ -1,7 +1,7 @@
 """开放平台管理员会话、应用、API Key 与内部同步端点。"""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
@@ -21,6 +21,7 @@ from app.core.admin_auth import (
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.open_platform import ApiKey, OpenPlatformApp
+from app.services.agent_service import agent_service
 from app.services.open_platform_service import open_platform_service
 
 
@@ -109,6 +110,22 @@ class AuditResponse(BaseModel):
     source_ip: str | None
     details: dict | None
     created_at: datetime
+
+
+class AgentNodeResponse(BaseModel):
+    id: str
+    ip: str
+    port: int
+    hostname: str | None
+    version: str | None
+    region: str
+    base_url: str
+    weight: int
+    status: Literal["online", "offline"]
+    is_online: bool
+    last_seen_at: datetime | None
+    created_at: datetime | None
+    updated_at: datetime | None
 
 
 def source_ip(request: Request) -> str | None:
@@ -274,6 +291,42 @@ async def list_audit_logs(
 ) -> ApiResponse[list[AuditResponse]]:
     logs = await open_platform_service.list_audit_logs(db, app_id, action, from_time, to_time, offset, limit)
     return ok([AuditResponse.model_validate(item, from_attributes=True) for item in logs])
+
+
+@router.get("/agents", summary="获取全部代理节点（含离线）")
+async def list_agents(
+    _: AdminSession = Depends(get_admin_session),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[list[AgentNodeResponse]]:
+    settings = get_settings()
+    deadline = datetime.now(timezone.utc) - timedelta(seconds=settings.agent_online_ttl_seconds)
+    agents = await agent_service.list_all(db)
+    response = []
+    for agent in agents:
+        meta = agent.meta if isinstance(agent.meta, dict) else {}
+        agent_region = str(meta.get("region") or "unknown")
+        base_url = str(meta.get("base_url") or f"http://{agent.ip}:{agent.port}").rstrip("/")
+        try:
+            weight = max(1, min(1000, int(meta.get("weight", 100))))
+        except (TypeError, ValueError):
+            weight = 100
+        online = agent.last_seen_at is not None and agent.last_seen_at >= deadline
+        response.append(AgentNodeResponse(
+            id=agent.id,
+            ip=agent.ip,
+            port=agent.port,
+            hostname=agent.hostname,
+            version=agent.version,
+            region=agent_region,
+            base_url=base_url,
+            weight=weight,
+            status="online" if online else "offline",
+            is_online=agent.is_online,
+            last_seen_at=agent.last_seen_at,
+            created_at=agent.created_at,
+            updated_at=agent.updated_at,
+        ))
+    return ok(response)
 
 
 @internal_router.get("/api-keys/snapshot", include_in_schema=False)
