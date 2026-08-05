@@ -104,3 +104,40 @@ export interface OaUser {
   email: string
   profile?: Record<string, unknown>
 }
+
+export type UserRole = 'admin' | 'oa'
+export type UserAccountStatus = 'active' | 'disabled'
+
+export interface PlatformUser {
+  itcode: string
+  name: string
+  email: string
+  role: UserRole
+  status: UserAccountStatus
+  app_count: number
+  created_at: string | null
+}
+
+export interface UserList {
+  items: PlatformUser[]
+  total: number
+}
+
+export interface CollectionSummary {
+  collection: string
+  doc_count: number
+  fields: string[]
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface CollectionDetail extends CollectionSummary {
+  filterable_attributes: string[]
+  sortable_attributes: string[]
+  primary_key_field: string | null
+}
+
+export interface CollectionSettingsInput {
+  filterableAttributes: string[]
+  sortableAttributes: string[]
+}

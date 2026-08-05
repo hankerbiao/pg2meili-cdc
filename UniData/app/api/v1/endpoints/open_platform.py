@@ -6,6 +6,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.endpoints.agents import require_agent_registration_token
@@ -21,9 +22,13 @@ from app.core.admin_auth import (
 from app.core.any_auth import ROLE_OA, AnySession, get_any_session, require_any_csrf
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.models.open_platform import ApiKey, OpenPlatformApp
+from app.models.oa import OaUser
+from app.models.open_platform import ApiKey, OpenPlatformApp, utc_now
+from app.api.v1.validation import valid_collection_name
+from app.schemas.document import CollectionDetail, CollectionSettingsUpdate
 from app.services.agent_service import agent_service
-from app.services.open_platform_service import open_platform_service
+from app.services.collection_service import collection_service
+from app.services.open_platform_service import OpenPlatformService, app_event, open_platform_service
 
 
 router = APIRouter()
@@ -211,10 +216,8 @@ async def list_apps(
 
 @router.post("/apps", status_code=status.HTTP_201_CREATED, summary="创建开放平台应用")
 async def create_app(body: AppCreateRequest, request: Request, identity: AnySession = Depends(require_any_csrf), db: AsyncSession = Depends(get_db)) -> ApiResponse[AppResponse]:
-    # OA 普通用户创建应用时，负责人强制为本人 itcode，忽略请求体中的 owner_itcode
-    owner_itcode = body.owner_itcode
-    if identity.role == ROLE_OA:
-        owner_itcode = identity.username
+    # 负责人强制为当前登录人本人（前端已无 itcode 输入项，请求体中的 owner_itcode 一律忽略）
+    owner_itcode = identity.username
     app = await open_platform_service.create_app(
         db,
         app_name=body.app_name,
@@ -238,9 +241,8 @@ async def bootstrap_app(
     identity: AnySession = Depends(require_any_csrf),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[AppBootstrapResponse]:
-    owner_itcode = body.owner_itcode
-    if identity.role == ROLE_OA:
-        owner_itcode = identity.username
+    # 负责人强制为当前登录人本人（与 create_app 一致，请求体中的 owner_itcode 一律忽略）
+    owner_itcode = identity.username
     actor = f"{identity.role}:{identity.username}"
     app = await open_platform_service.create_app(
         db,
@@ -381,3 +383,220 @@ async def api_key_snapshot(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[dict]:
     return ok(await open_platform_service.snapshot(db))
+
+
+# ---------------------------------------------------------------------------
+# 用户管理（仅管理员）：合并 admin 单例 + OA 普通用户，支持启用/禁用。
+# ---------------------------------------------------------------------------
+class UserItem(BaseModel):
+    """控制台用户列表项。admin 为内置虚拟行（不可禁用）。"""
+    itcode: str
+    name: str
+    email: str
+    role: Literal["admin", "oa"]
+    status: Literal["active", "disabled"]
+    app_count: int
+    created_at: datetime | None
+
+
+class UserListResponse(BaseModel):
+    items: list[UserItem]
+    total: int
+
+
+class UserStatusResponse(BaseModel):
+    itcode: str
+    status: Literal["active", "disabled"]
+
+
+def _admin_user_item(settings) -> UserItem:
+    return UserItem(
+        itcode=settings.open_platform_admin_username,
+        name=settings.open_platform_admin_username,
+        email="",
+        role="admin",
+        status="active",
+        app_count=0,
+        created_at=None,
+    )
+
+
+@router.get("/users", summary="获取开放平台用户列表（仅管理员）")
+async def list_users(
+    keyword: str | None = None,
+    user_status: Literal["active", "disabled"] | None = None,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    _: AdminSession = Depends(get_admin_session),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[UserListResponse]:
+    """合并 admin 单例与 OA 用户；支持关键字（itcode/姓名/邮箱）与状态过滤。"""
+    settings = get_settings()
+    keyword = (keyword or "").strip().lower()
+
+    # OA 用户查询
+    oa_query = select(OaUser)
+    if user_status:
+        oa_query = oa_query.where(OaUser.status == user_status)
+    oa_rows = list((await db.execute(oa_query.order_by(OaUser.created_at.desc()))).scalars().all())
+
+    # 统计每个 OA 用户的应用数（owner_itcode）
+    owner_counts: dict[str, int] = {}
+    if oa_rows:
+        app_rows = (await db.execute(
+            select(OpenPlatformApp.owner_itcode, func.count(OpenPlatformApp.id))
+            .where(OpenPlatformApp.owner_itcode.in_([r.itcode for r in oa_rows]))
+            .group_by(OpenPlatformApp.owner_itcode)
+        )).all()
+        owner_counts = {row[0]: row[1] for row in app_rows}
+
+    def _matches(u: OaUser) -> bool:
+        if not keyword:
+            return True
+        profile = u.profile if isinstance(u.profile, dict) else {}
+        name = str(profile.get("姓名") or profile.get("name") or profile.get("displayName") or "")
+        email = str(profile.get("email") or profile.get("邮箱") or "")
+        return keyword in u.itcode.lower() or keyword in name.lower() or keyword in email.lower()
+
+    oa_items = [
+        UserItem(
+            itcode=u.itcode,
+            name=str((u.profile or {}).get("姓名") or (u.profile or {}).get("name") or u.itcode),
+            email=str((u.profile or {}).get("email") or (u.profile or {}).get("邮箱") or ""),
+            role="oa",
+            status=u.status,  # type: ignore[arg-type]
+            app_count=owner_counts.get(u.itcode, 0),
+            created_at=u.created_at,
+        )
+        for u in oa_rows if _matches(u)
+    ]
+
+    # admin 单例虚拟行（恒 active，过滤：关键字/状态命中才纳入）
+    admin_item = _admin_user_item(settings)
+    admin_hit = (not keyword or keyword in admin_item.itcode.lower()) and (
+        user_status is None or user_status == "active"
+    )
+
+    # 合并：admin 恒排在最前
+    merged = ([admin_item] if admin_hit else []) + oa_items
+
+    total = len(merged)
+    page = merged[offset : offset + limit]
+    return ok(UserListResponse(items=page, total=total))
+
+
+async def _set_oa_user_status(
+    db: AsyncSession, itcode: str, target: Literal["active", "disabled"], actor: str, source_ip: str | None
+) -> None:
+    """切换 OA 用户状态，并级联其名下 active 应用（禁用→应用置 disabled，启用→不自动复活应用）。"""
+    user = await db.get(OaUser, itcode)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    if user.status == target:
+        return
+    user.status = target
+    user.updated_at = utc_now()
+    await db.flush()
+    if target == "disabled":
+        # 级联：名下 active 应用一并禁用，复用 auth.py 对 App.status 的校验即拒绝其 API Key 调用
+        apps = (await db.execute(
+            select(OpenPlatformApp).where(
+                OpenPlatformApp.owner_itcode == itcode, OpenPlatformApp.status == "active"
+            )
+        )).scalars().all()
+        for app in apps:
+            app.status = "disabled"
+            app.updated_at = utc_now()
+            app.version += 1
+            await db.flush()
+            OpenPlatformService._add_outbox(db, app.id, "app.upsert", app_event(app))
+            open_platform_service.add_audit(
+                db, actor=actor, action="app.update", target_type="app", target_id=app.id,
+                app_id=app.id, source_ip=source_ip, details={"status": "disabled", "reason": "user_disabled"},
+            )
+    await db.commit()
+
+
+@router.post("/users/{itcode}/disable", summary="禁用用户（仅管理员）")
+async def disable_user(
+    itcode: str,
+    identity: AdminSession = Depends(require_admin_csrf),
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+) -> ApiResponse[UserStatusResponse]:
+    settings = get_settings()
+    if itcode == settings.open_platform_admin_username:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="管理员账号不可禁用")
+    actor = f"admin:{identity.username}"
+    await _set_oa_user_status(db, itcode, "disabled", actor, source_ip(request))
+    return ok(UserStatusResponse(itcode=itcode, status="disabled"))
+
+
+@router.post("/users/{itcode}/enable", summary="启用用户（仅管理员）")
+async def enable_user(
+    itcode: str,
+    identity: AdminSession = Depends(require_admin_csrf),
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+) -> ApiResponse[UserStatusResponse]:
+    actor = f"admin:{identity.username}"
+    await _set_oa_user_status(db, itcode, "active", actor, source_ip(request))
+    return ok(UserStatusResponse(itcode=itcode, status="active"))
+
+
+# ---------------------------------------------------------------------------
+# 控制台集合（索引）管理：当前用户（admin/oa）查看其名下应用的集合与设置。
+# ---------------------------------------------------------------------------
+@router.get("/apps/{app_id}/collections", summary="获取应用下的集合列表")
+async def list_app_collections(
+    app_id: str,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    identity: AnySession = Depends(get_any_session),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[list[CollectionDetail]]:
+    app = await open_platform_service.get_app(db, app_id)
+    _assert_owned(identity, app)
+    return ok(await collection_service.list_collections(db, app_id, limit, offset))
+
+
+@router.get("/apps/{app_id}/collections/{collection}", summary="获取集合详情")
+async def get_app_collection(
+    app_id: str,
+    collection: str = Depends(valid_collection_name),
+    identity: AnySession = Depends(get_any_session),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[CollectionDetail]:
+    app = await open_platform_service.get_app(db, app_id)
+    _assert_owned(identity, app)
+    return ok(await collection_service.get_collection(db, app_id, collection))
+
+
+@router.patch(
+    "/apps/{app_id}/collections/{collection}/settings",
+    summary="更新集合可过滤/可排序设置",
+)
+async def update_app_collection_settings(
+    app_id: str,
+    collection: str = Depends(valid_collection_name),
+    body: CollectionSettingsUpdate = ...,
+    request: Request = None,
+    identity: AnySession = Depends(require_any_csrf),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[CollectionDetail]:
+    app = await open_platform_service.get_app(db, app_id)
+    _assert_owned(identity, app)
+    detail = await collection_service.update_settings(
+        db, app_id, app.app_name, collection, body
+    )
+    open_platform_service.add_audit(
+        db,
+        actor=f"{identity.role}:{identity.username}",
+        action="collection.update_settings",
+        target_type="collection",
+        target_id=collection,
+        app_id=app_id,
+        source_ip=source_ip(request),
+        details={"filterable": body.filterableAttributes, "sortable": body.sortableAttributes},
+    )
+    return ok(detail)

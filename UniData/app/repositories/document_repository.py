@@ -2,7 +2,7 @@
 import uuid
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -132,6 +132,56 @@ class DocumentRepository:
         result = await db.execute(query)
         rows = result.all()
         return [row[0] for row in rows]
+
+    @staticmethod
+    async def get_collection_summaries(
+        db: AsyncSession,
+        app_id: str,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """聚合某应用下的集合摘要：文档数、首末时间、样本字段键。"""
+        stats_stmt = (
+            select(
+                Document.collection,
+                func.count(Document.row_id).label("doc_count"),
+                func.min(Document.created_at).label("created_at"),
+                func.max(Document.updated_at).label("updated_at"),
+            )
+            .where(Document.app_id == app_id, Document.is_delete.is_(False))
+            .group_by(Document.collection)
+            .order_by(Document.collection.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+        stats_rows = (await db.execute(stats_stmt)).all()
+
+        # 每集合取一条最新样本文档，用于提取字段键（DISTINCT ON 需与 ORDER BY 首列一致）
+        sample_stmt = (
+            select(Document.collection, Document.payload)
+            .where(Document.app_id == app_id, Document.is_delete.is_(False))
+            .distinct(Document.collection)
+            .order_by(Document.collection.asc(), Document.updated_at.desc())
+        )
+        sample_rows = (await db.execute(sample_stmt)).all()
+
+        fields_by_collection: dict[str, list[str]] = {}
+        for collection, payload in sample_rows:
+            if isinstance(payload, dict):
+                fields_by_collection[collection] = list(payload.keys())
+            else:
+                fields_by_collection[collection] = []
+
+        summaries: list[dict[str, Any]] = []
+        for collection, doc_count, created_at, updated_at in stats_rows:
+            summaries.append({
+                "collection": collection,
+                "doc_count": doc_count,
+                "fields": fields_by_collection.get(collection, []),
+                "created_at": created_at,
+                "updated_at": updated_at,
+            })
+        return summaries
 
     @staticmethod
     async def soft_delete_collection_for_app(

@@ -7,10 +7,14 @@ import type {
   AppCreateInput,
   AppUpdateInput,
   AuditLog,
+  CollectionDetail,
+  CollectionSettingsInput,
   KeyCreateInput,
   OaUser,
   PlatformApp,
+  PlatformUser,
   Session,
+  UserList,
 } from './types'
 
 interface ApiEnvelope<T> {
@@ -73,6 +77,25 @@ export const platformApi = {
     request<ApiKeyRecord>(`${base}/keys/${encodeURIComponent(keyId)}/revoke`, { method: 'POST' }, csrf),
   listAuditLogs: (params: URLSearchParams) => request<AuditLog[]>(`${base}/audit-logs?${params.toString()}`),
   listAgents: () => request<AgentNode[]>(`${base}/agents`),
+  listUsers: (params: URLSearchParams) => request<UserList>(`${base}/users?${params.toString()}`),
+  setUserStatus: (itcode: string, target: 'active' | 'disabled', csrf?: string) =>
+    request<{ itcode: string; status: string }>(
+      `${base}/users/${encodeURIComponent(itcode)}/${target === 'disabled' ? 'disable' : 'enable'}`,
+      { method: 'POST' },
+      csrf,
+    ),
+  listCollections: (appId: string) =>
+    request<CollectionDetail[]>(`${base}/apps/${encodeURIComponent(appId)}/collections`),
+  getCollection: (appId: string, collection: string) =>
+    request<CollectionDetail>(
+      `${base}/apps/${encodeURIComponent(appId)}/collections/${encodeURIComponent(collection)}`,
+    ),
+  updateCollectionSettings: (appId: string, collection: string, input: CollectionSettingsInput, csrf?: string) =>
+    request<CollectionDetail>(
+      `${base}/apps/${encodeURIComponent(appId)}/collections/${encodeURIComponent(collection)}/settings`,
+      { method: 'PATCH', body: JSON.stringify(input) },
+      csrf,
+    ),
 }
 
 const oaBase = '/api/v1/auth/oa'

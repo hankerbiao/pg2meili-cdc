@@ -91,3 +91,25 @@ class DocumentResponse(BaseModel):
     status: str = "success"
     id: str
     collection: str
+
+
+class CollectionSummary(BaseModel):
+    """集合摘要（来自 uni_documents 聚合）。"""
+    collection: str
+    doc_count: int
+    fields: List[str] = Field(default_factory=list)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class CollectionDetail(CollectionSummary):
+    """集合详情（聚合信息 + 已保存的设置）。"""
+    filterable_attributes: List[str] = Field(default_factory=list)
+    sortable_attributes: List[str] = Field(default_factory=list)
+    primary_key_field: Optional[str] = None
+
+
+class CollectionSettingsUpdate(BaseModel):
+    """集合设置更新请求（可过滤/可排序字段）。"""
+    filterableAttributes: List[str] = Field(default_factory=list, description="可过滤字段列表")
+    sortableAttributes: List[str] = Field(default_factory=list, description="可排序字段列表")
