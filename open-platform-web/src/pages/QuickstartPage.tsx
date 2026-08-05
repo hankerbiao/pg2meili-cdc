@@ -5,12 +5,12 @@ import { CodeExamples } from '../components/CodeExamples'
 import { DocsLayout } from '../components/DocsLayout'
 import { SdkDownloadButton } from '../components/SdkDownloadButton'
 
-const curlWrite = `curl -X POST https://api.example.com/api/v1/data/products \\
+const curlWrite = `curl -X POST http://10.17.158.114/api/v1/data/products \\
   -H "Authorization: Bearer $UNIDATA_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"id":"sku-001","name":"Mechanical Keyboard","price":699}'`
 
-const curlSearch = `curl -X POST https://search.example.com/api/v1/collections/products/search \\
+const curlSearch = `curl -X POST http://10.17.158.114/api/v1/collections/products/search \\
   -H "Authorization: Bearer $UNIDATA_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"q":"keyboard","limit":10,"showRankingScore":true}'`
@@ -20,16 +20,10 @@ const writeExamples = {
   python: `import os
 from unidata_sdk import UniDataClient
 
-with UniDataClient(
-    "https://api.example.com",
-    os.environ["UNIDATA_API_KEY"],
-) as client:
-    client.upsert_document(
-        "products",
-        {"id": "sku-001", "name": "Mechanical Keyboard", "price": 699},
-    )`,
+client = UniDataClient("http://10.17.158.114", os.environ["UNIDATA_API_KEY"])
+client.upsert_document("products", {"id": "sku-001", "name": "Mechanical Keyboard", "price": 699})`,
   javascript: `const response = await fetch(
-  "https://api.example.com/api/v1/data/products",
+  "http://10.17.158.114/api/v1/data/products",
   {
     method: "POST",
     headers: {
@@ -47,19 +41,10 @@ const searchExamples = {
   python: `import os
 from unidata_sdk import UniDataClient
 
-with UniDataClient(
-    "https://api.example.com",
-    os.environ["UNIDATA_API_KEY"],
-    search_url="https://search.example.com",
-) as client:
-    result = client.search(
-        "products",
-        query="keyboard",
-        limit=10,
-        show_ranking_score=True,
-    )`,
+client = UniDataClient("http://10.17.158.114", os.environ["UNIDATA_API_KEY"], search_url="http://10.17.158.114")
+result = client.search("products", query="keyboard", limit=10, show_ranking_score=True)`,
   javascript: `const response = await fetch(
-  "https://search.example.com/api/v1/collections/products/search",
+  "http://10.17.158.114/api/v1/collections/products/search",
   {
     method: "POST",
     headers: {
