@@ -12,10 +12,21 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.tenant import set_tenant_context
 from app.models.document import Document
 from app.models.open_platform import OpenPlatformApp
 from app.schemas.document import CollectionSettingsUpdate
 from app.services.collection_service import collection_service
+from app.services.tenant_service import ensure_tenant
+
+
+async def _seed_docs(db: AsyncSession, app_id: str, docs: list[Document]) -> None:
+    # 物理租户化后文档写入租户 schema（RLS + search_path），测试库 superuser 绕过 RLS。
+    await ensure_tenant(db, app_id)
+    await set_tenant_context(db, app_id)
+    for doc in docs:
+        db.add(doc)
+    await db.flush()
 
 
 @pytest.mark.asyncio
@@ -30,17 +41,18 @@ async def test_list_collections_aggregates_docs(db_session: AsyncSession) -> Non
     db_session.add(app)
     await db_session.flush()
     # 最新样本文档（updated_at 更大）决定 discovered fields
-    db_session.add(Document(
-        row_id=uuid.uuid4(), id="d1", app_id=app.id, collection="bugs",
-        app_name=app.app_name, payload={"title": "x", "status": 1},
-        updated_at=datetime(2020, 1, 1), is_delete=False,
-    ))
-    db_session.add(Document(
-        row_id=uuid.uuid4(), id="d2", app_id=app.id, collection="bugs",
-        app_name=app.app_name, payload={"title": "y", "priority": 2},
-        updated_at=datetime(2020, 1, 2), is_delete=False,
-    ))
-    await db_session.flush()
+    await _seed_docs(db_session, app.id, [
+        Document(
+            row_id=uuid.uuid4(), id="d1", app_id=app.id, collection="bugs",
+            app_name=app.app_name, payload={"title": "x", "status": 1},
+            updated_at=datetime(2020, 1, 1), is_delete=False,
+        ),
+        Document(
+            row_id=uuid.uuid4(), id="d2", app_id=app.id, collection="bugs",
+            app_name=app.app_name, payload={"title": "y", "priority": 2},
+            updated_at=datetime(2020, 1, 2), is_delete=False,
+        ),
+    ])
 
     summaries = await collection_service.list_collections(db_session, app.id)
     assert len(summaries) == 1
@@ -61,11 +73,12 @@ async def test_update_and_read_settings(db_session: AsyncSession) -> None:
     )
     db_session.add(app)
     await db_session.flush()
-    db_session.add(Document(
-        row_id=uuid.uuid4(), id="d1", app_id=app.id, collection="bugs",
-        app_name=app.app_name, payload={"title": "x"}, is_delete=False,
-    ))
-    await db_session.flush()
+    await _seed_docs(db_session, app.id, [
+        Document(
+            row_id=uuid.uuid4(), id="d1", app_id=app.id, collection="bugs",
+            app_name=app.app_name, payload={"title": "x"}, is_delete=False,
+        ),
+    ])
 
     with patch("app.services.collection_service.index_service.update_index_settings") as mock_send:
         detail = await collection_service.update_settings(

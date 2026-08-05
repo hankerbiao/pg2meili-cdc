@@ -60,16 +60,36 @@ class CollectionService:
             db.add(settings)
         settings.filterable_attributes = list(body.filterableAttributes)
         settings.sortable_attributes = list(body.sortableAttributes)
+        # 扩展配置：None = 不更新该项（保持原值），显式值 = 覆盖。
+        if body.searchableAttributes is not None:
+            settings.searchable_attributes = list(body.searchableAttributes)
+        if body.displayedAttributes is not None:
+            settings.displayed_attributes = list(body.displayedAttributes)
+        if body.distinctAttribute is not None:
+            settings.distinct_attribute = body.distinctAttribute or None
+        if body.typoToleranceEnabled is not None:
+            settings.typo_tolerance_enabled = body.typoToleranceEnabled
+        if body.paginationMaxTotalHits is not None:
+            settings.pagination_max_total_hits = body.paginationMaxTotalHits
+        if body.facetingMaxValuesPerFacet is not None:
+            settings.faceting_max_values_per_facet = body.facetingMaxValuesPerFacet
         settings.version += 1
         await db.flush()
         # 下发到 Meilisearch（实际态由 Kafka 命令驱动）。Kafka 不可用时仅记录告警，
         # 不阻断「期望态」落库——控制台配置以 UniData 为准，后续可经 Kafka 补发。
         try:
             index_service.update_index_settings(
+                app_id=app_id,
                 app_name=app_name,
                 collection=collection,
                 filterable=settings.filterable_attributes,
                 sortable=settings.sortable_attributes,
+                searchable=settings.searchable_attributes,
+                displayed=settings.displayed_attributes,
+                distinct_attribute=settings.distinct_attribute,
+                typo_tolerance_enabled=settings.typo_tolerance_enabled,
+                pagination_max_total_hits=settings.pagination_max_total_hits,
+                faceting_max_values_per_facet=settings.faceting_max_values_per_facet,
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning(
@@ -91,6 +111,12 @@ class CollectionService:
             filterable_attributes=list(settings.filterable_attributes) if settings else [],
             sortable_attributes=list(settings.sortable_attributes) if settings else [],
             primary_key_field=settings.primary_key_field if settings else None,
+            searchable_attributes=list(settings.searchable_attributes) if settings and settings.searchable_attributes is not None else None,
+            displayed_attributes=list(settings.displayed_attributes) if settings and settings.displayed_attributes is not None else None,
+            distinct_attribute=settings.distinct_attribute if settings else None,
+            typo_tolerance_enabled=settings.typo_tolerance_enabled if settings else None,
+            pagination_max_total_hits=settings.pagination_max_total_hits if settings else None,
+            faceting_max_values_per_facet=settings.faceting_max_values_per_facet if settings else None,
         )
 
     @staticmethod

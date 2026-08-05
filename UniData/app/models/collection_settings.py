@@ -6,7 +6,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.models.base import Base
@@ -31,6 +31,13 @@ class CollectionSettings(Base):
     collection = Column(String, nullable=False, index=True)
     filterable_attributes = Column(JSONB, nullable=False, default=list)
     sortable_attributes = Column(JSONB, nullable=False, default=list)
+    # 扩展配置（期望态；None = 未配置，下发时跳过该字段，保持 Meilisearch 默认/现状）
+    searchable_attributes = Column(JSONB, nullable=True, default=None)
+    displayed_attributes = Column(JSONB, nullable=True, default=None)
+    distinct_attribute = Column(String, nullable=True)
+    typo_tolerance_enabled = Column(Boolean, nullable=True)
+    pagination_max_total_hits = Column(Integer, nullable=True)
+    faceting_max_values_per_facet = Column(Integer, nullable=True)
     primary_key_field = Column(String, nullable=True)
     version = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)

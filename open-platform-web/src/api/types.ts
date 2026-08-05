@@ -1,4 +1,4 @@
-export type AppStatus = 'active' | 'disabled'
+export type AppStatus = 'active' | 'disabled' | 'deleting' | 'deleted'
 export type KeyStatus = 'active' | 'revoked'
 export type Scope = 'search:read' | 'data:read' | 'data:write'
 
@@ -135,9 +135,21 @@ export interface CollectionDetail extends CollectionSummary {
   filterable_attributes: string[]
   sortable_attributes: string[]
   primary_key_field: string | null
+  searchable_attributes: string[] | null
+  displayed_attributes: string[] | null
+  distinct_attribute: string | null
+  typo_tolerance_enabled: boolean | null
+  pagination_max_total_hits: number | null
+  faceting_max_values_per_facet: number | null
 }
 
 export interface CollectionSettingsInput {
   filterableAttributes: string[]
   sortableAttributes: string[]
+  searchableAttributes?: string[] | null
+  displayedAttributes?: string[] | null
+  distinctAttribute?: string | null
+  typoToleranceEnabled?: boolean | null
+  paginationMaxTotalHits?: number | null
+  facetingMaxValuesPerFacet?: number | null
 }

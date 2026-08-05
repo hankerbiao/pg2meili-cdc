@@ -327,6 +327,46 @@ legend { margin-bottom: 8px; font-size: 12px; font-weight: 500; }
 .custom-field-row input { flex: 1; padding: 8px 10px; border: 1px solid var(--hairline); border-radius: 7px; font-size: 13px; }
 .field-hint { color: var(--muted); font-size: 12px; }
 .field-error { display: block; margin-top: 6px; color: var(--danger); font-size: 11px; }
+
+/* 集合配置弹窗 */
+.collection-meta { display: flex; padding: 10px 14px; border: 1px solid var(--hairline); border-radius: 8px; background: var(--canvas-soft); }
+.collection-meta > div { display: grid; gap: 2px; padding: 0 14px; }
+.collection-meta > div:first-child { padding-left: 0; }
+.collection-meta > div + div { border-left: 1px solid var(--hairline); }
+.collection-meta span { color: var(--muted); font-size: 11px; }
+.collection-meta strong { font-size: 13px; font-weight: 600; }
+.field-panel { margin: 0; padding: 14px; border: 1px solid var(--hairline); border-radius: 8px; background: var(--canvas); }
+.field-panel-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.field-panel-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+.field-panel-title code { margin-left: 6px; color: var(--muted); font-size: 10px; font-weight: 400; }
+.field-count-badge { margin-left: auto; padding: 1px 9px; border-radius: 999px; background: #e8f7ef; color: var(--primary-deep); font-size: 11px; font-weight: 600; }
+.field-quick-actions { display: flex; gap: 2px; }
+.field-quick-actions button { border: 0; background: none; padding: 3px 6px; color: var(--muted); font-size: 11px; border-radius: 4px; }
+.field-quick-actions button:hover:not(:disabled) { color: var(--primary-deep); background: #f0f7f3; }
+.field-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 28px; }
+.field-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid var(--hairline); border-radius: 999px; background: var(--canvas-soft); color: var(--ink-secondary); font: 12px ui-monospace, monospace; transition: border-color .12s, background .12s, color .12s; }
+button.field-chip:hover { border-color: var(--primary-deep); color: var(--primary-deep); }
+.field-chip.selected { border-color: var(--primary-deep); background: var(--primary-deep); color: #fff; }
+.field-chip.custom { border-style: dashed; }
+.field-chip .chip-remove { display: inline-flex; align-items: center; border: 0; background: none; color: inherit; opacity: .75; padding: 0; }
+.field-chip .chip-remove:hover { opacity: 1; }
+.add-field-row { display: flex; gap: 8px; margin-top: 12px; }
+.add-field-row input { flex: 1; min-height: 36px; padding: 7px 10px; border: 1px solid var(--hairline); border-radius: 7px; background: var(--canvas); color: var(--ink); font-size: 13px; }
+.settings-tip { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.field-count-badge.unset { background: var(--canvas-soft); color: var(--muted-2); }
+.advanced-settings { margin: 0; border: 1px solid var(--hairline); border-radius: 8px; background: var(--canvas); }
+.advanced-settings summary { padding: 12px 14px; display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink); list-style: none; }
+.advanced-settings summary::-webkit-details-marker { display: none; }
+.advanced-settings summary::before { content: '▸'; color: var(--muted); font-size: 11px; transition: transform .15s; }
+.advanced-settings[open] summary::before { transform: rotate(90deg); }
+.advanced-settings summary .muted { font-size: 11px; font-weight: 400; margin-left: auto; }
+.advanced-settings summary .field-count-badge { margin-left: auto; }
+.advanced-body { display: grid; gap: 14px; padding: 14px; border-top: 1px solid var(--hairline); }
+.setting-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.setting-grid label { display: flex; flex-direction: column; gap: 6px; color: var(--ink-secondary); font-size: 12px; font-weight: 500; }
+.setting-grid select, .setting-grid input { width: 100%; min-height: 36px; padding: 7px 10px; border: 1px solid var(--hairline); border-radius: 7px; background: var(--canvas); color: var(--ink); font-size: 13px; }
+.setting-grid code { color: var(--muted); font-weight: 400; }
+@media (max-width: 640px) { .setting-grid { grid-template-columns: 1fr; } }
 .secret-panel { padding: 20px; }
 .secret-warning { margin-bottom: 12px; color: #7d5a13; font-size: 12px; }
 .secret-list { display: grid; gap: 16px; }

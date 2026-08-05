@@ -107,9 +107,25 @@ class CollectionDetail(CollectionSummary):
     filterable_attributes: List[str] = Field(default_factory=list)
     sortable_attributes: List[str] = Field(default_factory=list)
     primary_key_field: Optional[str] = None
+    searchable_attributes: Optional[List[str]] = None
+    displayed_attributes: Optional[List[str]] = None
+    distinct_attribute: Optional[str] = None
+    typo_tolerance_enabled: Optional[bool] = None
+    pagination_max_total_hits: Optional[int] = None
+    faceting_max_values_per_facet: Optional[int] = None
 
 
 class CollectionSettingsUpdate(BaseModel):
-    """集合设置更新请求（可过滤/可排序字段）。"""
+    """集合设置更新请求（PATCH 部分更新；None = 不更新该项）。
+
+    filterable/sortable 为既有覆盖语义（缺省即空数组=清空）；
+    扩展配置项 None 表示「未配置/不更新」，显式传值表示覆盖。
+    """
     filterableAttributes: List[str] = Field(default_factory=list, description="可过滤字段列表")
     sortableAttributes: List[str] = Field(default_factory=list, description="可排序字段列表")
+    searchableAttributes: Optional[List[str]] = Field(None, description="可搜索字段列表（None=全部字段）")
+    displayedAttributes: Optional[List[str]] = Field(None, description="返回字段白名单（None=全部字段）")
+    distinctAttribute: Optional[str] = Field(None, description="去重字段（None=不启用）")
+    typoToleranceEnabled: Optional[bool] = Field(None, description="错字容错开关（None=跟随默认）")
+    paginationMaxTotalHits: Optional[int] = Field(None, ge=1, le=1_000_000, description="分页上限（None=默认 1000）")
+    facetingMaxValuesPerFacet: Optional[int] = Field(None, ge=1, le=1_000_000, description="分面上限（None=默认 100）")
