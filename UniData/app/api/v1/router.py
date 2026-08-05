@@ -6,6 +6,7 @@ from app.api.v1.endpoints import (
     documents_router,
     indexes_router,
     internal_router,
+    oa_router,
     open_platform_router,
     sdk_router,
 )
@@ -13,6 +14,7 @@ from app.api.v1.endpoints import (
 
 ROUTERS = (
     (open_platform_router, "/open-platform", "open-platform"),
+    (oa_router, "/auth", "oa-auth"),
     (internal_router, "/internal", "internal"),
     (indexes_router, "/indexes", "indexes"),
     (documents_router, "/data", "generic-data"),

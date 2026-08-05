@@ -97,3 +97,10 @@ export interface KeyCreateInput {
   scopes: Scope[]
   expires_at: string
 }
+
+export interface OaUser {
+  itcode: string
+  name: string
+  email: string
+  profile?: Record<string, unknown>
+}

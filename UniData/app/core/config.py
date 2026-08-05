@@ -13,6 +13,7 @@ SECRET_FILE_FIELDS = (
     "open_platform_session_secret",
     "agent_registration_token",
     "kafka_sasl_password",
+    "oa_jwt_secret",
 )
 
 
@@ -59,6 +60,14 @@ class Settings(BaseSettings):
     # 管理员登录会话失效，因此默认关闭。若服务前置 HTTPS / TLS 终止，请改为 true。
     open_platform_cookie_secure: bool = False
     api_key_max_ttl_days: int = 365
+
+    # OA 单点登录（springboard）配置
+    oa_jwt_secret: str = ""  # springboard 回调 payload（HS256 JWT）验签密钥；必填，经 .env 注入；缺失时 callback 报 500
+    oa_app_name: str = "searchunidatainterface"  # springboard 登录代理应用标识
+    oa_login_base_url: str = "http://tl.cooacloud.com/springboard_v3/login_proxy"  # springboard 登录代理地址
+    oa_session_ttl_seconds: int = 28800  # OA 普通用户会话有效期（秒）
+    oa_cookie_secure: bool = False  # 与 open_platform_cookie_secure 一致；HTTP 下必须 false
+    oa_cookie_name: str = "unidata_oa_session"
 
     # Kafka 配置（必填，通过 .env 或环境变量提供）
     kafka_bootstrap_servers: str

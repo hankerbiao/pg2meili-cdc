@@ -8,6 +8,7 @@ import type {
   AppUpdateInput,
   AuditLog,
   KeyCreateInput,
+  OaUser,
   PlatformApp,
   Session,
 } from './types'
@@ -54,22 +55,32 @@ export const platformApi = {
   getSession: () => request<Session>(`${base}/session`),
   login: (username: string, password: string) =>
     request<Session>(`${base}/session`, { method: 'POST', body: JSON.stringify({ username, password }) }),
-  logout: (csrf: string) => request<{ logged_out: boolean }>(`${base}/session`, { method: 'DELETE' }, csrf),
+  logout: (csrf?: string) => request<{ logged_out: boolean }>(`${base}/session`, { method: 'DELETE' }, csrf),
   listApps: () => request<PlatformApp[]>(`${base}/apps`),
   getApp: (id: string) => request<PlatformApp>(`${base}/apps/${encodeURIComponent(id)}`),
-  createApp: (input: AppCreateInput, csrf: string) =>
+  createApp: (input: AppCreateInput, csrf?: string) =>
     request<PlatformApp>(`${base}/apps`, { method: 'POST', body: JSON.stringify(input) }, csrf),
-  bootstrapApp: (input: AppBootstrapInput, csrf: string) =>
+  bootstrapApp: (input: AppBootstrapInput, csrf?: string) =>
     request<AppBootstrapResult>(`${base}/apps/bootstrap`, { method: 'POST', body: JSON.stringify(input) }, csrf),
-  updateApp: (id: string, input: AppUpdateInput, csrf: string) =>
+  updateApp: (id: string, input: AppUpdateInput, csrf?: string) =>
     request<PlatformApp>(`${base}/apps/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) }, csrf),
   listKeys: (appId: string) => request<ApiKeyRecord[]>(`${base}/apps/${encodeURIComponent(appId)}/keys`),
-  createKey: (appId: string, input: KeyCreateInput, csrf: string) =>
+  createKey: (appId: string, input: KeyCreateInput, csrf?: string) =>
     request<ApiKeySecret>(`${base}/apps/${encodeURIComponent(appId)}/keys`, { method: 'POST', body: JSON.stringify(input) }, csrf),
-  rotateKey: (keyId: string, csrf: string) =>
+  rotateKey: (keyId: string, csrf?: string) =>
     request<ApiKeySecret>(`${base}/keys/${encodeURIComponent(keyId)}/rotate`, { method: 'POST' }, csrf),
-  revokeKey: (keyId: string, csrf: string) =>
+  revokeKey: (keyId: string, csrf?: string) =>
     request<ApiKeyRecord>(`${base}/keys/${encodeURIComponent(keyId)}/revoke`, { method: 'POST' }, csrf),
   listAuditLogs: (params: URLSearchParams) => request<AuditLog[]>(`${base}/audit-logs?${params.toString()}`),
   listAgents: () => request<AgentNode[]>(`${base}/agents`),
+}
+
+const oaBase = '/api/v1/auth/oa'
+
+export const oaApi = {
+  loginRedirectUrl: (next: string) => `${oaBase}/login?next=${encodeURIComponent(next)}`,
+  callback: (body: { status: string; payload: string; next?: string | null }) =>
+    request<OaUser>(`${oaBase}/callback`, { method: 'POST', body: JSON.stringify(body) }),
+  me: () => request<OaUser>(`${oaBase}/me`),
+  logout: () => request<{ logged_out: boolean }>(`${oaBase}/logout`, { method: 'DELETE' }),
 }

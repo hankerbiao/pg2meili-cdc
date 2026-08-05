@@ -81,3 +81,21 @@ def register_pages(app: FastAPI, settings: Settings | None = None) -> None:
     @app.get("/open-platform/{spa_path:path}", include_in_schema=False)
     async def open_platform_spa_page(spa_path: str):
         return open_platform_spa()
+
+    # OA 单点登录相关前端路由：整页访问（springboard 回跳 / 直接刷新）时需 fallback 到 SPA
+    @app.get("/oa", include_in_schema=False)
+    async def oa_spa_page():
+        return open_platform_spa()
+
+    @app.get("/oa/{spa_path:path}", include_in_schema=False)
+    async def oa_spa_sub_page(spa_path: str):
+        return open_platform_spa()
+
+    # 其他前端路由（登录页 / 控制台）整页访问时同样 fallback 到 SPA
+    @app.get("/login", include_in_schema=False)
+    async def login_spa_page():
+        return open_platform_spa()
+
+    @app.get("/console/{spa_path:path}", include_in_schema=False)
+    async def console_spa_page(spa_path: str):
+        return open_platform_spa()
