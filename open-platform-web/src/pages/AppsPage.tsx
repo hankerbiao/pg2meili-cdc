@@ -70,12 +70,11 @@ export function AppsPage() {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
-    // OA 普通用户创建应用时，负责人强制为本人 itcode（后端同样强制，前端隐藏输入）
-    const ownerItcode = isAdmin ? String(data.get('owner_itcode')) : user!.username
+    // 负责人固定为当前登录人：不再提供 itcode 输入项，前端与后端均强制本人
     create.mutate({
       display_name: String(data.get('display_name')),
       app_name: String(data.get('app_name')),
-      owner_itcode: ownerItcode,
+      owner_itcode: user!.username,
       description: String(data.get('description') || '') || null,
       initial_keys: selectedProfile.keys.map((key) => ({
         ...key,
@@ -152,11 +151,6 @@ export function AppsPage() {
         <form className="form-grid" onSubmit={submit}>
           <label>显示名称<input name="display_name" required maxLength={128} placeholder="商品搜索" /></label>
           <label>应用标识<input name="app_name" required pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}" placeholder="product_search" /></label>
-          {isAdmin ? (
-            <label>负责人 itcode<input name="owner_itcode" required maxLength={128} placeholder="zhangsan" /></label>
-          ) : (
-            <label>负责人 itcode<input value={user!.username} disabled /></label>
-          )}
           <label>Key 到期时间<input type="datetime-local" name="expires_at" required defaultValue={defaultExpiry.toISOString().slice(0, 16)} /></label>
           <fieldset className="full-field">
             <legend>初始 API Key 权限</legend>

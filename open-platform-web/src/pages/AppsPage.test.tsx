@@ -82,13 +82,14 @@ describe('AppsPage', () => {
     await user.click(screen.getAllByRole('button', { name: '新建应用' })[0])
     await user.type(screen.getByLabelText('显示名称'), app.display_name)
     await user.type(screen.getByLabelText('应用标识'), app.app_name)
-    await user.type(screen.getByLabelText('负责人 itcode'), app.owner_itcode)
     await user.type(screen.getByLabelText('描述'), app.description!)
     await user.click(screen.getByRole('button', { name: '创建应用与 Key' }))
 
     await waitFor(() => expect(api.bootstrapApp).toHaveBeenCalledOnce())
     expect(api.bootstrapApp.mock.calls[0][0]).toMatchObject({
       app_name: app.app_name,
+      // 负责人输入项已移除，固定为当前登录人（mock 的 admin）
+      owner_itcode: 'admin',
       initial_keys: [
         { name: 'frontend-search', scopes: ['search:read'] },
         { name: 'backend-data', scopes: ['data:read', 'data:write'] },
