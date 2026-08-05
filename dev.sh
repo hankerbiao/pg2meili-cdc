@@ -26,7 +26,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-COMPOSE="docker compose"
+# 统一用 .env.docker 作为 compose 变量插值源，避免根目录 .env 与 .env.docker 不一致
+# （P0-4：env_file 注入的应用配置才能真正生效）。
+COMPOSE="docker compose --env-file .env.docker"
 GO_DIR="$SCRIPT_DIR/meilisearch-sync-service"
 GO_CTL="$GO_DIR/start_meilisearch_sync_service.sh"
 GO_BIN_LOCAL="meilisearch-sync-service_go.local"  # 本地编译版（*.local 已被 .gitignore 忽略）
@@ -261,8 +263,15 @@ shift || true
 
 case "$CMD" in
   build)
-    TARGET="${1:-unidata}"
-    [[ "${2:-}" == "--no-cache" ]] && NO_CACHE=1
+    NO_CACHE=0
+    TARGET=""
+    for arg in "$@"; do
+      case "$arg" in
+        --no-cache) NO_CACHE=1 ;;
+        *) TARGET="$arg" ;;
+      esac
+    done
+    TARGET="${TARGET:-unidata}"
     case "$TARGET" in
       unidata) build_unidata ;;
       go)      build_go ;;
