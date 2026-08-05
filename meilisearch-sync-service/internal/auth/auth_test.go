@@ -29,8 +29,20 @@ func validStore() testStore {
 
 func TestIdentityFromAPIKey(t *testing.T) {
 	identity, err := IdentityFromAPIKey(context.Background(), "ud_live_ak_0123456789abcdef."+testSecret, validStore())
-	if err != nil { t.Fatalf("authenticate: %v", err) }
-	if identity.AppName != "test-app" || identity.KeyID != "ak_0123456789abcdef" { t.Fatalf("unexpected identity: %+v", identity) }
+	if err != nil {
+		t.Fatalf("authenticate: %v", err)
+	}
+	if identity.AppID != "app-id" || identity.AppName != "test-app" || identity.KeyID != "ak_0123456789abcdef" {
+		t.Fatalf("unexpected identity: %+v", identity)
+	}
+}
+
+func TestIdentityFromAPIKeyRejectsAppMismatch(t *testing.T) {
+	store := validStore()
+	store.key.AppID = "other-app"
+	if _, err := IdentityFromAPIKey(context.Background(), "ud_live_ak_0123456789abcdef."+testSecret, store); err == nil {
+		t.Fatal("expected app mismatch rejection")
+	}
 }
 
 func TestIdentityFromAPIKeyRejectsJWT(t *testing.T) {
@@ -42,8 +54,12 @@ func TestIdentityFromAPIKeyRejectsJWT(t *testing.T) {
 func TestIdentityFromAPIKeyRejectsExpiredAndRevoked(t *testing.T) {
 	store := validStore()
 	store.key.ExpiresAt = time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
-	if _, err := IdentityFromAPIKey(context.Background(), "ud_live_ak_0123456789abcdef."+testSecret, store); err == nil { t.Fatal("expected expired key rejection") }
+	if _, err := IdentityFromAPIKey(context.Background(), "ud_live_ak_0123456789abcdef."+testSecret, store); err == nil {
+		t.Fatal("expected expired key rejection")
+	}
 	store = validStore()
 	store.key.Status = "revoked"
-	if _, err := IdentityFromAPIKey(context.Background(), "ud_live_ak_0123456789abcdef."+testSecret, store); err == nil { t.Fatal("expected revoked key rejection") }
+	if _, err := IdentityFromAPIKey(context.Background(), "ud_live_ak_0123456789abcdef."+testSecret, store); err == nil {
+		t.Fatal("expected revoked key rejection")
+	}
 }

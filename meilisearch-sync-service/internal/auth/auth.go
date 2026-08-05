@@ -41,6 +41,7 @@ type CredentialStore interface {
 }
 
 type AppIdentity struct {
+	AppID   string
 	AppName string
 	Scopes  []string
 	KeyID   string
@@ -90,5 +91,8 @@ func IdentityFromAPIKey(ctx context.Context, credential string, store Credential
 	if subtle.ConstantTimeCompare([]byte(digest), []byte(key.SecretHash)) != 1 {
 		return AppIdentity{}, ErrInvalidAPIKey
 	}
-	return AppIdentity{AppName: app.AppName, Scopes: key.Scopes, KeyID: key.ID}, nil
+	if strings.TrimSpace(app.ID) == "" || strings.TrimSpace(key.AppID) == "" || app.ID != key.AppID {
+		return AppIdentity{}, ErrInvalidAPIKey
+	}
+	return AppIdentity{AppID: app.ID, AppName: app.AppName, Scopes: key.Scopes, KeyID: key.ID}, nil
 }

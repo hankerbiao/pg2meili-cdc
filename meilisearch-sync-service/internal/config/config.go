@@ -146,7 +146,7 @@ func validateKafkaIdentifier(name, value string, maxLength int) error {
 func LoadConfig() AppConfig {
 	// 支持通过环境变量配置多类 Kafka topics。
 	brokersEnv := getenv("KAFKA_BROKERS", "")
-	topicEnv := getenv("KAFKA_TOPIC", "test_case.public.test_cases")
+	topicEnv := getenv("KAFKA_TOPIC", "pg.public.search_outbox")
 	commandTopic := getenv("KAFKA_COMMAND_TOPIC", "meili.commands")
 	apiKeyTopic := getenv("KAFKA_API_KEY_TOPIC", "api_keys.events")
 	dlqTopic := getenv("KAFKA_DLQ_TOPIC", "meili.dlq")

@@ -13,6 +13,7 @@ import (
 
 	"meilisearch-sync-service/internal/auth"
 	"meilisearch-sync-service/internal/config"
+	"meilisearch-sync-service/internal/model"
 )
 
 const handlerTestSecret = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
@@ -64,7 +65,8 @@ func TestSearchHandlerLimitsBodySize(t *testing.T) {
 func TestV1SearchHandlerReturnsStableEnvelope(t *testing.T) {
 	originalClient := searchHTTPClient
 	searchHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		if r.URL.Path != "/indexes/app_items/search" {
+		wantPath := "/indexes/" + model.IndexUID("app-id", "items") + "/search"
+		if r.URL.Path != wantPath {
 			t.Fatalf("backend path = %q", r.URL.Path)
 		}
 		if r.Header.Get("X-Request-ID") != "request-123" {

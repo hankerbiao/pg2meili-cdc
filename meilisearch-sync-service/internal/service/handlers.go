@@ -16,6 +16,30 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+func derefStr(v *string) string {
+	if v == nil {
+		return "<未配置>"
+	}
+	return *v
+}
+
+func derefBool(v *bool) string {
+	if v == nil {
+		return "<未配置>"
+	}
+	if *v {
+		return "true"
+	}
+	return "false"
+}
+
+func derefInt64(v *int64) string {
+	if v == nil {
+		return "<未配置>"
+	}
+	return fmt.Sprintf("%d", *v)
+}
+
 type RecordHandler interface {
 	// Handle 处理单条 Kafka 消息。
 	Handle(ctx context.Context, record *kgo.Record) error
@@ -83,7 +107,7 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 	case "c", "r", "u":
 		indexName := ResolveIndex(doc)
 		if indexName == "" {
-			return permanent(fmt.Errorf("写入消息缺少有效的 app_name 或 collection"))
+			return permanent(fmt.Errorf("写入消息缺少有效的 app_id 或 collection"))
 		}
 
 		if isDeleted(doc) {
@@ -97,6 +121,7 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 
 		if doc != nil {
 			delete(doc, "app_name")
+			delete(doc, "app_id")
 			delete(doc, "collection")
 			delete(doc, "is_delete")
 		}
@@ -116,7 +141,7 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 	case "d":
 		indexName := ResolveIndex(doc)
 		if indexName == "" {
-			return permanent(fmt.Errorf("删除消息缺少有效的 app_name 或 collection"))
+			return permanent(fmt.Errorf("删除消息缺少有效的 app_id 或 collection"))
 		}
 		logger.DebugLogf("执行硬删除 index=%s id=%s doc=%v", indexName, delID, doc)
 		if err := h.deleteDocument(ctx, indexName, delID, "硬删除"); err != nil {
@@ -141,8 +166,8 @@ func (h MeiliCommandHandler) Handle(ctx context.Context, record *kgo.Record) err
 		return permanent(fmt.Errorf("解码命令消息失败: %w", err))
 	}
 
-	if cmd.IndexUID == "" {
-		return permanent(fmt.Errorf("命令缺少 index_uid"))
+	if err := validateMeiliCommand(cmd); err != nil {
+		return permanent(err)
 	}
 
 	switch cmd.Action {
@@ -151,6 +176,24 @@ func (h MeiliCommandHandler) Handle(ctx context.Context, record *kgo.Record) err
 			FilterableAttributes: cmd.Payload.FilterableAttributes,
 			SortableAttributes:   cmd.Payload.SortableAttributes,
 		}
+		if cmd.Payload.SearchableAttributes != nil {
+			settings.SearchableAttributes = cmd.Payload.SearchableAttributes
+		}
+		if cmd.Payload.DisplayedAttributes != nil {
+			settings.DisplayedAttributes = cmd.Payload.DisplayedAttributes
+		}
+		if cmd.Payload.DistinctAttribute != nil {
+			settings.DistinctAttribute = cmd.Payload.DistinctAttribute
+		}
+		if cmd.Payload.TypoToleranceEnabled != nil {
+			settings.TypoTolerance = &meilisearch.TypoTolerance{Enabled: *cmd.Payload.TypoToleranceEnabled}
+		}
+		if cmd.Payload.PaginationMaxTotalHits != nil {
+			settings.Pagination = &meilisearch.Pagination{MaxTotalHits: *cmd.Payload.PaginationMaxTotalHits}
+		}
+		if cmd.Payload.FacetingMaxValuesPerFacet != nil {
+			settings.Faceting = &meilisearch.Faceting{MaxValuesPerFacet: *cmd.Payload.FacetingMaxValuesPerFacet}
+		}
 		task, err := h.MeiliClient.Index(cmd.IndexUID).UpdateSettingsWithContext(ctx, settings)
 		if err != nil {
 			return meiliOperationError(fmt.Sprintf("Meilisearch 更新设置失败 index=%s", cmd.IndexUID), err)
@@ -158,7 +201,11 @@ func (h MeiliCommandHandler) Handle(ctx context.Context, record *kgo.Record) err
 		if err := waitForTask(ctx, h.MeiliClient, task, "Meilisearch 更新设置"); err != nil {
 			return err
 		}
-		log.Printf("[update-settings] Meilisearch 索引=%s filterable=%v sortable=%v", cmd.IndexUID, cmd.Payload.FilterableAttributes, cmd.Payload.SortableAttributes)
+		log.Printf("[update-settings] Meilisearch 索引=%s filterable=%v sortable=%v searchable=%v displayed=%v distinct=%v typo=%v pagination=%v faceting=%v",
+			cmd.IndexUID, cmd.Payload.FilterableAttributes, cmd.Payload.SortableAttributes,
+			cmd.Payload.SearchableAttributes, cmd.Payload.DisplayedAttributes,
+			derefStr(cmd.Payload.DistinctAttribute), derefBool(cmd.Payload.TypoToleranceEnabled),
+			derefInt64(cmd.Payload.PaginationMaxTotalHits), derefInt64(cmd.Payload.FacetingMaxValuesPerFacet))
 	case "delete_index":
 		task, err := h.MeiliClient.DeleteIndexWithContext(ctx, cmd.IndexUID)
 		if err != nil {
@@ -170,6 +217,20 @@ func (h MeiliCommandHandler) Handle(ctx context.Context, record *kgo.Record) err
 		log.Printf("[delete-index] Meilisearch 索引=%s", cmd.IndexUID)
 	default:
 		return permanent(fmt.Errorf("未知命令 action=%s", cmd.Action))
+	}
+	return nil
+}
+
+func validateMeiliCommand(cmd model.MeiliCommand) error {
+	if cmd.IndexUID == "" {
+		return fmt.Errorf("命令缺少 index_uid")
+	}
+	if cmd.AppID == "" || cmd.Collection == "" {
+		return fmt.Errorf("命令缺少 app_id 或 collection")
+	}
+	expectedIndexUID := model.IndexUID(cmd.AppID, cmd.Collection)
+	if expectedIndexUID == "" || expectedIndexUID != cmd.IndexUID {
+		return fmt.Errorf("命令 index_uid 与租户路由不匹配")
 	}
 	return nil
 }

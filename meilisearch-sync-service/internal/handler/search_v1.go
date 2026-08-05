@@ -99,7 +99,13 @@ func NewV1SearchHandler(cfg config.AppConfig, credentialStore auth.CredentialSto
 			return
 		}
 
-		indexUID := model.IndexUID(identity.AppName, collection)
+		indexUID := model.IndexUID(identity.AppID, collection)
+		if indexUID == "" {
+			writeV1SearchError(w, cfg, requestID, searchRequestFailure{
+				Status: http.StatusBadRequest, Code: "INVALID_COLLECTION", Message: "collection 名称无效",
+			})
+			return
+		}
 		meiliURL := config.JoinURL(cfg.MeiliHost, "indexes/"+url.PathEscape(indexUID)+"/search")
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, meiliURL, bytes.NewReader(body))
 		if err != nil {

@@ -65,8 +65,12 @@ func NewSearchHandler(cfg config.AppConfig, credentialStore auth.CredentialStore
 			return
 		}
 
-		// 索引命名规则：<app_name>_<collection>
-		indexUID := model.IndexUID(identity.AppName, collection)
+		// 索引命名规则：由不可变 app_id 与 collection 推导。
+		indexUID := model.IndexUID(identity.AppID, collection)
+		if indexUID == "" {
+			http.Error(w, "collection 名称无效", http.StatusBadRequest)
+			return
+		}
 
 		// 读取前端请求体，用于构造 Meilisearch 的 search 请求
 		r.Body = http.MaxBytesReader(w, r.Body, maxSearchBodyBytes)

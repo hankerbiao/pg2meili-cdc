@@ -148,6 +148,14 @@ func processDebeziumMessage(value []byte) (string, string, map[string]interface{
 
 	payload := msg.Payload
 
+	// The physical-tenancy contract is an append-only search_outbox row. Its
+	// operation field, rather than the source table operation, is authoritative.
+	if payload.After != nil {
+		if _, ok := payload.After["operation"]; ok {
+			return processSearchOutbox(payload.After)
+		}
+	}
+
 	// 根据 Debezium 的 op 字段进行分支：
 	// c: create, r: read(快照), u: update, d: delete
 	switch payload.Op {
@@ -177,6 +185,50 @@ func processDebeziumMessage(value []byte) (string, string, map[string]interface{
 	}
 }
 
+func processSearchOutbox(after map[string]interface{}) (string, string, map[string]interface{}, string, error) {
+	appID, ok := nonEmptyString(after["app_id"])
+	if !ok {
+		return "", "", nil, "", fmt.Errorf("outbox 事件缺少 app_id")
+	}
+	collection, ok := nonEmptyString(after["collection"])
+	if !ok {
+		return "", "", nil, "", fmt.Errorf("outbox 事件缺少 collection")
+	}
+	documentID, err := scalarString(after["document_id"])
+	if err != nil || strings.TrimSpace(documentID) == "" {
+		return "", "", nil, "", fmt.Errorf("outbox 事件缺少 document_id")
+	}
+	operation, ok := nonEmptyString(after["operation"])
+	if !ok {
+		return "", "", nil, "", fmt.Errorf("outbox 事件缺少 operation")
+	}
+
+	route := map[string]interface{}{
+		"app_id":     appID,
+		"collection": collection,
+		"id":         documentID,
+	}
+	switch operation {
+	case "upsert":
+		raw, exists := after["document"]
+		if !exists || raw == nil {
+			return "", "", nil, "", fmt.Errorf("outbox upsert 事件缺少 document")
+		}
+		document, ok := raw.(map[string]interface{})
+		if !ok {
+			return "", "", nil, "", fmt.Errorf("outbox document 必须是对象")
+		}
+		document["id"] = documentID
+		document["app_id"] = appID
+		document["collection"] = collection
+		return "c", documentID, document, "", nil
+	case "delete":
+		return "d", "", route, documentID, nil
+	default:
+		return "", "", nil, "", fmt.Errorf("outbox operation 无效: %q", operation)
+	}
+}
+
 // isDeleted 根据 is_delete 字段判断文档是否被标记删除，兼容多种类型
 func isDeleted(doc map[string]interface{}) bool {
 	if doc == nil {
@@ -192,18 +244,18 @@ func isDeleted(doc map[string]interface{}) bool {
 	return false
 }
 
-// ResolveIndex 根据文档中的 app_name 和 collection 计算索引名称
+// ResolveIndex 根据不可变 app_id 和 collection 计算索引名称。
 func ResolveIndex(doc map[string]interface{}) string {
 	if doc == nil {
 		return ""
 	}
-	appName, appOK := nonEmptyString(doc["app_name"])
+	appID, appOK := nonEmptyString(doc["app_id"])
 	collection, collectionOK := nonEmptyString(doc["collection"])
 	if !appOK || !collectionOK {
 		return ""
 	}
 
-	return model.IndexUID(appName, collection)
+	return model.IndexUID(appID, collection)
 }
 
 // extractDocument 从 DebeziumPayload 中抽取实际业务文档和主键 id
@@ -257,8 +309,8 @@ func extractDocument(p model.DebeziumPayload) (map[string]interface{}, string, e
 	if v, ok := base["is_delete"]; ok {
 		doc["is_delete"] = v
 	}
-	if v, ok := base["app_name"]; ok {
-		doc["app_name"] = v
+	if v, ok := base["app_id"]; ok {
+		doc["app_id"] = v
 	}
 	if v, ok := base["collection"]; ok {
 		doc["collection"] = v
@@ -287,6 +339,19 @@ func documentID(doc map[string]interface{}) (string, error) {
 		return "", fmt.Errorf("id 不能为空")
 	}
 	return id, nil
+}
+
+func scalarString(value interface{}) (string, error) {
+	switch value := value.(type) {
+	case string:
+		return value, nil
+	case json.Number:
+		return value.String(), nil
+	case float64, float32, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return fmt.Sprint(value), nil
+	default:
+		return "", fmt.Errorf("标识字段类型无效: %T", value)
+	}
 }
 
 func nonEmptyString(value interface{}) (string, bool) {

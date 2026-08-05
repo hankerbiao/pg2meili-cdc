@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"meilisearch-sync-service/internal/config"
+	"meilisearch-sync-service/internal/model"
 
 	"github.com/meilisearch/meilisearch-go"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -52,11 +53,66 @@ func TestProcessDebeziumMessageRejectsInvalidNestedPayload(t *testing.T) {
 }
 
 func TestResolveIndexRequiresStringRoutingFields(t *testing.T) {
-	if got := ResolveIndex(map[string]interface{}{"app_name": nil, "collection": "items"}); got != "" {
+	if got := ResolveIndex(map[string]interface{}{"app_id": nil, "collection": "items"}); got != "" {
 		t.Fatalf("ResolveIndex() = %q, want empty", got)
 	}
-	if got := ResolveIndex(map[string]interface{}{"app_name": "app", "collection": "items"}); got != "app_items" {
-		t.Fatalf("ResolveIndex() = %q, want app_items", got)
+	if got := ResolveIndex(map[string]interface{}{"app_id": "app", "collection": "items"}); got != model.IndexUID("app", "items") {
+		t.Fatalf("ResolveIndex() = %q, want %q", got, model.IndexUID("app", "items"))
+	}
+}
+
+func TestProcessSearchOutboxUpsert(t *testing.T) {
+	input := `{"payload":{"after":{"app_id":"app-a","collection":"items","document_id":"doc-1","operation":"upsert","document":{"name":"x"}},"op":"c"}}`
+	op, id, doc, delID, err := processDebeziumMessage([]byte(input))
+	if err != nil {
+		t.Fatalf("processDebeziumMessage() error = %v", err)
+	}
+	if op != "c" || id != "doc-1" || delID != "" {
+		t.Fatalf("unexpected outbox result: op=%s id=%s delID=%s", op, id, delID)
+	}
+	if doc["name"] != "x" || doc["id"] != "doc-1" {
+		t.Fatalf("unexpected outbox document: %v", doc)
+	}
+	if ResolveIndex(doc) != model.IndexUID("app-a", "items") {
+		t.Fatalf("unexpected outbox index route: %s", ResolveIndex(doc))
+	}
+}
+
+func TestProcessSearchOutboxDelete(t *testing.T) {
+	input := `{"payload":{"after":{"app_id":"app-b","collection":"items","document_id":"doc-2","operation":"delete","document":null},"op":"c"}}`
+	op, id, doc, delID, err := processDebeziumMessage([]byte(input))
+	if err != nil {
+		t.Fatalf("processDebeziumMessage() error = %v", err)
+	}
+	if op != "d" || id != "" || delID != "doc-2" {
+		t.Fatalf("unexpected outbox delete result: op=%s id=%s delID=%s", op, id, delID)
+	}
+	if ResolveIndex(doc) != model.IndexUID("app-b", "items") {
+		t.Fatalf("unexpected delete index route: %s", ResolveIndex(doc))
+	}
+}
+
+func TestProcessSearchOutboxRequiresRouteFields(t *testing.T) {
+	for _, input := range []string{
+		`{"payload":{"after":{"collection":"items","document_id":"doc-1","operation":"upsert","document":{}},"op":"c"}}`,
+		`{"payload":{"after":{"app_id":"app-a","document_id":"doc-1","operation":"upsert","document":{}},"op":"c"}}`,
+		`{"payload":{"after":{"app_id":"app-a","collection":"items","operation":"upsert","document":{}},"op":"c"}}`,
+		`{"payload":{"after":{"app_id":"app-a","collection":"items","document_id":"doc-1","operation":"unknown","document":{}},"op":"c"}}`,
+	} {
+		if _, _, _, _, err := processDebeziumMessage([]byte(input)); err == nil {
+			t.Fatalf("processDebeziumMessage(%s) accepted invalid outbox event", input)
+		}
+	}
+}
+
+func TestValidateMeiliCommandRejectsMismatchedIndex(t *testing.T) {
+	cmd := model.MeiliCommand{IndexUID: "wrong", AppID: "app-a", Collection: "items", Action: "update_settings"}
+	if err := validateMeiliCommand(cmd); err == nil {
+		t.Fatal("expected mismatched index UID rejection")
+	}
+	cmd.IndexUID = model.IndexUID(cmd.AppID, cmd.Collection)
+	if err := validateMeiliCommand(cmd); err != nil {
+		t.Fatalf("validateMeiliCommand() error = %v", err)
 	}
 }
 

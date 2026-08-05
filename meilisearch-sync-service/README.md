@@ -36,7 +36,7 @@ cp .env.example .env
 | 环境变量 | 描述 | 默认值 |
 |---------|------|--------|
 | `KAFKA_BROKERS` | Kafka 集群地址 | `10.17.154.252:9092` |
-| `KAFKA_TOPIC` | 订阅的 Topic 列表（逗号分隔） | `test_case.public.test_cases` |
+| `KAFKA_TOPIC` | 订阅的 Topic 列表（逗号分隔） | `pg.public.search_outbox` |
 | `REGION_ID` | 部署区域标识；多区域部署必填，不同区域必须不同 | 空 |
 | `KAFKA_GROUP_PREFIX` | 消费者组前缀 | `meilisearch-sync-service` |
 | `KAFKA_GROUP_ID` | 未配置 `REGION_ID` 时兼容旧部署使用的消费者组 | 空 |
