@@ -43,7 +43,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1440, height: 900 },
-        baseURL: process.env.BASE_URL || 'http://127.0.0.1:8081/open-platform/',
+        baseURL: process.env.BASE_URL || 'http://127.0.0.1:8080/open-platform/',
         storageState: process.env.PLATFORM_PASSWORD ? './e2e/.auth/state.json' : undefined,
       },
       grep: /@integration/,

@@ -11,7 +11,7 @@ const statePath = path.resolve('e2e/.auth/state.json')
 async function globalSetup(config: FullConfig) {
   const baseURL = config.projects.find((p) => p.name.startsWith('integration'))?.use?.baseURL
     ?? process.env.BASE_URL
-    ?? 'http://127.0.0.1:8081/open-platform/'
+    ?? 'http://127.0.0.1:8080/open-platform/'
   const password = process.env.PLATFORM_PASSWORD
   if (!password) {
     fs.rmSync(statePath, { force: true })
