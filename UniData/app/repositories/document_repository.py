@@ -7,10 +7,20 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document, utc_now
+from app.core.tenant import set_tenant_context, tenant_schema_map
+from app.services.tenant_service import ensure_tenant
 
 
 class DocumentRepository:
     """通用文档 CRUD 操作的仓储类。"""
+
+    @staticmethod
+    async def _statement(db: AsyncSession, app_id: str, statement):
+        if isinstance(db, AsyncSession):
+            await ensure_tenant(db, app_id)
+            await set_tenant_context(db, app_id)
+            return statement.execution_options(schema_translate_map=tenant_schema_map(app_id))
+        return statement
 
     @staticmethod
     async def upsert_documents(
@@ -49,7 +59,7 @@ class DocumentRepository:
                 "updated_at": now,
             },
         )
-        await db.execute(statement)
+        await db.execute(await DocumentRepository._statement(db, app_id, statement))
 
     @staticmethod
     async def soft_delete_document(
@@ -70,7 +80,7 @@ class DocumentRepository:
             .values(is_delete=True, updated_at=utc_now())
             .returning(Document.row_id)
         )
-        result = await db.execute(statement)
+        result = await db.execute(await DocumentRepository._statement(db, app_id, statement))
         return result.scalar_one_or_none() is not None
 
     @staticmethod
@@ -87,7 +97,7 @@ class DocumentRepository:
             Document.id == id,
             Document.is_delete.is_(False),
         )
-        result = await db.execute(statement)
+        result = await db.execute(await DocumentRepository._statement(db, app_id, statement))
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -111,7 +121,7 @@ class DocumentRepository:
             .offset(offset)
         )
 
-        result = await db.execute(query)
+        result = await db.execute(await DocumentRepository._statement(db, app_id, query))
         return result.scalars().all()
 
     @staticmethod
@@ -129,7 +139,7 @@ class DocumentRepository:
             .limit(limit)
             .offset(offset)
         )
-        result = await db.execute(query)
+        result = await db.execute(await DocumentRepository._statement(db, app_id, query))
         rows = result.all()
         return [row[0] for row in rows]
 
@@ -154,7 +164,7 @@ class DocumentRepository:
             .limit(limit)
             .offset(offset)
         )
-        stats_rows = (await db.execute(stats_stmt)).all()
+        stats_rows = (await db.execute(await DocumentRepository._statement(db, app_id, stats_stmt))).all()
 
         # 每集合取一条最新样本文档，用于提取字段键（DISTINCT ON 需与 ORDER BY 首列一致）
         sample_stmt = (
@@ -163,7 +173,7 @@ class DocumentRepository:
             .distinct(Document.collection)
             .order_by(Document.collection.asc(), Document.updated_at.desc())
         )
-        sample_rows = (await db.execute(sample_stmt)).all()
+        sample_rows = (await db.execute(await DocumentRepository._statement(db, app_id, sample_stmt))).all()
 
         fields_by_collection: dict[str, list[str]] = {}
         for collection, payload in sample_rows:
@@ -202,7 +212,7 @@ class DocumentRepository:
             )
             .execution_options(synchronize_session=False)
         )
-        result = await db.execute(statement)
+        result = await db.execute(await DocumentRepository._statement(db, app_id, statement))
         return result.rowcount or 0
 
 

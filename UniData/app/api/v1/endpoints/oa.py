@@ -20,7 +20,7 @@ from app.core.oa_auth import (
     decode_and_verify_oa_jwt,
     get_oa_user,
 )
-from app.services.oa_service import get_oa_user_profile, upsert_oa_user
+from app.services.oa_service import assert_oa_user_active, get_oa_user_profile, upsert_oa_user
 
 router = APIRouter(prefix="/oa")
 
@@ -60,15 +60,19 @@ async def oa_login(
             try:
                 decoded = decode_and_verify_oa_jwt(payload, settings.oa_jwt_secret)
             except HTTPException as exc:
-                # 验签失败：记录真实 payload 头部便于定位算法/密钥问题，跳回登录页并带错误标记
-                logger.warning("OA payload 验签失败: %s | payload_head=%s", exc.detail, payload[:80])
+                # 验签失败：不记录 payload（含用户敏感信息），跳回登录页并带错误标记
+                logger.warning("OA 登录验签失败: %s", exc.detail)
                 return RedirectResponse(url="/open-platform/login?oa=error", status_code=302)
             itcode = decoded.get("itcode")
             if not itcode:
-                logger.warning("OA payload 缺少 itcode | payload_head=%s", payload[:80])
+                logger.warning("OA payload 缺少 itcode")
                 return RedirectResponse(url="/open-platform/login?oa=error", status_code=302)
-            await upsert_oa_user(db, itcode=str(itcode), profile=decoded)
-            token, session = create_oa_session(itcode=str(itcode), profile=decoded)
+            try:
+                await upsert_oa_user(db, itcode=str(itcode), profile=decoded)
+                token, session = create_oa_session(itcode=str(itcode), profile=decoded)
+            except Exception:  # noqa: BLE001 - 兜底：DB/会话异常时回登录页，避免 500 暴露内部错误
+                logger.exception("OA 登录建会话失败")
+                return RedirectResponse(url="/open-platform/login?oa=error", status_code=302)
             # 统一登录体系：OA 登录成功后进入同一控制台（按身份渲染不同内容）
             redirect = RedirectResponse(url="/open-platform/console", status_code=302)
             redirect.set_cookie(
@@ -125,6 +129,7 @@ async def oa_me(
     session: OaSession = Depends(get_oa_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[dict]:
+    await assert_oa_user_active(db, session.itcode)
     profile = await get_oa_user_profile(db, session.itcode) or {}
     return ok(
         {

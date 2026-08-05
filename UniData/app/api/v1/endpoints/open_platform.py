@@ -291,6 +291,24 @@ async def update_app(app_id: str, body: AppUpdateRequest, request: Request, iden
     return ok(serialize_app(app))
 
 
+@router.delete("/apps/{app_id}", summary="删除开放平台应用（回收租户资源）")
+async def delete_app(
+    app_id: str,
+    request: Request,
+    identity: AnySession = Depends(require_any_csrf),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AppResponse]:
+    app = await open_platform_service.get_app(db, app_id)
+    _assert_owned(identity, app)
+    app = await open_platform_service.delete_app(
+        db,
+        app_id=app_id,
+        actor=f"{identity.role}:{identity.username}",
+        source_ip=source_ip(request),
+    )
+    return ok(serialize_app(app))
+
+
 @router.get("/apps/{app_id}/keys", summary="获取应用 API Key")
 async def list_keys(app_id: str, identity: AnySession = Depends(get_any_session), db: AsyncSession = Depends(get_db)) -> ApiResponse[list[KeyResponse]]:
     app = await open_platform_service.get_app(db, app_id)

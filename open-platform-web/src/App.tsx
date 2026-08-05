@@ -26,6 +26,16 @@ function ProtectedRoute() {
   return <ConsoleLayout />
 }
 
+function RequireAdmin() {
+  const { user, loading } = useAuth()
+  const location = useLocation()
+  if (loading) return <div className="page-loading"><LoaderCircle className="spin" /><span>正在验证登录会话</span></div>
+  if (!user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />
+  // 仅管理员可访问代理节点 / 审计日志 / 用户管理（后端同样强制 admin）
+  if (user.role !== 'admin') return <Navigate to="/console/apps" replace />
+  return <Outlet />
+}
+
 function ProtectedOaRoute() {
   const { oaUser, loading } = useOaAuth()
   if (loading) return <div className="page-loading"><LoaderCircle className="spin" /><span>正在验证 OA 会话</span></div>
@@ -52,10 +62,12 @@ export function App() {
           <Route index element={<Navigate to="apps" replace />} />
           <Route path="apps" element={<AppsPage />} />
           <Route path="apps/:appId" element={<AppDetailPage />} />
-          <Route path="agents" element={<AgentsPage />} />
-          <Route path="audit" element={<AuditPage />} />
           <Route path="api-playground" element={<ApiPlaygroundPage />} />
-          <Route path="users" element={<UsersPage />} />
+          <Route element={<RequireAdmin />}>
+            <Route path="agents" element={<AgentsPage />} />
+            <Route path="audit" element={<AuditPage />} />
+            <Route path="users" element={<UsersPage />} />
+          </Route>
         </Route>
         <Route path="*" element={<Navigate to="/docs/quickstart" replace />} />
       </Routes>

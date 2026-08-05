@@ -7,16 +7,17 @@ set -euo pipefail
 CONNECT_URL="${CONNECT_URL:-http://connect:8083}"
 PG_HOST="${POSTGRES_HOST:-postgres}"
 PG_PORT="${POSTGRES_PORT:-5432}"
-PG_USER="${POSTGRES_USER:-postgres}"
-PG_PASSWORD="${POSTGRES_PASSWORD:-change-me}"
 PG_DB="${POSTGRES_DB:-postgres}"
 
-# CDC 监控的表（逗号分隔，需带 schema 前缀）。默认仅核心搜索表 uni_documents。
-TABLE_INCLUDE_LIST="${CDC_TABLE_INCLUDE_LIST:-public.uni_documents}"
+# CDC 监控的表（逗号分隔，需带 schema 前缀）。仅捕获公共 search_outbox。
+TABLE_INCLUDE_LIST="${CDC_TABLE_INCLUDE_LIST:-public.search_outbox}"
 SERVER_NAME="${CDC_SERVER_NAME:-pg}"
-SLOT_NAME="${CDC_SLOT_NAME:-unidata_slot}"
-PUBLICATION_NAME="${CDC_PUBLICATION_NAME:-unidata_pub}"
-CONNECTOR_NAME="${CDC_CONNECTOR_NAME:-pg-cdc-connector}"
+SLOT_NAME="${CDC_SLOT_NAME:-unidata_search_outbox_slot}"
+PUBLICATION_NAME="${CDC_PUBLICATION_NAME:-unidata_search_outbox_pub}"
+CONNECTOR_NAME="${CDC_CONNECTOR_NAME:-pg-search-outbox-connector}"
+# Debezium 使用独立复制账号，不使用业务写入账号
+PG_USER="${CDC_PG_USER:-unidata_cdc}"
+PG_PASSWORD="${CDC_PG_PASSWORD:-change-me}"
 
 # 等待 Connect REST API 真正可用（容器启动 ≠ API 就绪），超时则退出非零
 RETRY=0
@@ -44,14 +45,15 @@ JSON=$(cat <<EOF
     "schema.include.list": "public",
     "table.include.list": "${TABLE_INCLUDE_LIST}",
     "plugin.name": "pgoutput",
+    "snapshot.mode": "always",
     "publication.autocreate.mode": "filtered",
     "publication.name": "${PUBLICATION_NAME}",
     "slot.name": "${SLOT_NAME}",
     "topic.prefix": "${SERVER_NAME}",
     "key.converter": "org.apache.kafka.connect.json.JsonConverter",
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
-    "key.converter.schemas.enable": "false",
-    "value.converter.schemas.enable": "false"
+    "key.converter.schemas.enable": "true",
+    "value.converter.schemas.enable": "true"
   }
 }
 EOF

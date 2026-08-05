@@ -68,6 +68,8 @@ export const platformApi = {
     request<AppBootstrapResult>(`${base}/apps/bootstrap`, { method: 'POST', body: JSON.stringify(input) }, csrf),
   updateApp: (id: string, input: AppUpdateInput, csrf?: string) =>
     request<PlatformApp>(`${base}/apps/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) }, csrf),
+  deleteApp: (id: string, csrf?: string) =>
+    request<PlatformApp>(`${base}/apps/${encodeURIComponent(id)}`, { method: 'DELETE' }, csrf),
   listKeys: (appId: string) => request<ApiKeyRecord[]>(`${base}/apps/${encodeURIComponent(appId)}/keys`),
   createKey: (appId: string, input: KeyCreateInput, csrf?: string) =>
     request<ApiKeySecret>(`${base}/apps/${encodeURIComponent(appId)}/keys`, { method: 'POST', body: JSON.stringify(input) }, csrf),

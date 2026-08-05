@@ -26,13 +26,14 @@ export function Dialog({ open, onOpenChange, title, description, children }: {
   )
 }
 
-export function ConfirmDialog({ open, onOpenChange, title, description, confirmLabel, danger = false, onConfirm }: {
+export function ConfirmDialog({ open, onOpenChange, title, description, confirmLabel, danger = false, pending = false, onConfirm }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   title: string
   description: string
   confirmLabel: string
   danger?: boolean
+  pending?: boolean
   onConfirm: () => void | Promise<void>
 }) {
   return (
@@ -44,7 +45,7 @@ export function ConfirmDialog({ open, onOpenChange, title, description, confirmL
           <AlertDialogPrimitive.Description>{description}</AlertDialogPrimitive.Description>
           <div className="dialog-actions">
             <AlertDialogPrimitive.Cancel className="button button-secondary">取消</AlertDialogPrimitive.Cancel>
-            <AlertDialogPrimitive.Action className={danger ? 'button button-danger' : 'button button-primary'} onClick={onConfirm}>{confirmLabel}</AlertDialogPrimitive.Action>
+            <AlertDialogPrimitive.Action className={danger ? 'button button-danger' : 'button button-primary'} disabled={pending} onClick={onConfirm}>{pending ? '处理中' : confirmLabel}</AlertDialogPrimitive.Action>
           </div>
         </AlertDialogPrimitive.Content>
       </AlertDialogPrimitive.Portal>

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ApiError, AUTH_EXPIRED_EVENT, oaApi, platformApi } from '../api/client'
+import { AUTH_EXPIRED_EVENT, oaApi, platformApi } from '../api/client'
 
 export type ConsoleRole = 'admin' | 'oa'
 
@@ -37,17 +37,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!active) return
         setUser({ role: 'admin', username: session.username, name: session.username, csrf_token: session.csrf_token })
       } catch (error) {
-        // 2) 管理员未登录（401）→ 回退探测 OA 会话
-        if (error instanceof ApiError && error.status === 401 && active) {
+        // 2) 管理员会话探测失败（任意原因：401 / 网络错误 / 5xx）→ 一律回退探测 OA 会话，
+        // 避免管理员接口异常时把本可登录的 OA 用户错误挡在门外（P1）。
+        if (active) {
           try {
             const oa = await oaApi.me()
             if (!active) return
             setUser({ role: 'oa', username: oa.itcode, name: oa.name || oa.itcode, email: oa.email })
-          } catch (oaError) {
+          } catch {
             if (active) setUser(null)
           }
-        } else if (active) {
-          setUser(null)
         }
       } finally {
         if (active) setLoading(false)

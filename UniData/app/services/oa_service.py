@@ -4,11 +4,22 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.oa import OaUser
+
+
+async def assert_oa_user_active(db: AsyncSession, itcode: str) -> None:
+    """禁用用户拦截：oa_users.status == 'disabled' 时抛 401，拒绝其登录与调用受保护接口。"""
+    user = await db.scalar(select(OaUser).where(OaUser.itcode == itcode))
+    if user is not None and getattr(user, "status", "active") == "disabled":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="该账号已被禁用，请联系管理员",
+        )
 
 
 async def upsert_oa_user(db: AsyncSession, itcode: str, profile: dict[str, Any]) -> None:

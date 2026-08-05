@@ -15,6 +15,9 @@ from app.models import Base  # noqa: E402
 from migrations.migrate_document_tenancy import (  # noqa: E402
     apply_document_tenancy_migration,
 )
+from migrations.migrate_physical_tenancy import (  # noqa: E402
+    apply_physical_tenancy_migration,
+)
 
 
 # oa_users 增加 status 列（active / disabled），默认 active，兼容已有数据。
@@ -23,10 +26,22 @@ ALTER TABLE oa_users
     ADD COLUMN IF NOT EXISTS status VARCHAR NOT NULL DEFAULT 'active';
 """
 
+# collection_settings 扩展配置列（create_all 对已存在表不加列，必须 ALTER 双保险）。
+_COLLECTION_SETTINGS_EXTEND_SQL = """
+ALTER TABLE collection_settings
+    ADD COLUMN IF NOT EXISTS searchable_attributes JSONB,
+    ADD COLUMN IF NOT EXISTS displayed_attributes JSONB,
+    ADD COLUMN IF NOT EXISTS distinct_attribute VARCHAR,
+    ADD COLUMN IF NOT EXISTS typo_tolerance_enabled BOOLEAN,
+    ADD COLUMN IF NOT EXISTS pagination_max_total_hits INTEGER,
+    ADD COLUMN IF NOT EXISTS faceting_max_values_per_facet INTEGER;
+"""
+
 
 MIGRATION_VERSION = "20260730_open_platform_api_keys"
 MIGRATION_VERSION_OA_USER_STATUS = "20260805_oa_user_status"
 MIGRATION_VERSION_COLLECTION_SETTINGS = "20260805_collection_settings"
+MIGRATION_VERSION_COLLECTION_SETTINGS_EXTEND = "20260805_collection_settings_extend"
 
 
 async def migrate() -> None:
@@ -70,7 +85,17 @@ async def migrate() -> None:
             ),
             {"version": MIGRATION_VERSION_COLLECTION_SETTINGS},
         )
+        # 扩展配置列：对已存在的 collection_settings 表补列（幂等）。
+        await connection.execute(text(_COLLECTION_SETTINGS_EXTEND_SQL))
+        await connection.execute(
+            text(
+                "INSERT INTO unidata_schema_migrations (version) VALUES (:version) "
+                "ON CONFLICT (version) DO NOTHING"
+            ),
+            {"version": MIGRATION_VERSION_COLLECTION_SETTINGS_EXTEND},
+        )
         await apply_document_tenancy_migration(connection)
+        await apply_physical_tenancy_migration(connection)
 
 
 if __name__ == "__main__":

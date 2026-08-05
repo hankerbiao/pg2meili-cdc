@@ -24,7 +24,13 @@ class TestAPIRoutes:
         response = await clean_client.get("/api/v1/agents/online")
         assert response.status_code == 401
 
-    async def test_agent_registration_requires_service_token(self, clean_client: AsyncClient):
+    async def test_agent_registration_requires_service_token(
+        self, clean_client: AsyncClient, monkeypatch
+    ):
+        from app.core.config import get_settings
+
+        # 本地 .env 可能已配置 token，测试固定走“未配置”分支，保证结果与环境无关。
+        monkeypatch.setattr(get_settings(), "agent_registration_token", "")
         response = await clean_client.post(
             "/api/v1/agents/register",
             json={"ip": "127.0.0.1", "port": 8091},

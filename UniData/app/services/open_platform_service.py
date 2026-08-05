@@ -17,6 +17,9 @@ from app.core.config import get_settings
 from app.core.database import get_db_context
 from app.core.kafka_manager import get_kafka_manager
 from app.models.open_platform import ApiKey, OpenPlatformApp, OpenPlatformAuditLog, OpenPlatformOutbox
+from app.repositories.document_repository import document_repository
+from app.services.index_service import index_service
+from app.services.tenant_service import drop_tenant, provision_tenant, tenant_exists
 
 
 ALLOWED_SCOPES = {"search:read", "data:read", "data:write"}
@@ -137,6 +140,7 @@ class OpenPlatformService:
         )
         db.add(app)
         await db.flush()
+        await provision_tenant(db, app.id)
         cls._add_outbox(db, app.id, "app.upsert", app_event(app))
         cls.add_audit(db, actor=actor, action="app.create", target_type="app", target_id=app.id, app_id=app.id, source_ip=source_ip)
         return app
@@ -152,6 +156,66 @@ class OpenPlatformService:
         await db.flush()
         cls._add_outbox(db, app.id, "app.upsert", app_event(app))
         cls.add_audit(db, actor=actor, action="app.update", target_type="app", target_id=app.id, app_id=app.id, source_ip=source_ip, details=changes)
+        return app
+
+    @classmethod
+    async def delete_app(
+        cls,
+        db: AsyncSession,
+        *,
+        app_id: str,
+        actor: str,
+        source_ip: str | None,
+    ) -> OpenPlatformApp:
+        """物理回收租户：先冻结鉴权，再删除索引，最后删除租户 schema。"""
+        app = await cls.get_app(db, app_id)
+        if app.status in ("deleting", "deleted"):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="应用正在删除或已删除")
+
+        app.status = "deleting"
+        app.version += 1
+        app.updated_at = utc_now()
+        await db.flush()
+        cls._add_outbox(db, app.id, "app.upsert", app_event(app))
+
+        for key in await cls.list_keys(db, app_id):
+            if key.status != "active":
+                continue
+            key.status = "revoked"
+            key.revoked_at = utc_now()
+            key.updated_at = utc_now()
+            key.version += 1
+            cls._add_outbox(db, key.id, "key.revoked", key_event(key, app, "key.revoked"))
+
+        collections: list[str] = []
+        if await tenant_exists(db, app_id):
+            collections = await document_repository.list_collections_by_app(db, app_id, limit=1000)
+        for collection in collections:
+            try:
+                index_service.delete_index(
+                    app_id=app_id,
+                    app_name=app.app_name,
+                    collection=collection,
+                )
+            except Exception as exc:  # noqa: BLE001 - 删除命令失败不阻断租户回收，留审计供人工重试
+                logger.warning("删除租户索引命令失败 app=%s collection=%s: %s", app_id, collection, exc)
+
+        await drop_tenant(db, app_id)
+        app.status = "deleted"
+        app.version += 1
+        app.updated_at = utc_now()
+        await db.flush()
+        cls._add_outbox(db, app.id, "app.upsert", app_event(app))
+        cls.add_audit(
+            db,
+            actor=actor,
+            action="app.delete",
+            target_type="app",
+            target_id=app.id,
+            app_id=app.id,
+            source_ip=source_ip,
+            details={"collections": collections},
+        )
         return app
 
     @staticmethod

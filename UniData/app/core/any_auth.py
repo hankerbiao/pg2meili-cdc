@@ -17,14 +17,13 @@ from dataclasses import dataclass
 from typing import Literal
 
 from fastapi import Depends, Header, HTTPException, Request, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.admin_auth import SESSION_COOKIE, decode_admin_session
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.oa_auth import decode_oa_session
-from app.models.oa import OaUser
+from app.services.oa_service import assert_oa_user_active
 
 ROLE_ADMIN = "admin"
 ROLE_OA = "oa"
@@ -54,20 +53,24 @@ async def get_any_session(
     """
     token = request.cookies.get(SESSION_COOKIE, "")
     if token:
-        admin = decode_admin_session(token)
-        return AnySession(
-            role=ROLE_ADMIN,
-            username=admin.username,
-            name=admin.username,
-            csrf_token=admin.csrf_token,
-        )
+        try:
+            admin = decode_admin_session(token)
+        except HTTPException:
+            # 管理员 cookie 过期/损坏：不锁死，回退 OA 分支判定，
+            # 避免「曾登录过管理员的 OA 用户」被错误拦截（P0-3）。
+            admin = None
+        if admin is not None:
+            return AnySession(
+                role=ROLE_ADMIN,
+                username=admin.username,
+                name=admin.username,
+                csrf_token=admin.csrf_token,
+            )
     settings = get_settings()
     oa_token = request.cookies.get(settings.oa_cookie_name, "")
     if oa_token:
         oa = decode_oa_session(oa_token)
-        user = await db.scalar(select(OaUser).where(OaUser.itcode == oa.itcode))
-        if user is not None and getattr(user, "status", "active") == "disabled":
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="该账号已被禁用，请联系管理员")
+        await assert_oa_user_active(db, oa.itcode)
         return AnySession(role=ROLE_OA, username=oa.itcode, name=oa.name, email=oa.email)
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="请先登录开放平台")
 

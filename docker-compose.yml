@@ -2,16 +2,15 @@
 # 生产环境务必恢复为 127.0.0.1 绑定（仅本机），并前置 HTTPS 反向代理。
 name: pg2meili
 
+# 注：本锚点只保留「Docker 内部服务地址 / 端口」等无法从 .env.docker 直接取同名键的变量。
+# 其余应用配置（PG_CONN_STRING、CORS_ALLOW_ORIGINS、LOG_*、KAFKA_API_KEY_TOPIC、
+# 各类密钥等）一律由下方 env_file: ./.env.docker 注入，避免 environment 覆盖 env_file
+# 导致「改 .env.docker 不生效」的问题（详见 docs/optimization-plan-2026-08-05.md P0-4）。
 x-unidata-environment: &unidata-environment
-  PG_CONN_STRING: ${PG_CONN_STRING:-postgresql://postgres:change-me@postgres:5432/postgres}
   SERVER_PORT: :8080
-  CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:8080}
-  LOG_LEVEL: ${LOG_LEVEL:-INFO}
-  LOG_JSON: ${LOG_JSON:-false}
-  LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-false}
   KAFKA_BOOTSTRAP_SERVERS: kafka:9093
-  KAFKA_API_KEY_TOPIC: ${KAFKA_API_KEY_TOPIC:-api_keys.events}
   KAFKA_MEILI_COMMAND_TOPIC: ${KAFKA_COMMAND_TOPIC:-meili.commands}
+  REDIS_URL: redis://redis:6379/0
 
 services:
   postgres:
@@ -23,6 +22,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      UNIDATA_PG_USER: ${UNIDATA_PG_USER:-unidata_app}
+      UNIDATA_PG_PASSWORD: ${UNIDATA_PG_PASSWORD:-change-me}
+      CDC_PG_USER: ${CDC_PG_USER:-unidata_cdc}
+      CDC_PG_PASSWORD: ${CDC_PG_PASSWORD:-change-me}
     command:
       - postgres
       - -c
@@ -33,6 +36,7 @@ services:
       - max_wal_senders=5
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -127,11 +131,13 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
-      CDC_TABLE_INCLUDE_LIST: ${CDC_TABLE_INCLUDE_LIST:-public.uni_documents}
+      CDC_PG_USER: ${CDC_PG_USER:-unidata_cdc}
+      CDC_PG_PASSWORD: ${CDC_PG_PASSWORD:-change-me}
+      CDC_TABLE_INCLUDE_LIST: ${CDC_TABLE_INCLUDE_LIST:-public.search_outbox}
       CDC_SERVER_NAME: ${CDC_SERVER_NAME:-pg}
-      CDC_SLOT_NAME: ${CDC_SLOT_NAME:-unidata_slot}
-      CDC_PUBLICATION_NAME: ${CDC_PUBLICATION_NAME:-unidata_pub}
-      CDC_CONNECTOR_NAME: ${CDC_CONNECTOR_NAME:-pg-cdc-connector}
+      CDC_SLOT_NAME: ${CDC_SLOT_NAME:-unidata_search_outbox_slot}
+      CDC_PUBLICATION_NAME: ${CDC_PUBLICATION_NAME:-unidata_search_outbox_pub}
+      CDC_CONNECTOR_NAME: ${CDC_CONNECTOR_NAME:-pg-search-outbox-connector}
     volumes:
       - ./docker/register-connector.sh:/opt/unidata/register-connector.sh:ro
     entrypoint: ["/bin/sh", "/opt/unidata/register-connector.sh"]
@@ -156,6 +162,20 @@ services:
       start_period: 10s
     environment:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-change-me-meilisearch-key}
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
   unidata-migrate:
     build:
@@ -243,3 +263,4 @@ services:
 volumes:
   pgdata:
   meili_data:
+  redis_data:

@@ -124,7 +124,7 @@ export function AppsPage() {
                     </td>
                     <td><code>{app.app_name}</code></td>
                     <td>{app.owner_itcode}</td>
-                    <td><span className={`status-badge ${app.status}`}><i />{app.status === 'active' ? 'Active' : 'Disabled'}</span></td>
+                    <td><span className={`status-badge ${app.status}`}><i />{{ active: 'Active', disabled: 'Disabled', deleting: 'Deleting', deleted: 'Deleted' }[app.status] ?? 'Unknown'}</span></td>
                     <td>{formatDate(app.updated_at)}</td>
                     <td><Link className="row-action" to={`/console/apps/${app.id}`} aria-label={`打开 ${app.display_name}`}><ArrowRight size={17} /></Link></td>
                   </tr>

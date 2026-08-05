@@ -113,12 +113,13 @@ docker compose ps
 
 启动后 `connect-init` 服务会向 Kafka Connect 注册 Debezium PostgreSQL CDC connector，
 打通「PostgreSQL → Kafka → Meilisearch」同步链路。监控的表由 `.env.docker` 的
-`CDC_TABLE_INCLUDE_LIST` 控制（默认仅 `public.uni_documents`）。
+`CDC_TABLE_INCLUDE_LIST` 控制（默认仅公共 `public.search_outbox`；租户业务表通过
+触发器原子写入 outbox，不再被 Debezium 直接监听）。
 
 检查注册状态：
 
 ```bash
-curl -s http://localhost:8083/connectors/pg-cdc-connector/status | jq
+curl -s http://localhost:8083/connectors/pg-search-outbox-connector/status | jq
 ```
 
 如需调整监控表或重建 connector，修改 `CDC_TABLE_INCLUDE_LIST` 后重跑：
