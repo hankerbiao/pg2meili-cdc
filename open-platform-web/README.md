@@ -22,7 +22,7 @@ npm run test:e2e:mock
 Playwright 的 mock 套件不依赖后端，覆盖桌面、平板和移动端。真实后端 smoke 需要先启动 UniData，并注入管理员密码：
 
 ```bash
-BASE_URL=http://127.0.0.1:8081/open-platform/ \
+BASE_URL=http://127.0.0.1:8080/open-platform/ \
 PLATFORM_PASSWORD='your-password' \
 npm run test:e2e:integration
 ```

@@ -17,8 +17,6 @@ export function DocsLayout({ children, toc }: { children: ReactNode; toc: Array<
       <aside className={open ? 'docs-sidebar open' : 'docs-sidebar'}>
         <div className="sidebar-label">开始使用</div>
         {docLinks.map((link) => <NavLink key={link.to} to={link.to} onClick={() => setOpen(false)}>{link.label}<ChevronRight size={14} /></NavLink>)}
-        <div className="sidebar-label spaced">资源</div>
-        <a href="/docs" target="_blank" rel="noreferrer">后端 OpenAPI<ChevronRight size={14} /></a>
       </aside>
       <main className="docs-content">{children}</main>
       <aside className="docs-toc" aria-label="本页目录">
