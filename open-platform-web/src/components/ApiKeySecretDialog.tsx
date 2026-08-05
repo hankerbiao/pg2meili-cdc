@@ -2,6 +2,7 @@ import { Check, Copy } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { ApiKeySecret } from '../api/types'
 import { Dialog } from './Dialog'
+import { copyToClipboard } from '../utils/clipboard'
 
 export function ApiKeySecretDialog({ secrets, onClose }: { secrets: ApiKeySecret[]; onClose: () => void }) {
   const [copiedIds, setCopiedIds] = useState<Set<string>>(new Set())
@@ -10,7 +11,7 @@ export function ApiKeySecretDialog({ secrets, onClose }: { secrets: ApiKeySecret
   useEffect(() => setCopiedIds(new Set()), [secretIdentity])
 
   async function copy(secret: ApiKeySecret) {
-    await navigator.clipboard.writeText(secret.api_key)
+    await copyToClipboard(secret.api_key)
     setCopiedIds((current) => new Set(current).add(secret.id))
   }
 
@@ -18,7 +19,7 @@ export function ApiKeySecretDialog({ secrets, onClose }: { secrets: ApiKeySecret
     const content = secrets
       .map((secret) => `${secret.name} (${secret.scopes.join(', ')})\n${secret.api_key}`)
       .join('\n\n')
-    await navigator.clipboard.writeText(content)
+    await copyToClipboard(content)
     setCopiedIds(new Set(secrets.map((secret) => secret.id)))
   }
 

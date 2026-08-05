@@ -1,5 +1,6 @@
 import { Check, Copy } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { copyToClipboard } from '../utils/clipboard'
 
 interface CodeBlockProps {
   code: string
@@ -15,7 +16,7 @@ export function CodeBlock({ code, language = 'bash' }: CodeBlockProps) {
   }, [copied])
 
   async function copy() {
-    await navigator.clipboard.writeText(code)
+    await copyToClipboard(code)
     setCopied(true)
   }
 
