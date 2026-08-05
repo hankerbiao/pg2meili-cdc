@@ -20,7 +20,7 @@ vi.mock('../api/client', () => ({
 
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({
-    session: { username: 'admin', csrf_token: 'csrf-test', expires_at: 4102444800 },
+    user: { role: 'admin', username: 'admin', name: 'admin', csrf_token: 'csrf-test' },
   }),
 }))
 

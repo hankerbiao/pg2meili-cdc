@@ -37,14 +37,15 @@ const accessProfiles: Array<{
 ]
 
 export function AppsPage() {
-  const { session } = useAuth()
+  const { user } = useAuth()
   const queryClient = useQueryClient()
+  const isAdmin = user?.role === 'admin'
   const [dialogOpen, setDialogOpen] = useState(false)
   const [accessProfile, setAccessProfile] = useState<AccessProfile>('standard')
   const [secrets, setSecrets] = useState<ApiKeySecret[]>([])
   const apps = useQuery({ queryKey: ['apps'], queryFn: platformApi.listApps })
   const create = useMutation({
-    mutationFn: (input: AppBootstrapInput) => platformApi.bootstrapApp(input, session!.csrf_token),
+    mutationFn: (input: AppBootstrapInput) => platformApi.bootstrapApp(input, user?.csrf_token),
     onSuccess: (result) => {
       queryClient.setQueryData<PlatformApp[]>(['apps'], (current = []) => [
         result.app,
@@ -69,10 +70,12 @@ export function AppsPage() {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
+    // OA 普通用户创建应用时，负责人强制为本人 itcode（后端同样强制，前端隐藏输入）
+    const ownerItcode = isAdmin ? String(data.get('owner_itcode')) : user!.username
     create.mutate({
       display_name: String(data.get('display_name')),
       app_name: String(data.get('app_name')),
-      owner_itcode: String(data.get('owner_itcode')),
+      owner_itcode: ownerItcode,
       description: String(data.get('description') || '') || null,
       initial_keys: selectedProfile.keys.map((key) => ({
         ...key,
@@ -102,7 +105,7 @@ export function AppsPage() {
       </div>
 
       <section className="data-section">
-        <div className="section-heading"><h2>所有应用</h2><span>{apps.data?.length ?? 0} records</span></div>
+        <div className="section-heading"><h2>{isAdmin ? '所有应用' : '我的应用'}</h2><span>{apps.data?.length ?? 0} records</span></div>
         {apps.isLoading ? (
           <div className="loading-row"><LoaderCircle className="spin" size={18} />正在加载应用</div>
         ) : apps.isError ? (
@@ -149,7 +152,11 @@ export function AppsPage() {
         <form className="form-grid" onSubmit={submit}>
           <label>显示名称<input name="display_name" required maxLength={128} placeholder="商品搜索" /></label>
           <label>应用标识<input name="app_name" required pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}" placeholder="product_search" /></label>
-          <label>负责人 itcode<input name="owner_itcode" required maxLength={128} placeholder="zhangsan" /></label>
+          {isAdmin ? (
+            <label>负责人 itcode<input name="owner_itcode" required maxLength={128} placeholder="zhangsan" /></label>
+          ) : (
+            <label>负责人 itcode<input value={user!.username} disabled /></label>
+          )}
           <label>Key 到期时间<input type="datetime-local" name="expires_at" required defaultValue={defaultExpiry.toISOString().slice(0, 16)} /></label>
           <fieldset className="full-field">
             <legend>初始 API Key 权限</legend>

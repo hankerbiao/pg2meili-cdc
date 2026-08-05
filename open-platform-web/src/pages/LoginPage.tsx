@@ -1,16 +1,23 @@
 import { ArrowRight, Braces, LockKeyhole } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { oaApi } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 
 export function LoginPage() {
-  const { session, login } = useAuth()
+  const { user, login } = useAuth()
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
   const next = params.get('next')?.startsWith('/console') ? params.get('next')! : '/console/apps'
-  if (session) return <Navigate to={next} replace />
+  const oaError = params.get('oa') === 'error'
+  if (user) return <Navigate to={next} replace />
+
+  const handleOaLogin = () => {
+    const callback = `${window.location.origin}/open-platform/oa/callback`
+    window.location.href = oaApi.loginRedirectUrl(callback)
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -45,6 +52,9 @@ export function LoginPage() {
           {error && <div className="form-error" role="alert">{error}</div>}
           <button className="button button-primary full" type="submit" disabled={pending}>{pending ? '正在登录' : '进入控制台'}<ArrowRight size={17} /></button>
         </form>
+        <div className="login-divider"><span>或</span></div>
+        {oaError && <div className="form-error" role="alert">OA 登录失败，无法建立会话，请重试或联系管理员。</div>}
+        <button className="button button-secondary full" type="button" onClick={handleOaLogin}>使用 OA 账号登录</button>
       </section>
     </main>
   )

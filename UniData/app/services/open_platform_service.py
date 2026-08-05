@@ -96,10 +96,12 @@ class OpenPlatformService:
         ))
 
     @staticmethod
-    async def list_apps(db: AsyncSession, app_status: str | None = None) -> list[OpenPlatformApp]:
+    async def list_apps(db: AsyncSession, app_status: str | None = None, owner_itcode: str | None = None) -> list[OpenPlatformApp]:
         query = select(OpenPlatformApp).order_by(OpenPlatformApp.created_at.desc())
         if app_status:
             query = query.where(OpenPlatformApp.status == app_status)
+        if owner_itcode:
+            query = query.where(OpenPlatformApp.owner_itcode == owner_itcode)
         return list((await db.execute(query)).scalars().all())
 
     @staticmethod

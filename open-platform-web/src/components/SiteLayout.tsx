@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext'
 
 export function SiteLayout({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
-  const { session, logout } = useAuth()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
 
   async function handleLogout() {
@@ -26,9 +26,9 @@ export function SiteLayout({ children }: { children: ReactNode }) {
           <NavLink to="/console/apps" onClick={() => setMobileOpen(false)}><KeyRound size={16} />控制台</NavLink>
         </nav>
         <div className="account-actions">
-          {session ? (
+          {user ? (
             <>
-              <span className="account-name">{session.username}</span>
+              <span className="account-name">{user.name}</span>
               <button className="icon-button" type="button" onClick={handleLogout} aria-label="退出登录" title="退出登录"><LogOut size={17} /></button>
             </>
           ) : (

@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +18,7 @@ from app.core.admin_auth import (
     require_admin_csrf,
     verify_admin_password,
 )
+from app.core.any_auth import ROLE_OA, AnySession, get_any_session, require_any_csrf
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.open_platform import ApiKey, OpenPlatformApp
@@ -133,6 +134,12 @@ def source_ip(request: Request) -> str | None:
     return forwarded or (request.client.host if request.client else None)
 
 
+def _assert_owned(identity: AnySession, app: OpenPlatformApp) -> None:
+    """OA 普通用户只能访问 owner_itcode 为自己的应用；管理员不受限。"""
+    if identity.role == ROLE_OA and app.owner_itcode != identity.username:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该应用")
+
+
 def serialize_app(app: OpenPlatformApp) -> AppResponse:
     return AppResponse.model_validate(app, from_attributes=True)
 
@@ -195,15 +202,28 @@ async def logout(
 @router.get("/apps", summary="获取开放平台应用")
 async def list_apps(
     app_status: Literal["active", "disabled"] | None = Query(default=None, alias="status"),
-    _: AdminSession = Depends(get_admin_session),
+    identity: AnySession = Depends(get_any_session),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[list[AppResponse]]:
-    return ok([serialize_app(app) for app in await open_platform_service.list_apps(db, app_status)])
+    owner = identity.username if identity.role == ROLE_OA else None
+    return ok([serialize_app(app) for app in await open_platform_service.list_apps(db, app_status, owner_itcode=owner)])
 
 
 @router.post("/apps", status_code=status.HTTP_201_CREATED, summary="创建开放平台应用")
-async def create_app(body: AppCreateRequest, request: Request, session: AdminSession = Depends(require_admin_csrf), db: AsyncSession = Depends(get_db)) -> ApiResponse[AppResponse]:
-    app = await open_platform_service.create_app(db, **body.model_dump(), actor=session.username, source_ip=source_ip(request))
+async def create_app(body: AppCreateRequest, request: Request, identity: AnySession = Depends(require_any_csrf), db: AsyncSession = Depends(get_db)) -> ApiResponse[AppResponse]:
+    # OA 普通用户创建应用时，负责人强制为本人 itcode，忽略请求体中的 owner_itcode
+    owner_itcode = body.owner_itcode
+    if identity.role == ROLE_OA:
+        owner_itcode = identity.username
+    app = await open_platform_service.create_app(
+        db,
+        app_name=body.app_name,
+        display_name=body.display_name,
+        owner_itcode=owner_itcode,
+        description=body.description,
+        actor=f"{identity.role}:{identity.username}",
+        source_ip=source_ip(request),
+    )
     return ok(serialize_app(app))
 
 
@@ -215,13 +235,20 @@ async def create_app(body: AppCreateRequest, request: Request, session: AdminSes
 async def bootstrap_app(
     body: AppBootstrapRequest,
     request: Request,
-    session: AdminSession = Depends(require_admin_csrf),
+    identity: AnySession = Depends(require_any_csrf),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[AppBootstrapResponse]:
+    owner_itcode = body.owner_itcode
+    if identity.role == ROLE_OA:
+        owner_itcode = identity.username
+    actor = f"{identity.role}:{identity.username}"
     app = await open_platform_service.create_app(
         db,
-        **body.model_dump(exclude={"initial_keys"}),
-        actor=session.username,
+        app_name=body.app_name,
+        display_name=body.display_name,
+        owner_itcode=owner_itcode,
+        description=body.description,
+        actor=actor,
         source_ip=source_ip(request),
     )
     keys: list[KeySecretResponse] = []
@@ -230,7 +257,7 @@ async def bootstrap_app(
             db,
             app_id=app.id,
             **initial_key.model_dump(),
-            actor=session.username,
+            actor=actor,
             source_ip=source_ip(request),
         )
         keys.append(KeySecretResponse.model_validate(serialize_key(key, plaintext)))
@@ -243,38 +270,57 @@ async def bootstrap_app(
 
 
 @router.get("/apps/{app_id}", summary="获取开放平台应用详情")
-async def get_app(app_id: str, _: AdminSession = Depends(get_admin_session), db: AsyncSession = Depends(get_db)) -> ApiResponse[AppResponse]:
-    return ok(serialize_app(await open_platform_service.get_app(db, app_id)))
+async def get_app(app_id: str, identity: AnySession = Depends(get_any_session), db: AsyncSession = Depends(get_db)) -> ApiResponse[AppResponse]:
+    app = await open_platform_service.get_app(db, app_id)
+    _assert_owned(identity, app)
+    return ok(serialize_app(app))
 
 
 @router.patch("/apps/{app_id}", summary="更新开放平台应用")
-async def update_app(app_id: str, body: AppUpdateRequest, request: Request, session: AdminSession = Depends(require_admin_csrf), db: AsyncSession = Depends(get_db)) -> ApiResponse[AppResponse]:
+async def update_app(app_id: str, body: AppUpdateRequest, request: Request, identity: AnySession = Depends(require_any_csrf), db: AsyncSession = Depends(get_db)) -> ApiResponse[AppResponse]:
+    app = await open_platform_service.get_app(db, app_id)
+    _assert_owned(identity, app)
     changes = body.model_dump(exclude_unset=True)
-    app = await open_platform_service.update_app(db, app_id, changes, session.username, source_ip(request))
+    if identity.role == ROLE_OA:
+        # OA 用户不能转移应用负责人（涉及数据隔离边界）
+        if "owner_itcode" in changes:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="普通用户不能修改应用负责人")
+    app = await open_platform_service.update_app(db, app_id, changes, f"{identity.role}:{identity.username}", source_ip(request))
     return ok(serialize_app(app))
 
 
 @router.get("/apps/{app_id}/keys", summary="获取应用 API Key")
-async def list_keys(app_id: str, _: AdminSession = Depends(get_admin_session), db: AsyncSession = Depends(get_db)) -> ApiResponse[list[KeyResponse]]:
-    await open_platform_service.get_app(db, app_id)
+async def list_keys(app_id: str, identity: AnySession = Depends(get_any_session), db: AsyncSession = Depends(get_db)) -> ApiResponse[list[KeyResponse]]:
+    app = await open_platform_service.get_app(db, app_id)
+    _assert_owned(identity, app)
     return ok([serialize_key(key) for key in await open_platform_service.list_keys(db, app_id)])
 
 
 @router.post("/apps/{app_id}/keys", status_code=status.HTTP_201_CREATED, summary="创建应用 API Key")
-async def create_key(app_id: str, body: KeyCreateRequest, request: Request, session: AdminSession = Depends(require_admin_csrf), db: AsyncSession = Depends(get_db)) -> ApiResponse[KeySecretResponse]:
-    key, plaintext = await open_platform_service.create_key(db, app_id=app_id, **body.model_dump(), actor=session.username, source_ip=source_ip(request))
+async def create_key(app_id: str, body: KeyCreateRequest, request: Request, identity: AnySession = Depends(require_any_csrf), db: AsyncSession = Depends(get_db)) -> ApiResponse[KeySecretResponse]:
+    app = await open_platform_service.get_app(db, app_id)
+    _assert_owned(identity, app)
+    key, plaintext = await open_platform_service.create_key(db, app_id=app_id, **body.model_dump(), actor=f"{identity.role}:{identity.username}", source_ip=source_ip(request))
     return ok(serialize_key(key, plaintext))
 
 
 @router.post("/keys/{key_id}/rotate", status_code=status.HTTP_201_CREATED, summary="轮换 API Key")
-async def rotate_key(key_id: str, request: Request, session: AdminSession = Depends(require_admin_csrf), db: AsyncSession = Depends(get_db)) -> ApiResponse[KeySecretResponse]:
-    key, plaintext = await open_platform_service.rotate_key(db, key_id, session.username, source_ip(request))
+async def rotate_key(key_id: str, request: Request, identity: AnySession = Depends(require_any_csrf), db: AsyncSession = Depends(get_db)) -> ApiResponse[KeySecretResponse]:
+    key = await db.get(ApiKey, key_id)
+    if key is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API Key 不存在")
+    _assert_owned(identity, await open_platform_service.get_app(db, key.app_id))
+    key, plaintext = await open_platform_service.rotate_key(db, key_id, f"{identity.role}:{identity.username}", source_ip(request))
     return ok(serialize_key(key, plaintext))
 
 
 @router.post("/keys/{key_id}/revoke", summary="撤销 API Key")
-async def revoke_key(key_id: str, request: Request, session: AdminSession = Depends(require_admin_csrf), db: AsyncSession = Depends(get_db)) -> ApiResponse[KeyResponse]:
-    key = await open_platform_service.revoke_key(db, key_id, session.username, source_ip(request))
+async def revoke_key(key_id: str, request: Request, identity: AnySession = Depends(require_any_csrf), db: AsyncSession = Depends(get_db)) -> ApiResponse[KeyResponse]:
+    key = await db.get(ApiKey, key_id)
+    if key is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API Key 不存在")
+    _assert_owned(identity, await open_platform_service.get_app(db, key.app_id))
+    key = await open_platform_service.revoke_key(db, key_id, f"{identity.role}:{identity.username}", source_ip(request))
     return ok(serialize_key(key))
 
 

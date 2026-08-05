@@ -1,3 +1,16 @@
+export interface OpenApiParameter {
+  name: string
+  in: 'path' | 'query' | 'header'
+  required: boolean
+  description?: string
+  example?: unknown
+}
+
+export interface ApiResponseInfo {
+  status: string
+  description: string
+}
+
 export interface PublicOperation {
   id: string
   method: string
@@ -5,6 +18,29 @@ export interface PublicOperation {
   summary: string
   description: string
   tag: string
+  parameters: OpenApiParameter[]
+  requestBodyExample: string | null
+  responses: ApiResponseInfo[]
+}
+
+interface OpenApiParameterRaw {
+  name: string
+  in: 'path' | 'query' | 'header'
+  required?: boolean
+  description?: string
+  example?: unknown
+  schema?: OpenApiSchema
+}
+
+interface OpenApiSchema {
+  type?: string
+  format?: string
+  properties?: Record<string, OpenApiSchema>
+  items?: OpenApiSchema
+  example?: unknown
+  default?: unknown
+  enum?: unknown[]
+  $ref?: string
 }
 
 interface OpenApiOperation {
@@ -12,14 +48,59 @@ interface OpenApiOperation {
   summary?: string
   description?: string
   tags?: string[]
+  parameters?: OpenApiParameterRaw[]
+  requestBody?: { content?: Record<string, { schema?: OpenApiSchema; example?: unknown }> }
+  responses?: Record<string, { description?: string; content?: Record<string, { schema?: OpenApiSchema }> }>
 }
 
 interface OpenApiDocument {
   paths?: Record<string, Record<string, OpenApiOperation>>
+  components?: { schemas?: Record<string, OpenApiSchema> }
 }
 
 const allowedTags = new Set(['generic-data', 'indexes', 'agents', 'sdk'])
 const methods = new Set(['get', 'post', 'put', 'patch', 'delete'])
+
+function resolveSchema(ref: string | undefined, doc: OpenApiDocument): OpenApiSchema | undefined {
+  if (!ref || !ref.startsWith('#/')) return undefined
+  const parts = ref.slice(2).split('/')
+  let current: unknown = doc
+  for (const part of parts) {
+    if (current && typeof current === 'object') current = (current as Record<string, unknown>)[part]
+    else return undefined
+  }
+  return current as OpenApiSchema | undefined
+}
+
+function sampleFromSchema(schema: OpenApiSchema | undefined, doc: OpenApiDocument): unknown {
+  if (!schema) return null
+  if (schema.$ref) return sampleFromSchema(resolveSchema(schema.$ref, doc), doc)
+  if (schema.example !== undefined) return schema.example
+  if (schema.default !== undefined) return schema.default
+  switch (schema.type) {
+    case 'object': {
+      const obj: Record<string, unknown> = {}
+      for (const [key, prop] of Object.entries(schema.properties ?? {})) {
+        obj[key] = sampleFromSchema(prop, doc)
+      }
+      return obj
+    }
+    case 'array':
+      return schema.items ? [sampleFromSchema(schema.items, doc)] : []
+    case 'integer':
+    case 'number':
+      return 0
+    case 'boolean':
+      return true
+    case 'string':
+      if (schema.format === 'date-time') return '2024-01-01T00:00:00Z'
+      if (schema.format === 'date') return '2024-01-01'
+      if (schema.enum && schema.enum.length > 0) return schema.enum[0]
+      return 'string'
+    default:
+      return null
+  }
+}
 
 export function extractPublicOperations(document: OpenApiDocument): PublicOperation[] {
   const operations: PublicOperation[] = []
@@ -28,6 +109,19 @@ export function extractPublicOperations(document: OpenApiDocument): PublicOperat
       if (!methods.has(method) || !operation || typeof operation !== 'object') continue
       const tag = operation.tags?.find((item) => allowedTags.has(item))
       if (!tag) continue
+      const parameters: OpenApiParameter[] = (operation.parameters ?? [])
+        .filter((item) => item.in === 'path' || item.in === 'query')
+        .map((item) => ({ name: item.name, in: item.in, required: Boolean(item.required), description: item.description }))
+      const jsonContent = operation.requestBody?.content?.['application/json']
+      let requestBodyExample: string | null = null
+      if (jsonContent) {
+        const example = jsonContent.example ?? sampleFromSchema(jsonContent.schema, document)
+        if (example !== null && example !== undefined) requestBodyExample = JSON.stringify(example, null, 2)
+      }
+      const responses: ApiResponseInfo[] = Object.entries(operation.responses ?? {}).map(([status, resp]) => ({
+        status,
+        description: resp?.description ?? '',
+      }))
       operations.push({
         id: operation.operationId ?? `${method}-${path}`,
         method: method.toUpperCase(),
@@ -35,6 +129,9 @@ export function extractPublicOperations(document: OpenApiDocument): PublicOperat
         summary: operation.summary ?? path,
         description: operation.description ?? '',
         tag,
+        parameters,
+        requestBodyExample,
+        responses,
       })
     }
   }
@@ -48,4 +145,19 @@ export const regionalSearchOperation: PublicOperation = {
   summary: '在区域节点执行搜索',
   description: '使用具有 search:read scope 的 API Key 调用就近的区域搜索节点。',
   tag: 'search',
+  parameters: [],
+  requestBodyExample: JSON.stringify({ q: 'keyboard', limit: 10, show_ranking_score: true }, null, 2),
+  responses: [
+    { status: '200', description: '搜索结果' },
+    { status: '400', description: '请求参数错误' },
+    { status: '401', description: 'API Key 无效或缺少 search:read scope' },
+  ],
+}
+
+export const PLATFORM_TAG_LABELS: Record<string, string> = {
+  'generic-data': '数据',
+  indexes: '索引',
+  agents: 'Agent',
+  sdk: 'SDK',
+  search: '搜索',
 }
