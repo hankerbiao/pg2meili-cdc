@@ -10,6 +10,7 @@ import { ApiReferencePage } from './pages/ApiReferencePage'
 import { AppDetailPage } from './pages/AppDetailPage'
 import { AppsPage } from './pages/AppsPage'
 import { AuditPage } from './pages/AuditPage'
+import { UsersPage } from './pages/UsersPage'
 import { AuthenticationPage } from './pages/AuthenticationPage'
 import { LoginPage } from './pages/LoginPage'
 import { OaCallbackPage } from './pages/OaCallbackPage'
@@ -54,6 +55,7 @@ export function App() {
           <Route path="agents" element={<AgentsPage />} />
           <Route path="audit" element={<AuditPage />} />
           <Route path="api-playground" element={<ApiPlaygroundPage />} />
+          <Route path="users" element={<UsersPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/docs/quickstart" replace />} />
       </Routes>

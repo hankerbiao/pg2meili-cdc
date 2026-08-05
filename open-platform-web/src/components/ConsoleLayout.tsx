@@ -1,4 +1,4 @@
-import { Activity, AppWindow, ArrowLeft, Braces, KeyRound, Server } from 'lucide-react'
+import { Activity, AppWindow, ArrowLeft, Braces, KeyRound, Server, Users } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 
@@ -11,11 +11,12 @@ export function ConsoleLayout() {
         <div className="console-heading"><span className="status-dot" />{isAdmin ? '管理控制台' : '我的控制台'}</div>
         <nav aria-label="控制台导航">
           <NavLink to="/console/apps"><AppWindow size={17} />{isAdmin ? '应用与密钥' : '我的应用'}</NavLink>
+          <NavLink to="/console/api-playground"><Braces size={17} />API 调试</NavLink>
           {isAdmin && (
             <>
               <NavLink to="/console/agents"><Server size={17} />代理节点</NavLink>
               <NavLink to="/console/audit"><Activity size={17} />审计日志</NavLink>
-              <NavLink to="/console/api-playground"><Braces size={17} />API 调试</NavLink>
+              <NavLink to="/console/users"><Users size={17} />用户管理</NavLink>
             </>
           )}
         </nav>
