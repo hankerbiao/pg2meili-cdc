@@ -93,6 +93,8 @@ class TestOpenPlatform:
         assert response.status_code == 201, response.text
         result = response.json()["data"]
         assert result["app"]["app_name"] == "bootstrap-app"
+        # 请求体中的 owner_itcode 应被忽略，负责人强制为当前登录人（admin）
+        assert result["app"]["owner_itcode"] == "admin"
         assert [key["name"] for key in result["keys"]] == [
             "frontend-search",
             "backend-data",
@@ -119,6 +121,8 @@ class TestOpenPlatform:
             json={"app_name": "catalog", "display_name": "Catalog", "owner_itcode": "owner"},
         )
         app_id = app_response.json()["data"]["id"]
+        # create_app 同样强制负责人为当前登录人（admin），忽略请求体 owner_itcode
+        assert app_response.json()["data"]["owner_itcode"] == "admin"
         key_response = await platform_client.post(
             f"/api/v1/open-platform/apps/{app_id}/keys",
             headers={"X-CSRF-Token": csrf},

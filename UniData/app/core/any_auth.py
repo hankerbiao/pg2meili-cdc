@@ -17,10 +17,14 @@ from dataclasses import dataclass
 from typing import Literal
 
 from fastapi import Depends, Header, HTTPException, Request, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.admin_auth import SESSION_COOKIE, decode_admin_session
 from app.core.config import get_settings
+from app.core.database import get_db
 from app.core.oa_auth import decode_oa_session
+from app.models.oa import OaUser
 
 ROLE_ADMIN = "admin"
 ROLE_OA = "oa"
@@ -35,11 +39,18 @@ class AnySession:
     csrf_token: str | None = None  # 仅 admin 会话有值
 
 
-def get_any_session(request: Request) -> AnySession:
+async def get_any_session(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> AnySession:
     """任一有效会话即可；管理员优先（级别更高，身份以管理员为准）。
 
     注意：若管理员 cookie 存在但已过期/被篡改，decode_admin_session 会抛
     401，此时不再回退到 OA 会话，避免身份混淆。
+
+    OA 用户若已被管理员禁用（oa_users.status == 'disabled'），即使持有有效
+    会话也返回 401，拒绝其继续访问控制台（需重新登录才能生效；被禁后旧
+    会话在新请求时即被拦截）。
     """
     token = request.cookies.get(SESSION_COOKIE, "")
     if token:
@@ -54,6 +65,9 @@ def get_any_session(request: Request) -> AnySession:
     oa_token = request.cookies.get(settings.oa_cookie_name, "")
     if oa_token:
         oa = decode_oa_session(oa_token)
+        user = await db.scalar(select(OaUser).where(OaUser.itcode == oa.itcode))
+        if user is not None and getattr(user, "status", "active") == "disabled":
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="该账号已被禁用，请联系管理员")
         return AnySession(role=ROLE_OA, username=oa.itcode, name=oa.name, email=oa.email)
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="请先登录开放平台")
 
