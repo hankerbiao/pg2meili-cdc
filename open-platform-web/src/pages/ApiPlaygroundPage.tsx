@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { LoaderCircle, Send } from 'lucide-react'
+import { AlertTriangle, LoaderCircle, Send } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { CodeBlock } from '../components/CodeBlock'
 import {
@@ -11,6 +11,9 @@ import {
 } from '../api/openapi'
 
 const methodClass = (method: string) => `method method-${method.toLowerCase()}`
+
+// 调试台不提供 Agent、SDK 接口的调试（注册/下载类操作无需在此暴露）
+const HIDDEN_PLAYGROUND_TAGS = new Set(['agents', 'sdk'])
 
 function extractPathParams(path: string): string[] {
   return [...path.matchAll(/\{([^}]+)\}/g)].map((match) => match[1])
@@ -64,7 +67,10 @@ export function ApiPlaygroundPage() {
       return extractPublicOperations(await response.json())
     },
   })
-  const operations = useMemo(() => [...(query.data ?? []), regionalSearchOperation], [query.data])
+  const operations = useMemo(
+    () => [...(query.data ?? []).filter((item) => !HIDDEN_PLAYGROUND_TAGS.has(item.tag)), regionalSearchOperation],
+    [query.data],
+  )
   const [selectedId, setSelectedId] = useState('regional-search')
   const selected: PublicOperation =
     operations.find((item) => item.id === selectedId) ?? operations[0] ?? regionalSearchOperation
@@ -154,8 +160,16 @@ export function ApiPlaygroundPage() {
       <header className="playground-header">
         <div className="eyebrow">API PLAYGROUND</div>
         <h1>API 调试台</h1>
-        <p className="lead">直接调用 UniData 业务 API。粘贴你的 API Key，填写参数后发送，实时查看响应。</p>
+        <p className="lead">直接调用 UniData 业务 API（数据与索引接口）。粘贴你的 API Key，填写参数后发送，实时查看响应。</p>
       </header>
+
+      <div className="playground-warning" role="note">
+        <AlertTriangle size={18} />
+        <p>
+          <strong>真实写入提示：</strong>调试台发出的请求会<strong>真实调用线上 API 并写入数据库</strong>（创建 / 更新 / 删除文档、删除索引、修改索引设置等），
+          操作不可回滚。请使用测试数据（例如临时 collection）进行验证，谨慎操作。
+        </p>
+      </div>
 
       <div className="playground-grid">
         <aside className="playground-endpoints">
