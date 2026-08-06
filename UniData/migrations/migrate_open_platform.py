@@ -12,6 +12,7 @@ if ROOT_DIR not in sys.path:
 
 from app.core.database import engine  # noqa: E402
 from app.models import Base  # noqa: E402
+from app.services.tenant_service import ensure_collection_settings_rls  # noqa: E402
 from migrations.migrate_document_tenancy import (  # noqa: E402
     apply_document_tenancy_migration,
 )
@@ -42,6 +43,7 @@ MIGRATION_VERSION = "20260730_open_platform_api_keys"
 MIGRATION_VERSION_OA_USER_STATUS = "20260805_oa_user_status"
 MIGRATION_VERSION_COLLECTION_SETTINGS = "20260805_collection_settings"
 MIGRATION_VERSION_COLLECTION_SETTINGS_EXTEND = "20260805_collection_settings_extend"
+MIGRATION_VERSION_COLLECTION_SETTINGS_RLS = "20260806_collection_settings_rls"
 
 
 async def migrate() -> None:
@@ -93,6 +95,14 @@ async def migrate() -> None:
                 "ON CONFLICT (version) DO NOTHING"
             ),
             {"version": MIGRATION_VERSION_COLLECTION_SETTINGS_EXTEND},
+        )
+        await ensure_collection_settings_rls(connection)
+        await connection.execute(
+            text(
+                "INSERT INTO unidata_schema_migrations (version) VALUES (:version) "
+                "ON CONFLICT (version) DO NOTHING"
+            ),
+            {"version": MIGRATION_VERSION_COLLECTION_SETTINGS_RLS},
         )
         await apply_document_tenancy_migration(connection)
         await apply_physical_tenancy_migration(connection)

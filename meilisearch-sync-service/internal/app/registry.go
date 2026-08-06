@@ -30,7 +30,8 @@ func BuildHandlers(topics Topics, meiliClient meilisearch.ServiceManager, regist
 		handlers[topic] = handler
 	}
 
-	cdcHandler := service.DebeziumHandler{MeiliClient: meiliClient}
+	// registry 同时充当租户状态门禁：跳过已回收租户的 CDC 消息，防止索引复活。
+	cdcHandler := service.DebeziumHandler{MeiliClient: meiliClient, TenantGate: registry}
 	for _, topic := range topics.CDC {
 		register(topic, cdcHandler)
 	}

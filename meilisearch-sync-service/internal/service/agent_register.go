@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -23,13 +24,51 @@ type agentRegisterPayload struct {
 	Meta     map[string]interface{} `json:"meta,omitempty"`
 }
 
-// RegisterAgent 尝试向 UniData 注册代理节点信息。
-// 若 UNIDATA_URL 未配置，则直接跳过。
+// RegisterAgent 执行一次代理注册请求，保留给一次性调用方使用。
 func RegisterAgent(cfg config.AppConfig) {
 	if strings.TrimSpace(cfg.UniDataURL) == "" {
 		log.Printf("未配置 UNIDATA_URL，跳过代理注册")
 		return
 	}
+	if err := registerAgent(context.Background(), cfg); err != nil {
+		log.Printf("代理注册失败: %v", err)
+	}
+}
+
+// RegisterAgentLoop 在服务运行期间重试注册，直到成功或收到退出信号。
+func RegisterAgentLoop(ctx context.Context, cfg config.AppConfig) {
+	if strings.TrimSpace(cfg.UniDataURL) == "" {
+		log.Printf("未配置 UNIDATA_URL，跳过代理注册")
+		return
+	}
+
+	backoff := time.Second
+	for {
+		if err := registerAgent(ctx, cfg); err == nil {
+			return
+		} else if ctx.Err() != nil {
+			return
+		} else {
+			log.Printf("代理注册失败，将在 %s 后重试: %v", backoff, err)
+		}
+
+		timer := time.NewTimer(backoff)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+		if backoff < 30*time.Second {
+			backoff *= 2
+			if backoff > 30*time.Second {
+				backoff = 30 * time.Second
+			}
+		}
+	}
+}
+
+func registerAgent(ctx context.Context, cfg config.AppConfig) error {
 
 	agentIP := cfg.AgentIP
 	if agentIP == "" {
@@ -46,8 +85,7 @@ func RegisterAgent(cfg config.AppConfig) {
 	}
 
 	if agentIP == "" || agentPort == 0 {
-		log.Printf("代理注册信息不完整（AGENT_IP/HTTP_ADDR），跳过注册")
-		return
+		return fmt.Errorf("代理注册信息不完整（AGENT_IP/HTTP_ADDR）")
 	}
 
 	hostname := cfg.AgentName
@@ -84,30 +122,31 @@ func RegisterAgent(cfg config.AppConfig) {
 		Meta:     meta,
 	}
 
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("序列化代理注册请求失败: %w", err)
+	}
 	url := config.JoinURL(normalizeURL(cfg.UniDataURL), "api/v1/agents/register")
 
 	client := &http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		log.Printf("构造代理注册请求失败: %v", err)
-		return
+		return fmt.Errorf("构造代理注册请求失败: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Agent-Token", cfg.AgentRegistrationToken)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("代理注册请求失败: %v", err)
-		return
+		return fmt.Errorf("代理注册请求失败: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		log.Printf("代理注册成功 region=%s base_url=%s", cfg.RegionID, publicURL)
-		return
+		return nil
 	}
-	log.Printf("代理注册失败 status=%d", resp.StatusCode)
+	return fmt.Errorf("代理注册响应状态码=%d", resp.StatusCode)
 }
 
 func parsePort(addr string) (int, error) {

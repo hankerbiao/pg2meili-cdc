@@ -3,7 +3,11 @@ set -euo pipefail
 
 # Runs only when the PostgreSQL data directory is first initialized.
 # The app role owns business tables and tenant schemas (non-superuser, RLS applies).
-# The CDC role is the Debezium logical replication account.
+# The CDC role is the Debezium logical replication account. BYPASSRLS lets its
+# initial snapshot SELECT read every tenant's search_outbox rows (WAL-based
+# pgoutput streaming is not subject to RLS anyway); UniData additionally creates
+# an outbox_cdc_full_read SELECT policy for this role as an idempotent fallback
+# for deployments where this init script already ran.
 app_role="${UNIDATA_PG_USER:-unidata_app}"
 app_password="${UNIDATA_PG_PASSWORD:-change-me}"
 cdc_role="${CDC_PG_USER:-unidata_cdc}"
@@ -33,11 +37,11 @@ fi
 if role_exists "${cdc_role}"; then
   psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" \
     --set=unidata_cdc_password="${cdc_password}" \
-    -c "ALTER ROLE \"${cdc_role}\" LOGIN REPLICATION PASSWORD :'unidata_cdc_password'"
+    -c "ALTER ROLE \"${cdc_role}\" LOGIN REPLICATION BYPASSRLS PASSWORD :'unidata_cdc_password'"
 else
   psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" \
     --set=unidata_cdc_password="${cdc_password}" \
-    -c "CREATE ROLE \"${cdc_role}\" LOGIN REPLICATION PASSWORD :'unidata_cdc_password'"
+    -c "CREATE ROLE \"${cdc_role}\" LOGIN REPLICATION BYPASSRLS PASSWORD :'unidata_cdc_password'"
 fi
 
 psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" <<SQL

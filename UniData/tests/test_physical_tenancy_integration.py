@@ -163,6 +163,10 @@ async def test_rls_blocks_cross_tenant_direct_access(db_session: AsyncSession):
     await db_session.execute(
         text(f'GRANT USAGE ON SCHEMA public TO "{role}", "{limited_role}"')
     )
+    # outbox 启用 RLS 后，业务角色在自身租户上下文之外同样看不到其它租户的 CDC 行。
+    await db_session.execute(
+        text(f'GRANT SELECT ON public.search_outbox TO "{role}", "{limited_role}"')
+    )
     await db_session.commit()
 
     engine = create_async_engine(
@@ -200,12 +204,32 @@ async def test_rls_blocks_cross_tenant_direct_access(db_session: AsyncSession):
                     ),
                     {"id": "forbidden", "app_id": app_a_id},
                 )
+            # outbox RLS：B 的租户上下文看不到 A 的 outbox 行，切到 A 上下文后可见。
+            count = await conn.scalar(
+                text("SELECT count(*) FROM public.search_outbox WHERE app_id = :app_id"),
+                {"app_id": app_a_id},
+            )
+            assert count == 0
+            await conn.execute(
+                text("SELECT set_config('app.tenant_id', :app_id, true)"),
+                {"app_id": app_a_id},
+            )
+            count = await conn.scalar(
+                text("SELECT count(*) FROM public.search_outbox WHERE app_id = :app_id"),
+                {"app_id": app_a_id},
+            )
+            assert count == 1
 
         async with limited_engine.begin() as conn:
             with pytest.raises(Exception):
                 await conn.execute(
                     text(f'SELECT id FROM "{schema_a}".uni_documents')
                 )
+            count = await conn.scalar(
+                text("SELECT count(*) FROM public.search_outbox WHERE app_id = :app_id"),
+                {"app_id": app_b_id},
+            )
+            assert count == 0
     finally:
         await engine.dispose()
         await limited_engine.dispose()

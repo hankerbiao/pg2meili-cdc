@@ -68,6 +68,20 @@ func (r *Registry) Lookup(ctx context.Context, keyID string) (auth.KeyRecord, au
 	return key, app, nil
 }
 
+// AppStatus 返回本地注册表中应用的状态。记录不存在时返回 ("", false, nil)，
+// 供 CDC 消费端做租户状态门禁：已删除/删除中的应用不再写入 Meilisearch，
+// 避免在途消息复活已回收租户的索引。
+func (r *Registry) AppStatus(ctx context.Context, appID string) (string, bool, error) {
+	var app auth.AppRecord
+	if err := r.getRecord(ctx, appPrefix+appID, &app); err != nil {
+		if errors.Is(err, auth.ErrInvalidAPIKey) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return app.Status, true, nil
+}
+
 func (r *Registry) getRecord(ctx context.Context, redisKey string, out interface{}) error {
 	raw, err := r.redis.Get(ctx, redisKey).Bytes()
 	if errors.Is(err, redis.Nil) {
@@ -82,7 +96,7 @@ func (r *Registry) getRecord(ctx context.Context, redisKey string, out interface
 func (r *Registry) Apply(ctx context.Context, payload []byte) error {
 	var event Event
 	if err := json.Unmarshal(payload, &event); err != nil {
-		return fmt.Errorf("解析 API Key 事件: %w", err)
+		return permanent(fmt.Errorf("解析 API Key 事件: %w", err))
 	}
 	switch event.Event {
 	case "app.upsert":
@@ -90,20 +104,20 @@ func (r *Registry) Apply(ctx context.Context, payload []byte) error {
 	case "key.upsert", "key.revoked":
 		return r.storeKey(ctx, auth.KeyRecord{ID: event.KeyID, AppID: event.AppID, AppName: event.AppName, SecretHash: event.SecretHash, Scopes: event.Scopes, Status: event.Status, ExpiresAt: event.ExpiresAt, Version: event.ResourceVersion})
 	default:
-		return fmt.Errorf("未知 API Key 事件 %q", event.Event)
+		return permanent(fmt.Errorf("未知 API Key 事件 %q", event.Event))
 	}
 }
 
 func (r *Registry) storeApp(ctx context.Context, record auth.AppRecord) error {
 	if record.ID == "" || record.Version <= 0 {
-		return fmt.Errorf("应用事件缺少标识或版本")
+		return permanent(fmt.Errorf("应用事件缺少标识或版本"))
 	}
 	return r.storeNewer(ctx, appPrefix+record.ID, record.Version, record)
 }
 
 func (r *Registry) storeKey(ctx context.Context, record auth.KeyRecord) error {
 	if record.ID == "" || record.AppID == "" || record.Version <= 0 {
-		return fmt.Errorf("Key 事件缺少标识、应用或版本")
+		return permanent(fmt.Errorf("Key 事件缺少标识、应用或版本"))
 	}
 	return r.storeNewer(ctx, keyPrefix+record.ID, record.Version, record)
 }

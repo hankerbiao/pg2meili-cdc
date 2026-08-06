@@ -142,6 +142,23 @@ func TestV1SearchHandlerRejectsInvalidCollection(t *testing.T) {
 	assertV1ErrorCode(t, response, "INVALID_COLLECTION", false)
 }
 
+func TestV1SearchHandlerRejectsNullBody(t *testing.T) {
+	handler := NewV1SearchHandler(config.AppConfig{}, handlerCredentialStore{})
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/collections/items/search",
+		strings.NewReader("null"),
+	)
+	request.Header.Set("Authorization", "Bearer "+testAPIKey())
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+	assertV1ErrorCode(t, response, "INVALID_JSON", false)
+}
+
 func TestV1SearchHandlerMapsBackendUnavailable(t *testing.T) {
 	originalClient := searchHTTPClient
 	searchHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {

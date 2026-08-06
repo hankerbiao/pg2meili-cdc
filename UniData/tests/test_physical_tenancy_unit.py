@@ -3,10 +3,11 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.tenant import index_uid, set_tenant_context, tenant_schema, tenant_schema_map
+from app.core.tenant import TenantContext, index_uid, set_tenant_context, tenant_schema, tenant_schema_map
 from migrations.migrate_physical_tenancy import apply_physical_tenancy_migration
-from app.services.tenant_service import provision_tenant
+from app.services.tenant_service import ensure_collection_settings_rls, ensure_tenant, provision_tenant
 
 
 def test_tenant_names_are_stable_and_app_scoped():
@@ -26,6 +27,14 @@ def test_index_uid_rejects_invalid_collection():
 
 def test_tenant_schema_map_targets_tenant_schema():
     assert tenant_schema_map("app-a") == {None: tenant_schema("app-a")}
+
+
+def test_tenant_context_normalizes_app_id():
+    context = TenantContext(" app-a ")
+    assert context.app_id == "app-a"
+    assert context.schema == tenant_schema("app-a")
+    with pytest.raises(ValueError):
+        TenantContext(" ")
 
 
 async def test_set_tenant_context_sets_transaction_locals():
@@ -48,11 +57,30 @@ async def test_provision_tenant_creates_rls_and_trigger():
         call.args[0].text for call in db.execute.await_args_list
     )
     assert 'CREATE SCHEMA IF NOT EXISTS "tenant_' in statements
+    assert "pg_advisory_xact_lock(hashtext(:schema))" in statements
     assert "ENABLE ROW LEVEL SECURITY" in statements
     assert "FORCE ROW LEVEL SECURITY" in statements
     assert "tenant_isolation" in statements
+    assert "outbox_tenant_isolation" in statements
+    assert "ALTER TABLE public.search_outbox ENABLE ROW LEVEL SECURITY" in statements
     assert "CREATE TRIGGER emit_search_outbox" in statements
     assert "CREATE TABLE IF NOT EXISTS public.search_outbox" in statements
+
+
+async def test_collection_settings_rls_is_enabled():
+    db = AsyncMock()
+    await ensure_collection_settings_rls(db)
+    statements = " ".join(call.args[0].text for call in db.execute.await_args_list)
+    assert "ALTER TABLE public.collection_settings ENABLE ROW LEVEL SECURITY" in statements
+    assert "FORCE ROW LEVEL SECURITY" in statements
+    assert "collection_settings_tenant_isolation" in statements
+
+
+async def test_unknown_app_cannot_create_orphan_tenant():
+    db = AsyncMock(spec=AsyncSession)
+    db.get.return_value = None
+    with pytest.raises(ValueError, match="应用不存在"):
+        await ensure_tenant(db, "missing-app")
 
 
 async def test_physical_tenancy_migration_is_idempotent():

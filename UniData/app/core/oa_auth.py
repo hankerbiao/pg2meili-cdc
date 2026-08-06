@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, Request, status
 
+from app.core.admin_auth import get_session_secret
 from app.core.config import get_settings
 
 # OA 回调 JWT 允许的时钟偏差（秒）。吸收 springboard 与本网服务时钟的微小不一致，
@@ -72,6 +73,7 @@ def _profile_email(profile: dict) -> str:
 def create_oa_session(itcode: str, profile: dict) -> tuple[str, OaSession]:
     """生成 OA 会话签名 token 与 OaSession 元信息。"""
     settings = get_settings()
+    secret = get_session_secret()
     now = int(time.time())
     session = OaSession(
         itcode=itcode,
@@ -86,18 +88,18 @@ def create_oa_session(itcode: str, profile: dict) -> tuple[str, OaSession]:
         ).encode()
     )
     signature = _b64encode(
-        hmac.new(settings.open_platform_session_secret.encode(), payload.encode(), hashlib.sha256).digest()
+        hmac.new(secret.encode(), payload.encode(), hashlib.sha256).digest()
     )
     return f"{payload}.{signature}", session
 
 
 def decode_oa_session(token: str) -> OaSession:
     """校验 OA 会话 token（HMAC + 过期），失败抛 401。"""
-    settings = get_settings()
+    secret = get_session_secret()
     try:
         payload, signature = token.split(".", 1)
         expected = _b64encode(
-            hmac.new(settings.open_platform_session_secret.encode(), payload.encode(), hashlib.sha256).digest()
+            hmac.new(secret.encode(), payload.encode(), hashlib.sha256).digest()
         )
         if not hmac.compare_digest(signature, expected):
             raise ValueError

@@ -261,7 +261,7 @@ func readV1SearchBody(w http.ResponseWriter, r *http.Request) ([]byte, *searchRe
 
 	request := make(map[string]interface{})
 	if len(bytes.TrimSpace(body)) > 0 {
-		if err := json.Unmarshal(body, &request); err != nil {
+		if err := json.Unmarshal(body, &request); err != nil || request == nil {
 			return nil, &searchRequestFailure{
 				Status:  http.StatusBadRequest,
 				Code:    "INVALID_JSON",

@@ -79,16 +79,18 @@ func (a *App) Run(ctx context.Context) error {
 		a.cfg.RegionID, a.topics.CDC, a.topics.Command, a.topics.APIKey, a.cfg.DLQTopic, a.cfg.GroupID, a.cfg.Brokers, a.cfg.MeiliHost, a.cfg.Debug,
 	)
 
-	// 5. 启动时向 UniData 注册本机代理信息（若配置了 UNIDATA_URL），
-	// 便于管理端发现并展示当前可用的搜索代理节点。
-	service.RegisterAgent(a.cfg)
-
-	// 6. 创建对外 HTTP 服务，提供 /search 代理与 /health 健康检查接口。
+	// 5. 创建对外 HTTP 服务，提供 /search 代理与 /health 健康检查接口。
 	server := newHTTPServer(a.cfg, keyRegistry)
 
-	// 7. 使用 errgroup 并发管理 HTTP 服务与 Kafka 消费循环，
+	// 6. 使用 errgroup 并发管理 HTTP 服务、注册重试与 Kafka 消费循环，
 	// 任一子协程返回错误都会导致整体退出。
 	g, ctx := errgroup.WithContext(ctx)
+
+	// 注册失败不影响本地搜索服务启动，但会在后台退避重试，直到中心服务可用。
+	g.Go(func() error {
+		service.RegisterAgentLoop(ctx, a.cfg)
+		return nil
+	})
 
 	g.Go(func() error {
 		log.Printf("HTTP 服务启动，监听地址 %s", server.Addr)
@@ -105,10 +107,10 @@ func (a *App) Run(ctx context.Context) error {
 		return service.Run(ctx, client, a.cfg, handlers)
 	})
 
-	// 8. 等待外部 ctx 被取消（例如收到中断信号）。
+	// 7. 等待外部 ctx 被取消（例如收到中断信号）。
 	<-ctx.Done()
 
-	// 9. 在限定时间内优雅关闭 HTTP 服务，避免强制中断正在处理的请求。
+	// 8. 在限定时间内优雅关闭 HTTP 服务，避免强制中断正在处理的请求。
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {

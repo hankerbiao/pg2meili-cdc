@@ -1,10 +1,14 @@
 """应用租户 PostgreSQL schema 的生命周期管理。"""
 from __future__ import annotations
 
+import re
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.tenant import tenant_schema
+from app.models.open_platform import OpenPlatformApp
 
 
 def _schema_sql(schema: str) -> str:
@@ -14,8 +18,34 @@ def _schema_sql(schema: str) -> str:
     return schema
 
 
+_CDC_ROLE_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _cdc_outbox_policy_sql(cdc_role: str) -> tuple[str, str]:
+    """为 Debezium 复制角色创建 outbox 全量读策略（快照阶段需绕过 RLS）。"""
+    if not _CDC_ROLE_PATTERN.fullmatch(cdc_role):
+        raise ValueError("search_outbox_cdc_role 必须是合法的 PostgreSQL 角色名")
+    return (
+        "DROP POLICY IF EXISTS outbox_cdc_full_read ON public.search_outbox",
+        # 角色可能尚未创建（如单元测试库），存在才建策略，避免 DDL 失败。
+        f"""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{cdc_role}') THEN
+                EXECUTE format(
+                    'CREATE POLICY outbox_cdc_full_read ON public.search_outbox '
+                    'FOR SELECT TO %I USING (true)',
+                    '{cdc_role}'
+                );
+            END IF;
+        END
+        $$
+        """,
+    )
+
+
 async def ensure_search_outbox(db: AsyncSession) -> None:
-    """创建公共 outbox、序列和可复用的触发器函数。"""
+    """创建公共 outbox、序列、可复用的触发器函数，并启用 outbox 的 RLS。"""
     statements = (
         """
         CREATE SEQUENCE IF NOT EXISTS public.search_outbox_event_version_seq
@@ -57,6 +87,17 @@ async def ensure_search_outbox(db: AsyncSession) -> None:
         $$
         """,
         "CREATE INDEX IF NOT EXISTS ix_search_outbox_route ON public.search_outbox (app_id, collection, event_version)",
+        # outbox 是全租户共享的 CDC 传输表：业务角色（含表 owner）经 RLS 只能读自己
+        # 租户的行，防止共享连接角色被注入后拖走全部租户文档；Debezium 复制角色由
+        # outbox_cdc_full_read 策略豁免（pgoutput 流式解码不受 RLS 影响，但快照 SELECT 需要）。
+        "ALTER TABLE public.search_outbox ENABLE ROW LEVEL SECURITY",
+        "ALTER TABLE public.search_outbox FORCE ROW LEVEL SECURITY",
+        "DROP POLICY IF EXISTS outbox_tenant_isolation ON public.search_outbox",
+        """
+        CREATE POLICY outbox_tenant_isolation ON public.search_outbox
+        USING (app_id = current_setting('app.tenant_id', true))
+        WITH CHECK (app_id = current_setting('app.tenant_id', true))
+        """,
         """
         CREATE OR REPLACE FUNCTION public.emit_search_outbox()
         RETURNS TRIGGER
@@ -107,6 +148,26 @@ async def ensure_search_outbox(db: AsyncSession) -> None:
         $function$
         """,
     )
+    cdc_role = (get_settings().search_outbox_cdc_role or "").strip()
+    if cdc_role:
+        statements = statements + _cdc_outbox_policy_sql(cdc_role)
+    for statement in statements:
+        await db.execute(text(statement))
+
+
+async def ensure_collection_settings_rls(db: AsyncSession) -> None:
+    """为公共控制表增加租户级读写约束。"""
+    statements = (
+        "ALTER TABLE public.collection_settings ENABLE ROW LEVEL SECURITY",
+        "ALTER TABLE public.collection_settings FORCE ROW LEVEL SECURITY",
+        "DROP POLICY IF EXISTS collection_settings_tenant_isolation ON public.collection_settings",
+        """
+        CREATE POLICY collection_settings_tenant_isolation
+        ON public.collection_settings
+        USING (app_id = current_setting('app.tenant_id', true))
+        WITH CHECK (app_id = current_setting('app.tenant_id', true))
+        """,
+    )
     for statement in statements:
         await db.execute(text(statement))
 
@@ -126,6 +187,8 @@ async def tenant_exists(db: AsyncSession, app_id: str) -> bool:
 async def ensure_tenant(db: AsyncSession, app_id: str) -> str:
     """按会话懒初始化历史租户，避免旧应用在迁移窗口内访问失败。"""
     schema = _schema_sql(tenant_schema(app_id))
+    if isinstance(db, AsyncSession) and await db.get(OpenPlatformApp, app_id) is None:
+        raise ValueError(f"应用不存在，不能初始化租户: {app_id}")
     if not await tenant_exists(db, app_id):
         await provision_tenant(db, app_id)
     return schema
@@ -134,6 +197,12 @@ async def ensure_tenant(db: AsyncSession, app_id: str) -> str:
 async def provision_tenant(db: AsyncSession, app_id: str) -> str:
     """幂等创建租户 schema、文档表、RLS 和 CDC trigger。"""
     schema = _schema_sql(tenant_schema(app_id))
+    # 并发懒初始化同一租户时串行化 DDL：即使 IF NOT EXISTS，并发 CREATE TABLE /
+    # DROP+CREATE POLICY 仍可能因 pg_type 唯一约束等竞争而失败。
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:schema))"),
+        {"schema": schema},
+    )
     await ensure_search_outbox(db)
     ddl = (
         f'CREATE SCHEMA IF NOT EXISTS "{schema}"',

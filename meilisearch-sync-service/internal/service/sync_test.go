@@ -169,3 +169,80 @@ func TestWaitForTaskChecksFinalStatus(t *testing.T) {
 		})
 	}
 }
+
+type fakeTenantGate struct {
+	status string
+	found  bool
+	err    error
+}
+
+func (g fakeTenantGate) AppStatus(_ context.Context, _ string) (string, bool, error) {
+	return g.status, g.found, g.err
+}
+
+func TestTenantGateSkipsRetiredTenants(t *testing.T) {
+	for _, status := range []string{"deleting", "deleted"} {
+		t.Run(status, func(t *testing.T) {
+			handler := DebeziumHandler{TenantGate: fakeTenantGate{status: status, found: true}}
+			record := &kgo.Record{Topic: "pg.public.search_outbox", Partition: 0, Offset: 1}
+			skip, err := handler.tenantGateDecision(
+				context.Background(),
+				record,
+				map[string]interface{}{"app_id": "app-x"},
+			)
+			if err != nil {
+				t.Fatalf("tenantGateDecision() error = %v", err)
+			}
+			if !skip {
+				t.Fatalf("expected message for %s tenant to be skipped", status)
+			}
+		})
+	}
+}
+
+func TestTenantGateAllowsActiveTenant(t *testing.T) {
+	handler := DebeziumHandler{TenantGate: fakeTenantGate{status: "active", found: true}}
+	skip, err := handler.tenantGateDecision(
+		context.Background(),
+		&kgo.Record{},
+		map[string]interface{}{"app_id": "app-x"},
+	)
+	if err != nil || skip {
+		t.Fatalf("active tenant should be allowed, skip=%v err=%v", skip, err)
+	}
+}
+
+func TestTenantGateRetriesUnknownTenant(t *testing.T) {
+	handler := DebeziumHandler{TenantGate: fakeTenantGate{found: false}}
+	_, err := handler.tenantGateDecision(
+		context.Background(),
+		&kgo.Record{},
+		map[string]interface{}{"app_id": "app-x"},
+	)
+	if err == nil {
+		t.Fatal("unknown tenant should be retried")
+	}
+}
+
+func TestTenantGatePropagatesRegistryError(t *testing.T) {
+	handler := DebeziumHandler{TenantGate: fakeTenantGate{err: errors.New("redis unavailable")}}
+	_, err := handler.tenantGateDecision(
+		context.Background(),
+		&kgo.Record{},
+		map[string]interface{}{"app_id": "app-x"},
+	)
+	if err == nil {
+		t.Fatal("expected registry error to propagate for retry")
+	}
+}
+
+func TestTenantGateIgnoresMissingRoutingField(t *testing.T) {
+	handler := DebeziumHandler{TenantGate: fakeTenantGate{status: "deleted", found: true}}
+	skip, err := handler.tenantGateDecision(context.Background(), &kgo.Record{}, map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("tenantGateDecision() error = %v", err)
+	}
+	if skip {
+		t.Fatal("message without app_id should be left for ResolveIndex handling")
+	}
+}

@@ -8,6 +8,7 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.tenant import set_tenant_context
 from app.models.collection_settings import CollectionSettings
 from app.repositories.document_repository import document_repository
 from app.schemas.document import CollectionDetail, CollectionSettingsUpdate
@@ -78,7 +79,7 @@ class CollectionService:
         # 下发到 Meilisearch（实际态由 Kafka 命令驱动）。Kafka 不可用时仅记录告警，
         # 不阻断「期望态」落库——控制台配置以 UniData 为准，后续可经 Kafka 补发。
         try:
-            index_service.update_index_settings(
+            await index_service.update_index_settings_async(
                 app_id=app_id,
                 app_name=app_name,
                 collection=collection,
@@ -123,6 +124,7 @@ class CollectionService:
     async def _load_settings(
         db: AsyncSession, app_id: str, collection: str
     ) -> CollectionSettings | None:
+        await set_tenant_context(db, app_id)
         stmt = select(CollectionSettings).where(
             CollectionSettings.app_id == app_id,
             CollectionSettings.collection == collection,
@@ -135,6 +137,7 @@ class CollectionService:
     ) -> dict[str, CollectionSettings]:
         if not collections:
             return {}
+        await set_tenant_context(db, app_id)
         stmt = select(CollectionSettings).where(
             CollectionSettings.app_id == app_id,
             CollectionSettings.collection.in_(collections),

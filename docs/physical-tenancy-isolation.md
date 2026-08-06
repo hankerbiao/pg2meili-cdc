@@ -75,9 +75,11 @@ Go 侧：`model.IndexUID(appID, collection)`（`internal/model/model.go`）、�
 
 ### 4.3 RLS
 
-租户表 `ENABLE` + `FORCE ROW LEVEL SECURITY`，策略 `USING/WITH CHECK (app_id = current_setting('app.tenant_id', true))`。
+租户表与公共 `search_outbox` 均 `ENABLE` + `FORCE ROW LEVEL SECURITY`，策略 `USING/WITH CHECK (app_id = current_setting('app.tenant_id', true))`。`FORCE` 使表 owner（共享业务角色）也受约束，连接池复用不会跨租户读到数据。
 
 访问原则：API Key 鉴权只查控制面；文档 CRUD/集合统计/索引管理必须走租户上下文；管理员访问租户数据也须显式指定 `app_id`；**业务数据库角色须为普通角色（非超级用户），否则 RLS 被绕过**。
+
+outbox 豁免：Debezium 复制角色经 `outbox_cdc_full_read` 策略（`FOR SELECT ... USING (true)`，按 `SEARCH_OUTBOX_CDC_ROLE` 配置、角色存在时幂等创建）或角色级 `BYPASSRLS` 读取全量 outbox——pgoutput 流式解码不受 RLS 影响，但 `snapshot.mode=always` 的初始快照 SELECT 需要豁免。业务角色没有该豁免，注入后也只能读到自身租户的 outbox 行。
 
 ### 4.4 事务上下文
 
@@ -87,11 +89,13 @@ Go 侧：`model.IndexUID(appID, collection)`（`internal/model/model.go`）、�
 
 `public.search_outbox`（`ensure_search_outbox()` 幂等创建/修复）字段：`event_id`、`app_id`、`collection`、`document_id`、`operation`(upsert/delete)、`document`(JSONB)、`event_version`(BIGINT 序列)、`created_at`。`app_id/collection/document_id` 为强制路由字段，缺失触发器的 DDL 直接报错。
 
-触发器 `emit_search_outbox`（`AFTER INSERT/UPDATE/DELETE`）调公共函数 `public.emit_search_outbox`：INSERT/UPDATE(`is_delete=false`)→`upsert`；UPDATE(`is_delete=true`)/DELETE→`delete`。业务行变更与 outbox 写入同事务，提交/回滚一致。
+触发器 `emit_search_outbox`（`AFTER INSERT/UPDATE/DELETE`）调公共函数 `public.emit_search_outbox`：INSERT/UPDATE(`is_delete=false`)→`upsert`；UPDATE(`is_delete=true`)/DELETE→`delete`。业务行变更与 outbox 写入同事务，提交/回滚一致。函数为 `SECURITY DEFINER`，outbox 的 `WITH CHECK` 依赖调用方事务内已设置 `app.tenant_id`（正常请求流与迁移均已设置）。
 
 Debezium 配置：connector `pg-search-outbox-connector`、slot `unidata_search_outbox_slot`、publication `unidata_search_outbox_pub`、`table.include.list=public.search_outbox`、`plugin.name=pgoutput`、`snapshot.mode=always`、topic `pg.public.search_outbox`（见 `docker/register-connector.sh`、`meilisearch-sync-service/.env.example`）。Debezium 不再直连租户业务表。
 
-Go 同步（`internal/service/sync.go`）：识别 `payload.after.operation`；upsert 强制注入 `id/app_id/collection`，delete 只删当前租户 index 的当前文档；`ResolveIndex()` 由 `app_id+collection` 重算 index UID，不信任消息中的 `index_uid`；缺路由字段/非法 operation 进 DLQ；日志记 app_id/collection 不记完整业务文档。`MeiliCommandHandler` 校验命令 `index_uid` 与 `model.IndexUID(app_id, collection)` 一致，否则进永久错误/DLQ；支持 `update_settings`/`delete_index`。幂等当前依赖 Kafka at-least-once + Meilisearch upsert/delete 天然幂等（`event_id` 已进事件模型，去重表未实现，见 §11）。
+Go 同步（`internal/service/sync.go`）：识别 `payload.after.operation`；upsert 强制注入 `id/app_id/collection`，delete 只删当前租户 index 的当前文档；`ResolveIndex()` 由 `app_id+collection` 重算 index UID，不信任消息中的 `index_uid`；缺路由字段/非法 operation 进 DLQ；日志记 app_id/collection 不记完整业务文档。`MeiliCommandHandler` 校验命令 `index_uid` 与 `model.IndexUID(app_id, collection)` 一致，否则进永久错误/DLQ；支持 `update_settings`/`delete_index`。
+
+租户状态门禁（`internal/service/handlers.go` 的 `TenantGate`）：消费端写 Meilisearch 前向本地 API Key 注册表查询 app 状态，`deleting`/`deleted` 的应用直接跳过该消息（并记日志），防止删应用后在途 CDC 消息复活已回收索引；注册表不可用或记录不存在时均返回可重试错误（fail-closed），等待应用状态事件到达。幂等当前依赖 Kafka at-least-once + Meilisearch upsert/delete 天然幂等（`event_id` 已进事件模型，去重表未实现，见 §11）。
 
 ## 6. Meilisearch 索引与搜索代理
 
@@ -101,9 +105,9 @@ Go 同步（`internal/service/sync.go`）：识别 `payload.after.operation`；u
 
 ## 7. 应用与租户生命周期
 
-**创建**（`open_platform_service.create_app`）：写 `open_platform_apps`→`provision_tenant()`（确保 outbox + `CREATE SCHEMA` + 建表/索引/约束 + 启用 RLS + 装 CDC 触发器）→写 `app.upsert` outbox→写审计→事务提交后可见。失败整体回滚；`provision_tenant()` 幂等可重试。
+**创建**（`open_platform_service.create_app`）：写 `open_platform_apps`→`provision_tenant()`（确保 outbox + `CREATE SCHEMA` + 建表/索引/约束 + 启用 RLS + 装 CDC 触发器；入口先取 `pg_advisory_xact_lock(hashtext(schema))` 串行化并发懒初始化）→写 `app.upsert` outbox→写审计→事务提交后可见。失败整体回滚；`provision_tenant()` 幂等可重试。
 
-**删除**（`DELETE /api/v1/open-platform/apps/{app_id}`）：状态置 `deleting`（立即拒绝新 Key）→撤销全部 active Key 并写 `key.revoked`→列 collection 发 `delete_index` Kafka 命令→`CASCADE` 删 schema→状态置 `deleted`+写 `app.delete` 审计（details 含已回收 collections）。`deleting` 状态因 API Key 鉴权要求 `app.status=='active'` 而立即切断写入/搜索；删索引命令失败不阻断 schema 回收，失败留审计待人工补发。前端入口在应用详情页。
+**删除**（`DELETE /api/v1/open-platform/apps/{app_id}`）：先提交 `deleting`（立即拒绝新 Key）→撤销全部 active Key 并写 `key.revoked`→分页列出含软删除文档的全部 collection 并发 `delete_index` Kafka 命令→`CASCADE` 删 schema→状态置 `deleted`+写 `app.delete` 审计。索引清理失败时保留 `deleting`，同一接口可安全重试；成功后才回收 schema。前端入口在应用详情页。
 
 ## 8. 数据库角色与部署
 
@@ -112,7 +116,7 @@ RLS 真正生效要求业务账号非超级用户。初始化脚本 `docker/post
 | 角色 | 用途 | 权限 |
 | --- | --- | --- |
 | `unidata_app` | 业务写入/DDL | LOGIN；CONNECT+CREATE；public USAGE+CREATE；业务表所有者（FORCE RLS 同样生效） |
-| `unidata_cdc` | Debezium 逻辑复制 | LOGIN+REPLICATION；CONNECT+CREATE；public USAGE；对 public 新表 SELECT 默认权限 |
+| `unidata_cdc` | Debezium 逻辑复制 | LOGIN+REPLICATION+BYPASSRLS；CONNECT+CREATE；public USAGE；对 public 新表 SELECT 默认权限；outbox 上另有 `outbox_cdc_full_read` 策略豁免 |
 
 注意：脚本仅 PostgreSQL 数据目录首次初始化时执行；已有数据卷不自动重跑，需重建数据卷或手动建角色授权。`.env.docker` 需配 `UNIDATA_PG_USER/PASSWORD`、`CDC_PG_USER/PASSWORD`，`PG_CONN_STRING` 指向 `unidata_app`；`register-connector.sh` 用 `CDC_PG_USER` 连接。
 
@@ -124,11 +128,11 @@ RLS 真正生效要求业务账号非超级用户。初始化脚本 `docker/post
 
 ## 10. 测试
 
-- Python：`tests/test_physical_tenancy_unit.py`、`test_document_tenancy_unit.py`、`test_physical_tenancy_integration.py`、`test_document_tenancy_integration.py`、`test_document_tenancy_migration.py`——覆盖命名稳定性、非法 collection、schema translate、事务上下文、RLS/trigger DDL、迁移幂等、RLS 拦非超户跨租户直查、触发器事件、outbox 同事务、provisioning 回滚、上下文不残留、删应用回收。
+- Python：`tests/test_physical_tenancy_unit.py`、`test_document_tenancy_unit.py`、`test_physical_tenancy_integration.py`、`test_document_tenancy_integration.py`、`test_document_tenancy_migration.py`——覆盖命名稳定性、非法 collection、schema translate、事务上下文、RLS/trigger DDL、advisory lock、迁移幂等、RLS 拦非超户跨租户直查（含 outbox 行）、触发器事件、outbox 同事务、provisioning 回滚、上下文不残留、删应用回收。
   ```bash
   cd UniData && TEST_PG_CONN_STRING=postgres://...@127.0.0.1:5432/unidata_test pytest -q
   ```
-- Go：`cd meilisearch-sync-service && go test ./...`——覆盖 `IndexUID` 稳定性、租户索引隔离、outbox 解析、缺路由字段进 DLQ、命令 `index_uid` 不匹配拒绝、删除不跨租户。
+- Go：`cd meilisearch-sync-service && go test ./...`——覆盖 `IndexUID` 稳定性、租户索引隔离、outbox 解析、缺路由字段进 DLQ、命令 `index_uid` 不匹配拒绝、删除不跨租户、租户状态门禁（deleting/deleted 跳过、注册表错误和未知租户均可重试）。
 - 前端：`cd open-platform-web && npm run build`。
 
 ## 11. 运维注意与后续工作
@@ -137,7 +141,8 @@ RLS 真正生效要求业务账号非超级用户。初始化脚本 `docker/post
 
 - 已有数据卷不自动执行角色初始化脚本；升级须手工建角色授权或重建数据卷。
 - 本地栈可能仍在旧 connector 配置下运行；应用新配置前需重建 `connect-init` 并确认 connector 名 `pg-search-outbox-connector`。
-- 删应用对 Meilisearch 删除命令为尽力而为；失败不回滚 schema，需据 `app.delete` 审计人工补发。
+- 删应用先提交 `deleting` 冻结状态，再清理索引和 schema；清理失败保留 `deleting`，可重试。完成迁移回滚窗口后，显式执行 `CONFIRM_DROP_LEGACY_DOCUMENTS=YES python -m migrations.drop_legacy_documents` 删除旧公共文档表。
+- 租户状态门禁对未知租户 fail-closed 并等待状态事件，避免应用状态事件与 CDC 事件跨 topic 传播时复活索引。
 
 **尚未自动化**：
 

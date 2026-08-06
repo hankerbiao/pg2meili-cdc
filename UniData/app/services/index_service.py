@@ -1,4 +1,5 @@
 """索引管理相关的业务服务层。"""
+import asyncio
 import time
 from typing import Dict, Any, List
 
@@ -88,6 +89,14 @@ class IndexService:
             action="delete_index",
             payload={},
         )
+
+    async def update_index_settings_async(self, **kwargs: Any) -> str:
+        """在线程池执行同步 Kafka 客户端，避免阻塞 FastAPI 事件循环。"""
+        return await asyncio.to_thread(self.update_index_settings, **kwargs)
+
+    async def delete_index_async(self, **kwargs: Any) -> str:
+        """在线程池执行同步 Kafka 客户端，避免阻塞 FastAPI 事件循环。"""
+        return await asyncio.to_thread(self.delete_index, **kwargs)
 
 
 index_service = IndexService()

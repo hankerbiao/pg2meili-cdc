@@ -16,7 +16,15 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-const maxPollRecords = 50
+const (
+	maxPollRecords = 50
+	retryBackoff   = time.Second
+)
+
+type recordPartition struct {
+	topic     string
+	partition int32
+}
 
 // Run 是消息处理的主循环函数，负责持续消费 Kafka 消息并同步到 Meilisearch。
 // handlers 由 App 层按 topic 注册，便于扩展不同类型的消息处理。
@@ -46,9 +54,15 @@ func Run(
 		// 整批处理完成后再提交，失败时允许 Kafka 重新投递。
 		iter := fetches.RecordIter()
 		var records []*kgo.Record
+		retry := false
+		blocked := make(map[recordPartition]struct{})
 
 		for !iter.Done() {
 			record := iter.Next()
+			partition := recordPartition{topic: record.Topic, partition: record.Partition}
+			if _, ok := blocked[partition]; ok {
+				continue
+			}
 
 			handler := handlers[record.Topic]
 			var handleErr error
@@ -60,7 +74,13 @@ func Run(
 
 			if handleErr != nil {
 				if !isPermanent(handleErr) {
-					return fmt.Errorf("处理可重试消息失败 topic=%s partition=%d offset=%d: %w", record.Topic, record.Partition, record.Offset, handleErr)
+					if ctx.Err() != nil {
+						return ctx.Err()
+					}
+					log.Printf("处理消息失败，将重试 topic=%s partition=%d offset=%d: %v", record.Topic, record.Partition, record.Offset, handleErr)
+					blocked[partition] = struct{}{}
+					retry = true
+					continue
 				}
 				log.Printf("永久消息错误，写入 DLQ: %v", handleErr)
 				if err := sendToDLQ(ctx, client, cfg, record, handleErr); err != nil {
@@ -73,6 +93,16 @@ func Run(
 		if len(records) > 0 {
 			if err := client.CommitRecords(ctx, records...); err != nil {
 				return fmt.Errorf("提交 Kafka offset 失败: %w", err)
+			}
+		}
+
+		if retry {
+			timer := time.NewTimer(retryBackoff)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			case <-timer.C:
 			}
 		}
 	}

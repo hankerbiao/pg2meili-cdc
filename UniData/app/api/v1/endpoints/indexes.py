@@ -55,7 +55,7 @@ async def delete_app_index(
         app_id=current_app.app_id,
         collection=collection,
     )
-    index_service.delete_index(
+    await index_service.delete_index_async(
         app_id=current_app.app_id,
         app_name=current_app.app_name,
         collection=collection,
@@ -78,7 +78,7 @@ async def update_index_settings(
     current_app: AppIdentity = Depends(get_current_app),
 ) -> ApiResponse[IndexSettingsResponse]:
     require_scopes(current_app, ["data:write"])
-    index_uid = index_service.update_index_settings(
+    index_uid = await index_service.update_index_settings_async(
         app_id=current_app.app_id,
         app_name=current_app.app_name,
         collection=collection,

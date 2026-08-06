@@ -16,10 +16,13 @@ type APIKeyEventHandler struct {
 
 func (h APIKeyEventHandler) Handle(ctx context.Context, record *kgo.Record) error {
 	if h.Registry == nil {
-		return fmt.Errorf("API Key registry 未初始化")
+		return permanent(fmt.Errorf("API Key registry 未初始化"))
 	}
 	if err := h.Registry.Apply(ctx, record.Value); err != nil {
-		return permanent(err)
+		if apikey.IsPermanent(err) {
+			return permanent(err)
+		}
+		return err
 	}
 	return nil
 }

@@ -1,5 +1,6 @@
 """通用文档数据库操作的仓储模块。"""
 import uuid
+from collections.abc import AsyncIterator
 from typing import Any
 
 from sqlalchemy import func, select, update
@@ -7,7 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document, utc_now
-from app.core.tenant import set_tenant_context, tenant_schema_map
+from app.core.tenant import TenantContext, set_tenant_context, tenant_schema_map
 from app.services.tenant_service import ensure_tenant
 
 
@@ -17,9 +18,10 @@ class DocumentRepository:
     @staticmethod
     async def _statement(db: AsyncSession, app_id: str, statement):
         if isinstance(db, AsyncSession):
-            await ensure_tenant(db, app_id)
-            await set_tenant_context(db, app_id)
-            return statement.execution_options(schema_translate_map=tenant_schema_map(app_id))
+            tenant = TenantContext(app_id)
+            await ensure_tenant(db, tenant.app_id)
+            await set_tenant_context(db, tenant)
+            return statement.execution_options(schema_translate_map=tenant_schema_map(tenant))
         return statement
 
     @staticmethod
@@ -130,11 +132,13 @@ class DocumentRepository:
         app_id: str,
         limit: int = 100,
         offset: int = 0,
+        include_deleted: bool = False,
     ) -> list[str]:
+        query = select(Document.collection).where(Document.app_id == app_id)
+        if not include_deleted:
+            query = query.where(Document.is_delete.is_(False))
         query = (
-            select(Document.collection)
-            .where(Document.app_id == app_id, Document.is_delete.is_(False))
-            .group_by(Document.collection)
+            query.group_by(Document.collection)
             .order_by(Document.collection.asc())
             .limit(limit)
             .offset(offset)
@@ -142,6 +146,29 @@ class DocumentRepository:
         result = await db.execute(await DocumentRepository._statement(db, app_id, query))
         rows = result.all()
         return [row[0] for row in rows]
+
+    @staticmethod
+    async def iter_collections_by_app(
+        db: AsyncSession,
+        app_id: str,
+        batch_size: int = 500,
+        include_deleted: bool = False,
+    ) -> AsyncIterator[str]:
+        """按批次枚举 collection，避免租户规模影响内存和删除完整性。"""
+        offset = 0
+        while True:
+            batch = await DocumentRepository.list_collections_by_app(
+                db,
+                app_id,
+                limit=batch_size,
+                offset=offset,
+                include_deleted=include_deleted,
+            )
+            for collection in batch:
+                yield collection
+            if len(batch) < batch_size:
+                return
+            offset += len(batch)
 
     @staticmethod
     async def get_collection_summaries(

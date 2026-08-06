@@ -1,10 +1,14 @@
 package app
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 
 	"meilisearch-sync-service/internal/apikey"
+	"meilisearch-sync-service/internal/config"
 	"meilisearch-sync-service/internal/service"
 )
 
@@ -52,4 +56,24 @@ func TestBuildHandlersRejectsDuplicateTopic(t *testing.T) {
 	}()
 
 	BuildHandlers(Topics{CDC: []string{"shared"}, Command: "shared"}, nil, nil)
+}
+
+func TestHealthReturnsJSON(t *testing.T) {
+	server := newHTTPServer(config.AppConfig{HTTPAddr: ":8091"}, nil)
+	request := httptest.NewRequest(http.MethodGet, "/health", nil)
+	response := httptest.NewRecorder()
+
+	server.Handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	var body struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("health response is not JSON: %v", err)
+	}
+	if body.Status != "healthy" {
+		t.Fatalf("health status = %q, want healthy", body.Status)
+	}
 }

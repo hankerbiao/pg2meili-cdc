@@ -45,9 +45,16 @@ type RecordHandler interface {
 	Handle(ctx context.Context, record *kgo.Record) error
 }
 
+// TenantGate 供 CDC 消费端查询租户应用状态，阻止已回收租户的在途消息复活索引。
+type TenantGate interface {
+	AppStatus(ctx context.Context, appID string) (status string, found bool, err error)
+}
+
 // DebeziumHandler 负责处理 CDC 数据写入/删除。
 type DebeziumHandler struct {
 	MeiliClient meilisearch.ServiceManager
+	// TenantGate 可选；为 nil 时不启用租户状态门禁（测试/单机场景）。
+	TenantGate TenantGate
 }
 
 const (
@@ -101,6 +108,18 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 		return nil
 	}
 
+	// 租户状态门禁：删除中/已删除的租户不再写入 Meilisearch。注册表不可用或
+	// 未找到租户时报错让 Kafka 重试（fail-closed），等待应用状态事件到达。
+	if h.TenantGate != nil {
+		skip, err := h.tenantGateDecision(ctx, record, doc)
+		if err != nil {
+			return err
+		}
+		if skip {
+			return nil
+		}
+	}
+
 	logger.DebugLogf("收到消息 topic=%s partition=%d offset=%d op=%s id=%s delID=%s", record.Topic, record.Partition, record.Offset, op, id, delID)
 
 	switch op {
@@ -111,7 +130,7 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 		}
 
 		if isDeleted(doc) {
-			logger.DebugLogf("执行标记删除触发物理删除 index=%s id=%s doc=%v", indexName, id, doc)
+			logger.DebugLogf("执行标记删除触发物理删除 index=%s id=%s", indexName, id)
 			if err := h.deleteDocument(ctx, indexName, id, "标记删除"); err != nil {
 				return err
 			}
@@ -125,7 +144,7 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 			delete(doc, "collection")
 			delete(doc, "is_delete")
 		}
-		logger.DebugLogf("执行插入/更新 index=%s id=%s doc=%v", indexName, id, doc)
+		logger.DebugLogf("执行插入/更新 index=%s id=%s", indexName, id)
 		task, err := h.MeiliClient.Index(indexName).AddDocumentsWithContext(
 			ctx,
 			[]map[string]interface{}{doc},
@@ -143,7 +162,7 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 		if indexName == "" {
 			return permanent(fmt.Errorf("删除消息缺少有效的 app_id 或 collection"))
 		}
-		logger.DebugLogf("执行硬删除 index=%s id=%s doc=%v", indexName, delID, doc)
+		logger.DebugLogf("执行硬删除 index=%s id=%s", indexName, delID)
 		if err := h.deleteDocument(ctx, indexName, delID, "硬删除"); err != nil {
 			return err
 		}
@@ -153,6 +172,30 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 	}
 
 	return nil
+}
+
+// tenantGateDecision 返回 (true, nil) 表示应跳过该消息。
+func (h DebeziumHandler) tenantGateDecision(ctx context.Context, record *kgo.Record, doc map[string]interface{}) (bool, error) {
+	appID, ok := nonEmptyString(doc["app_id"])
+	if !ok {
+		// 缺少路由字段时交由后续 ResolveIndex 报永久错误处理。
+		return false, nil
+	}
+	status, found, err := h.TenantGate.AppStatus(ctx, appID)
+	if err != nil {
+		return false, fmt.Errorf("查询租户状态失败 app=%s: %w", appID, err)
+	}
+	if found && (status == "deleting" || status == "deleted") {
+		logger.DebugLogf(
+			"跳过已停用租户的 CDC 消息 app=%s status=%s topic=%s partition=%d offset=%d",
+			appID, status, record.Topic, record.Partition, record.Offset,
+		)
+		return true, nil
+	}
+	if !found {
+		return false, fmt.Errorf("租户状态不存在 app=%s", appID)
+	}
+	return false, nil
 }
 
 // MeiliCommandHandler 负责处理索引设置与管理命令。

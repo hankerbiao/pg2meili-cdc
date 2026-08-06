@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     agent_online_ttl_seconds: int = 120
     agent_registration_token: str = ""
 
+    # search_outbox 的 CDC 读取角色（Debezium 快照 SELECT 需绕过 RLS）。
+    # 留空则不创建豁免策略：业务角色与复制角色都会被 RLS 限制（仅建议在非标准部署时留空）。
+    search_outbox_cdc_role: str = "unidata_cdc"
+
     # 开放平台管理员与会话配置
     open_platform_admin_username: str = "admin"
     open_platform_admin_password_hash: str = ""
