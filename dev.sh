@@ -8,7 +8,6 @@
 # 部署拓扑:
 #   - unidata 容器(8080): 镜像内 = open-platform-web 前端 dist + UniData 后端
 #   - meilisearch-sync-service(Go): 宿主进程, 不在 docker-compose 内
-#   - 旧前端 frontend/(search-tester): 构建 dist 后由 Go 服务托管
 #
 # 用法:
 #   ./dev.sh build [unidata|go|all] [--no-cache]  重新构建并更新
@@ -69,13 +68,6 @@ build_go() {
   warn "本地实时开发请用: ./dev.sh dev go（本机架构编译 + 热重启）"
 }
 
-# --- 构建: 旧前端 search-tester（由 Go 服务托管静态文件）---------------------
-build_legacy_frontend() {
-  info "构建旧前端 frontend/（search-tester）..."
-  (cd "$SCRIPT_DIR/frontend" && npm run build)
-  ok "dist 已生成: frontend/dist"
-  warn "若 Go 服务托管该目录，需重启使其生效: ./dev.sh go restart"
-}
 
 # --- 实时更新: 后端同步到容器（compose watch）--------------------------------
 dev_backend() {

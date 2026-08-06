@@ -17,7 +17,6 @@ Distributed CDC-based search synchronization system enabling "single-source writ
 | `UniData/` | Python/FastAPI | Producer service - writes data to PostgreSQL |
 | `meilisearch-sync-service/` | Go | Kafka consumer - syncs changes to Meilisearch |
 | `open-platform-web/` | React/TypeScript | Documentation portal + API Key management console |
-| `frontend/` | React | Search debugging tool |
 | `python-sdk/` | Python | Client SDK for document operations |
 
 ## Commands

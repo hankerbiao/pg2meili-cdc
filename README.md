@@ -54,7 +54,6 @@
 │   ├── go.mod                        # Go 模块定义
 │   └── go.sum
 │
-├── frontend/                         # 数据与搜索调试工具 (React)
 ├── open-platform-web/               # 开放平台文档与管理控制台 (React + TypeScript)
 ├── python-sdk/                       # 独立 Python 客户端 SDK
 ├── docker/                           # 容器初始化脚本
@@ -180,8 +179,7 @@ cp UniData/.env.example UniData/.env
 cp meilisearch-sync-service/.env.example meilisearch-sync-service/.env
 ```
 
-Docker 部署使用根目录的 `.env.docker.example`；前端调试配置见
-`frontend/.env.example`。所有实际 `.env` 文件均为本地配置，不应提交。
+Docker 部署使用根目录的 `.env.docker.example`。所有实际 `.env` 文件均为本地配置，不应提交。
 
 ### 4. 启动服务
 
