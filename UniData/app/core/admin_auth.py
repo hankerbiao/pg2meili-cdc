@@ -1,7 +1,7 @@
 """开放平台管理员登录、签名会话与 CSRF 校验。"""
 from __future__ import annotations
 
-import base64
+from app.core.encoding import b64encode as _b64encode, b64decode as _b64decode
 import hashlib
 import hmac
 import json
@@ -26,12 +26,7 @@ class AdminSession:
     expires_at: int
 
 
-def _b64encode(value: bytes) -> str:
-    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
-
-
-def _b64decode(value: str) -> bytes:
-    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+# _b64encode / _b64decode 见 app.core.encoding（与 oa_auth 共用）
 
 
 def verify_admin_password(username: str, password: str) -> bool:

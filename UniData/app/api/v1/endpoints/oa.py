@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.response import ApiResponse, ok
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.database import get_db
 from app.core.oa_auth import (
     OaSession,
@@ -23,6 +23,19 @@ from app.core.oa_auth import (
 from app.services.oa_service import assert_oa_user_active, get_oa_user_profile, upsert_oa_user
 
 router = APIRouter(prefix="/oa")
+
+
+def set_oa_session_cookie(response: Response, token: str, settings: Settings) -> None:
+    """写入 OA 单点登录会话 cookie（双模登录与回调共用，避免重复配置）。"""
+    response.set_cookie(
+        settings.oa_cookie_name,
+        token,
+        max_age=settings.oa_session_ttl_seconds,
+        httponly=True,
+        secure=settings.oa_cookie_secure,
+        samesite="strict",
+        path="/",
+    )
 
 
 class OaCallbackRequest(BaseModel):
@@ -75,15 +88,7 @@ async def oa_login(
                 return RedirectResponse(url="/open-platform/login?oa=error", status_code=302)
             # 统一登录体系：OA 登录成功后进入同一控制台（按身份渲染不同内容）
             redirect = RedirectResponse(url="/open-platform/console", status_code=302)
-            redirect.set_cookie(
-                settings.oa_cookie_name,
-                token,
-                max_age=settings.oa_session_ttl_seconds,
-                httponly=True,
-                secure=settings.oa_cookie_secure,
-                samesite="strict",
-                path="/",
-            )
+            set_oa_session_cookie(redirect, token, settings)
             return redirect
         # status != success 或缺失 payload → 登录失败，回登录页并带错误标记
         logger.warning("OA 登录中止: status=%s payload_present=%s", status_value, bool(payload))
@@ -112,15 +117,7 @@ async def oa_callback(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OA 登录信息缺少 itcode")
     await upsert_oa_user(db, itcode=str(itcode), profile=payload)
     token, session = create_oa_session(itcode=str(itcode), profile=payload)
-    response.set_cookie(
-        settings.oa_cookie_name,
-        token,
-        max_age=settings.oa_session_ttl_seconds,
-        httponly=True,
-        secure=settings.oa_cookie_secure,
-        samesite="strict",
-        path="/",
-    )
+    set_oa_session_cookie(response, token, settings)
     return ok(OaUserResponse(itcode=session.itcode, name=session.name, email=session.email))
 
 

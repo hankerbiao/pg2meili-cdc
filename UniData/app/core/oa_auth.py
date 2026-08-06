@@ -5,7 +5,7 @@ OA 普通用户会话为无状态签名 cookie，与管理员会话相互独立�
 """
 from __future__ import annotations
 
-import base64
+from app.core.encoding import b64encode as _b64encode, b64decode as _b64decode
 import hashlib
 import hmac
 import json
@@ -29,17 +29,7 @@ class OaSession:
     expires_at: int
 
 
-def _b64encode(value: bytes) -> str:
-    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
-
-
-def _b64decode(value: str) -> bytes:
-    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
-
-
-def _base64url_decode(value: str) -> bytes:
-    padding = "=" * (-len(value) % 4)
-    return base64.urlsafe_b64decode(value + padding)
+# _b64encode / _b64decode 见 app.core.encoding（与 admin_auth 共用）
 
 
 def decode_and_verify_oa_jwt(token: str, secret: str) -> dict:
@@ -54,13 +44,13 @@ def decode_and_verify_oa_jwt(token: str, secret: str) -> dict:
     signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
     expected_sig = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
     try:
-        sig_bytes = _base64url_decode(signature_b64)
+        sig_bytes = _b64decode(signature_b64)
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OA 登录信息签名编码错误")
     if not hmac.compare_digest(expected_sig, sig_bytes):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OA 登录信息验签失败")
     try:
-        payload = json.loads(_base64url_decode(payload_b64))
+        payload = json.loads(_b64decode(payload_b64))
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OA 登录信息解析失败")
     exp = payload.get("exp")
