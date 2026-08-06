@@ -5,7 +5,7 @@ name: pg2meili
 # 注：本锚点只保留「Docker 内部服务地址 / 端口」等无法从 .env.docker 直接取同名键的变量。
 # 其余应用配置（PG_CONN_STRING、CORS_ALLOW_ORIGINS、LOG_*、KAFKA_API_KEY_TOPIC、
 # 各类密钥等）一律由下方 env_file: ./.env.docker 注入，避免 environment 覆盖 env_file
-# 导致「改 .env.docker 不生效」的问题（详见 docs/optimization-plan-2026-08-05.md P0-4）。
+# 导致「改 .env.docker 不生效」的历史问题（详见 docs/optimization-plan-2026-08-05.md 之环境变量单源化 I-1/P0-4）。
 x-unidata-environment: &unidata-environment
   SERVER_PORT: :8080
   KAFKA_BOOTSTRAP_SERVERS: kafka:9093
