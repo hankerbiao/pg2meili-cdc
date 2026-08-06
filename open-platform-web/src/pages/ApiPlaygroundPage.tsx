@@ -1,14 +1,13 @@
-import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, LoaderCircle, Send } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { CodeBlock } from '../components/CodeBlock'
 import {
-  extractPublicOperations,
   PLATFORM_TAG_LABELS,
   regionalSearchOperation,
   type ApiResponseInfo,
   type PublicOperation,
 } from '../api/openapi'
+import { useOpenApiOperations } from '../api/useOpenApi'
 
 const methodClass = (method: string) => `method method-${method.toLowerCase()}`
 
@@ -59,14 +58,7 @@ function statusClass(result: SendResult): string {
 }
 
 export function ApiPlaygroundPage() {
-  const query = useQuery({
-    queryKey: ['openapi-playground'],
-    queryFn: async () => {
-      const response = await fetch('/openapi.json')
-      if (!response.ok) throw new Error('无法加载 OpenAPI 描述')
-      return extractPublicOperations(await response.json())
-    },
-  })
+  const query = useOpenApiOperations()
   const operations = useMemo(
     () => [...(query.data ?? []).filter((item) => !HIDDEN_PLAYGROUND_TAGS.has(item.tag)), regionalSearchOperation],
     [query.data],

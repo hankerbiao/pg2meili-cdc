@@ -1,21 +1,14 @@
-import { useQuery } from '@tanstack/react-query'
 import { ChevronRight, LoaderCircle } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { CodeBlock } from '../components/CodeBlock'
 import { DocsLayout } from '../components/DocsLayout'
-import { extractPublicOperations, regionalSearchOperation, type PublicOperation } from '../api/openapi'
+import { regionalSearchOperation, type PublicOperation } from '../api/openapi'
+import { useOpenApiOperations } from '../api/useOpenApi'
 
 const methodClass = (method: string) => `method method-${method.toLowerCase()}`
 
 export function ApiReferencePage() {
-  const query = useQuery({
-    queryKey: ['openapi'],
-    queryFn: async () => {
-      const response = await fetch('/openapi.json')
-      if (!response.ok) throw new Error('无法加载 OpenAPI 描述')
-      return extractPublicOperations(await response.json())
-    },
-  })
+  const query = useOpenApiOperations()
   const operations = useMemo(() => [...(query.data ?? []), regionalSearchOperation], [query.data])
   const [selectedId, setSelectedId] = useState('regional-search')
   const selected = operations.find((item) => item.id === selectedId) ?? operations[0]
