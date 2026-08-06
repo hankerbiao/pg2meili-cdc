@@ -17,7 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 # 使用与 app 相同的数据库连接
-DATABASE_URL = "postgresql+asyncpg://postgres:change-me@127.0.0.1:5432/postgres"
+DATABASE_URL = "postgresql+asyncpg://postgres:change-me@postgres:5432/postgres"
 
 
 async def upgrade() -> None:
