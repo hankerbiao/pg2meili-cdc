@@ -31,7 +31,7 @@ func TestBuildHandlers(t *testing.T) {
 		CDC:     []string{"cdc"},
 		Command: "commands",
 		APIKey:  "api-keys",
-	}, nil, registry)
+	}, nil, registry, config.AppConfig{})
 
 	tests := []struct {
 		topic string
@@ -55,7 +55,7 @@ func TestBuildHandlersRejectsDuplicateTopic(t *testing.T) {
 		}
 	}()
 
-	BuildHandlers(Topics{CDC: []string{"shared"}, Command: "shared"}, nil, nil)
+	BuildHandlers(Topics{CDC: []string{"shared"}, Command: "shared"}, nil, nil, config.AppConfig{})
 }
 
 func TestHealthReturnsJSON(t *testing.T) {
@@ -75,5 +75,52 @@ func TestHealthReturnsJSON(t *testing.T) {
 	}
 	if body.Status != "healthy" {
 		t.Fatalf("health status = %q, want healthy", body.Status)
+	}
+}
+
+func TestWithCORSReflectsAllowedOrigin(t *testing.T) {
+	handler := withCORS([]string{"https://console.example.com"})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	request := httptest.NewRequest(http.MethodGet, "/health", nil)
+	request.Header.Set("Origin", "https://console.example.com")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "https://console.example.com" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want https://console.example.com", got)
+	}
+}
+
+func TestWithCORSRejectsDisallowedOrigin(t *testing.T) {
+	handler := withCORS([]string{"https://console.example.com"})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	request := httptest.NewRequest(http.MethodGet, "/health", nil)
+	request.Header.Set("Origin", "https://evil.example.com")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("disallowed origin should not get ACAO, got %q", got)
+	}
+	// 预检对未授权 Origin 返回 403。
+	preflight := httptest.NewRequest(http.MethodOptions, "/health", nil)
+	preflight.Header.Set("Origin", "https://evil.example.com")
+	preflightResp := httptest.NewRecorder()
+	handler.ServeHTTP(preflightResp, preflight)
+	if preflightResp.Code != http.StatusForbidden {
+		t.Fatalf("preflight status = %d, want 403", preflightResp.Code)
+	}
+}
+
+func TestWithCORSAllowAllInDev(t *testing.T) {
+	handler := withCORS(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	request := httptest.NewRequest(http.MethodGet, "/health", nil)
+	request.Header.Set("Origin", "https://anything.example.com")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("dev mode should reflect *, got %q", got)
 	}
 }

@@ -39,7 +39,7 @@ func TestProcessDebeziumMessageRejectsInvalidIDs(t *testing.T) {
 		`{"payload":{"after":{"id":null,"app_name":"app","collection":"items"},"op":"u"}}`,
 	}
 	for _, input := range tests {
-		if _, _, _, _, err := processDebeziumMessage([]byte(input)); err == nil {
+		if _, _, _, _, _, _, err := processDebeziumMessage([]byte(input)); err == nil {
 			t.Errorf("processDebeziumMessage(%s) accepted invalid id", input)
 		}
 	}
@@ -47,7 +47,7 @@ func TestProcessDebeziumMessageRejectsInvalidIDs(t *testing.T) {
 
 func TestProcessDebeziumMessageRejectsInvalidNestedPayload(t *testing.T) {
 	input := `{"payload":{"after":{"id":1,"payload":42,"app_name":"app","collection":"items"},"op":"u"}}`
-	if _, _, _, _, err := processDebeziumMessage([]byte(input)); err == nil {
+	if _, _, _, _, _, _, err := processDebeziumMessage([]byte(input)); err == nil {
 		t.Fatal("expected invalid nested payload to be rejected")
 	}
 }
@@ -63,7 +63,26 @@ func TestResolveIndexRequiresStringRoutingFields(t *testing.T) {
 
 func TestProcessSearchOutboxUpsert(t *testing.T) {
 	input := `{"payload":{"after":{"app_id":"app-a","collection":"items","document_id":"doc-1","operation":"upsert","document":{"name":"x"}},"op":"c"}}`
-	op, id, doc, delID, err := processDebeziumMessage([]byte(input))
+	op, id, doc, delID, _, _, err := processDebeziumMessage([]byte(input))
+	if err != nil {
+		t.Fatalf("processDebeziumMessage() error = %v", err)
+	}
+	if op != "c" || id != "doc-1" || delID != "" {
+		t.Fatalf("unexpected outbox result: op=%s id=%s delID=%s", op, id, delID)
+	}
+	if doc["name"] != "x" || doc["id"] != "doc-1" {
+		t.Fatalf("unexpected outbox document: %v", doc)
+	}
+	if ResolveIndex(doc) != model.IndexUID("app-a", "items") {
+		t.Fatalf("unexpected outbox index route: %s", ResolveIndex(doc))
+	}
+}
+
+func TestProcessSearchOutboxUpsertWithStringDocument(t *testing.T) {
+	// Debezium JsonConverter with schemas.enable=true serializes the
+	// io.debezium.data.Json document column as a JSON string (not an object).
+	input := `{"payload":{"after":{"app_id":"app-a","collection":"items","document_id":"doc-1","operation":"upsert","document":"{\"name\":\"x\"}"},"op":"c"}}`
+	op, id, doc, delID, _, _, err := processDebeziumMessage([]byte(input))
 	if err != nil {
 		t.Fatalf("processDebeziumMessage() error = %v", err)
 	}
@@ -80,7 +99,7 @@ func TestProcessSearchOutboxUpsert(t *testing.T) {
 
 func TestProcessSearchOutboxDelete(t *testing.T) {
 	input := `{"payload":{"after":{"app_id":"app-b","collection":"items","document_id":"doc-2","operation":"delete","document":null},"op":"c"}}`
-	op, id, doc, delID, err := processDebeziumMessage([]byte(input))
+	op, id, doc, delID, _, _, err := processDebeziumMessage([]byte(input))
 	if err != nil {
 		t.Fatalf("processDebeziumMessage() error = %v", err)
 	}
@@ -99,7 +118,7 @@ func TestProcessSearchOutboxRequiresRouteFields(t *testing.T) {
 		`{"payload":{"after":{"app_id":"app-a","collection":"items","operation":"upsert","document":{}},"op":"c"}}`,
 		`{"payload":{"after":{"app_id":"app-a","collection":"items","document_id":"doc-1","operation":"unknown","document":{}},"op":"c"}}`,
 	} {
-		if _, _, _, _, err := processDebeziumMessage([]byte(input)); err == nil {
+		if _, _, _, _, _, _, err := processDebeziumMessage([]byte(input)); err == nil {
 			t.Fatalf("processDebeziumMessage(%s) accepted invalid outbox event", input)
 		}
 	}
@@ -113,6 +132,18 @@ func TestValidateMeiliCommandRejectsMismatchedIndex(t *testing.T) {
 	cmd.IndexUID = model.IndexUID(cmd.AppID, cmd.Collection)
 	if err := validateMeiliCommand(cmd); err != nil {
 		t.Fatalf("validateMeiliCommand() error = %v", err)
+	}
+}
+
+func TestCommandTargetsRegion(t *testing.T) {
+	if !commandTargetsRegion([]string{"cn-bj", "cn-sh"}, "cn-sh") {
+		t.Fatal("targeted region should execute cleanup command")
+	}
+	if commandTargetsRegion([]string{"cn-bj"}, "cn-sh") {
+		t.Fatal("non-target region must not execute cleanup command")
+	}
+	if commandTargetsRegion([]string{"cn-bj"}, "") {
+		t.Fatal("empty region must not acknowledge cleanup command")
 	}
 }
 

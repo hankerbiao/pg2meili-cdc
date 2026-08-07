@@ -5,6 +5,7 @@ from app.models.agent import AgentNode
 from app.models.open_platform import ApiKey, OpenPlatformApp, OpenPlatformAuditLog, OpenPlatformOutbox
 from app.models.collection_settings import CollectionSettings
 from app.models.oa import OaUser
+from app.models.cleanup_task import AppCleanupTask
 
 __all__ = [
     "Base",
@@ -16,4 +17,5 @@ __all__ = [
     "OpenPlatformOutbox",
     "CollectionSettings",
     "OaUser",
+    "AppCleanupTask",
 ]

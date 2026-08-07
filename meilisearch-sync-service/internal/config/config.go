@@ -38,6 +38,8 @@ type AppConfig struct {
 	RedisAddr              string // Redis 地址，默认本机
 	RedisPass              string // Redis 密码
 	RedisDB                int    // Redis DB
+	CORSAllowedOrigins     []string // 允许跨域的 Origin 白名单；为空表示开发模式允许任意（*）
+	CORSRequireAllowlist   bool     // 生产环境置 true 时，白名单为空则启动校验失败
 	legacyGroupID          string // 仅用于校验遗留 KAFKA_GROUP_ID，禁止其覆盖派生结果
 }
 
@@ -125,6 +127,9 @@ func (c AppConfig) Validate() error {
 		(strings.TrimSpace(c.UniDataURL) == "" || strings.TrimSpace(c.AgentRegistrationToken) == "") {
 		return fmt.Errorf("API Key 鉴权必须配置 UNIDATA_URL 和 AGENT_REGISTRATION_TOKEN")
 	}
+	if c.CORSRequireAllowlist && len(c.CORSAllowedOrigins) == 0 {
+		return fmt.Errorf("CORS_REQUIRE_ALLOWLIST 已启用但 CORS_ALLOWED_ORIGINS 为空；生产环境必须显式配置跨域白名单")
+	}
 	return nil
 }
 
@@ -168,6 +173,8 @@ func LoadConfig() AppConfig {
 	if v, err := strconv.Atoi(getenv("REDIS_DB", "0")); err == nil {
 		redisDB = v
 	}
+	corsRequire := getenv("CORS_REQUIRE_ALLOWLIST", "false")
+	corsRequireBool := corsRequire == "1" || strings.EqualFold(corsRequire, "true")
 	return AppConfig{
 		Brokers:                splitAndTrim(brokersEnv),
 		Topics:                 splitAndTrim(topicEnv),
@@ -192,6 +199,8 @@ func LoadConfig() AppConfig {
 		RedisAddr:              getenv("REDIS_ADDR", "127.0.0.1:6379"),
 		RedisPass:              getenv("REDIS_PASSWORD", ""),
 		RedisDB:                redisDB,
+		CORSAllowedOrigins:     splitAndTrim(getenv("CORS_ALLOWED_ORIGINS", "")),
+		CORSRequireAllowlist:   corsRequireBool,
 		legacyGroupID:          legacyGroupID,
 	}
 }

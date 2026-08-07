@@ -33,6 +33,8 @@ class AgentRepository:
             existing.hostname = hostname
             existing.version = version
             existing.meta = meta
+            # 成功注册即表明节点当前可达；恢复此前健康检查标记的离线状态。
+            existing.is_online = True
             existing.updated_at = now
             existing.last_seen_at = now
         else:

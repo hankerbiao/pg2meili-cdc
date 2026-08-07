@@ -18,25 +18,31 @@ class IndexService:
         collection: str,
         action: str,
         payload: Dict[str, Any],
+        cleanup_task_id: str | None = None,
+        target_regions: list[str] | None = None,
     ) -> str:
         # 统一构造并发送 Kafka 命令，避免接口层重复逻辑
         resolved_index_uid = tenant_index_uid(app_id, collection)
         settings = get_settings()
         kafka = get_kafka_manager()
         now_ts = int(time.time())
+        command = {
+            "version": 2,
+            "command_id": f"{resolved_index_uid}:{now_ts}",
+            "app_id": app_id,
+            "collection": collection,
+            "index_uid": resolved_index_uid,
+            "action": action,
+            "payload": payload,
+            "ts": now_ts,
+        }
+        if cleanup_task_id:
+            command["cleanup_task_id"] = cleanup_task_id
+            command["target_regions"] = list(target_regions or [])
         kafka.send_json(
             topic=settings.kafka_meili_command_topic,
             key=resolved_index_uid,
-            payload={
-                "version": 2,
-                "command_id": f"{resolved_index_uid}:{now_ts}",
-                "app_id": app_id,
-                "collection": collection,
-                "index_uid": resolved_index_uid,
-                "action": action,
-                "payload": payload,
-                "ts": now_ts,
-            },
+            payload=command,
         )
         kafka.flush()
         return resolved_index_uid
@@ -81,13 +87,21 @@ class IndexService:
         )
 
     @staticmethod
-    def delete_index(app_id: str, app_name: str, collection: str) -> str:
+    def delete_index(
+        app_id: str,
+        app_name: str,
+        collection: str,
+        cleanup_task_id: str | None = None,
+        target_regions: list[str] | None = None,
+    ) -> str:
         return IndexService._send_command(
             app_id=app_id,
             app_name=app_name,
             collection=collection,
             action="delete_index",
             payload={},
+            cleanup_task_id=cleanup_task_id,
+            target_regions=target_regions,
         )
 
     async def update_index_settings_async(self, **kwargs: Any) -> str:

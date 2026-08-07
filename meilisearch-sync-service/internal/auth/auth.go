@@ -23,6 +23,8 @@ type AppRecord struct {
 	AppName string `json:"app_name"`
 	Status  string `json:"status"`
 	Version int    `json:"resource_version"`
+	// Epoch 是应用生命周期 epoch（删除/重建时变化）。消费端据此丢弃旧 epoch 的迟到事件。
+	Epoch string `json:"lifecycle_epoch,omitempty"`
 }
 
 type KeyRecord struct {

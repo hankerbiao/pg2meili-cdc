@@ -34,6 +34,7 @@ type Event struct {
 	Status          string   `json:"status"`
 	ExpiresAt       string   `json:"expires_at"`
 	ResourceVersion int      `json:"resource_version"`
+	LifecycleEpoch  string   `json:"lifecycle_epoch,omitempty"`
 }
 
 type snapshotResponse struct {
@@ -100,7 +101,7 @@ func (r *Registry) Apply(ctx context.Context, payload []byte) error {
 	}
 	switch event.Event {
 	case "app.upsert":
-		return r.storeApp(ctx, auth.AppRecord{ID: event.AppID, AppName: event.AppName, Status: event.Status, Version: event.ResourceVersion})
+		return r.storeApp(ctx, auth.AppRecord{ID: event.AppID, AppName: event.AppName, Status: event.Status, Version: event.ResourceVersion, Epoch: event.LifecycleEpoch})
 	case "key.upsert", "key.revoked":
 		return r.storeKey(ctx, auth.KeyRecord{ID: event.KeyID, AppID: event.AppID, AppName: event.AppName, SecretHash: event.SecretHash, Scopes: event.Scopes, Status: event.Status, ExpiresAt: event.ExpiresAt, Version: event.ResourceVersion})
 	default:
@@ -113,6 +114,19 @@ func (r *Registry) storeApp(ctx context.Context, record auth.AppRecord) error {
 		return permanent(fmt.Errorf("应用事件缺少标识或版本"))
 	}
 	return r.storeNewer(ctx, appPrefix+record.ID, record.Version, record)
+}
+
+// AppEpoch 实现 service.EpochGate：返回本地注册表中应用的生命周期 epoch。
+// 记录不存在时返回 ("", false, nil)，供 CDC 消费端判断旧 epoch 事件。
+func (r *Registry) AppEpoch(ctx context.Context, appID string) (string, bool, error) {
+	var app auth.AppRecord
+	if err := r.getRecord(ctx, appPrefix+appID, &app); err != nil {
+		if errors.Is(err, auth.ErrInvalidAPIKey) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return app.Epoch, true, nil
 }
 
 func (r *Registry) storeKey(ctx context.Context, record auth.KeyRecord) error {

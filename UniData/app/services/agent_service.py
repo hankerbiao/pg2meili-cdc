@@ -7,6 +7,11 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.security import (
+    allowed_agent_cidrs,
+    validate_agent_address,
+    validate_agent_base_url,
+)
 from app.models.agent import AgentNode
 from app.repositories.agent_repository import agent_repository
 
@@ -27,6 +32,14 @@ class AgentService:
         version: str | None,
         meta: dict | None,
     ) -> AgentNode:
+        # SSRF 防护：拒绝 Agent 自报的受限地址，避免中心服务被借作内网探测跳板。
+        allowed = allowed_agent_cidrs()
+        validate_agent_address(ip, port, allowed_cidrs=allowed)
+        if isinstance(meta, dict) and meta.get("base_url"):
+            normalized = validate_agent_base_url(str(meta["base_url"]), allowed_cidrs=allowed)
+            if normalized is not None:
+                meta = {**meta, "base_url": normalized}
+
         agent_id = AgentService.build_agent_id(ip, port)
         return await agent_repository.upsert_agent(
             db=db,
@@ -54,6 +67,12 @@ class AgentService:
     @staticmethod
     async def check_health(agent: AgentNode) -> bool:
         settings = get_settings()
+        # 防御性校验：即使注册环节被绕过，也不对受限地址发起请求。
+        try:
+            validate_agent_address(agent.ip, agent.port, allowed_cidrs=allowed_agent_cidrs())
+        except ValueError as exc:
+            logger.warning("跳过受限 Agent 地址的健康检查 {}: {}", agent.id, exc)
+            return False
         url = f"http://{agent.ip}:{agent.port}{settings.agent_health_path}"
         timeout = settings.agent_health_timeout_seconds
         try:

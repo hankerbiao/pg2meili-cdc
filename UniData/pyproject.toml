@@ -29,6 +29,16 @@ packages = ["app"]
 dependencies = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "httpx>=0.25.0",
+]
+
+# 独立的可复现测试依赖清单（开发/CI 安装用）
+[tool.hatch.envs.test]
+dependencies = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.24.0",
+    "pytest-cov==6.0.0",
     "httpx>=0.25.0",
 ]
 
@@ -37,3 +47,10 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_default_fixture_loop_scope = "function"
+# 覆盖率：先建立基线，逐步抬高门槛（当前仅统计 app 包，排除 migrations/scripts）
+addopts = """
+    --cov=app
+    --cov-report=term-missing
+    --cov-report=html:htmlcov
+    --cov-fail-under=45
+"""

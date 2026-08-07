@@ -163,20 +163,22 @@ func sendToDLQ(ctx context.Context, client recordProducer, cfg config.AppConfig,
 	return nil
 }
 
-// processDebeziumMessage 解析 Debezium 消息，抽取操作类型、文档内容和主键 id
-func processDebeziumMessage(value []byte) (string, string, map[string]interface{}, string, error) {
+// processDebeziumMessage 解析 Debezium 消息，抽取操作类型、文档内容、主键 id，
+// 以及可选的文档 revision 与生命周期 lifecycle_epoch（用于消费端幂等/epoch 门禁）。
+func processDebeziumMessage(value []byte) (string, string, map[string]interface{}, string, int64, string, error) {
 	// Debezium 可能发送空消息或 "null"，表示该偏移无有效数据
 	trimmed := bytes.TrimSpace(value)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		return "", "", nil, "", nil
+		return "", "", nil, "", 0, "", nil
 	}
 
 	var msg model.DebeziumMessage
 	if err := json.Unmarshal(value, &msg); err != nil {
-		return "", "", nil, "", fmt.Errorf("解码 Debezium 消息失败: %w", err)
+		return "", "", nil, "", 0, "", fmt.Errorf("解码 Debezium 消息失败: %w", err)
 	}
 
 	payload := msg.Payload
+	revision, epoch := extractRevisionEpoch(payload.After)
 
 	// The physical-tenancy contract is an append-only search_outbox row. Its
 	// operation field, rather than the source table operation, is authoritative.
@@ -192,45 +194,46 @@ func processDebeziumMessage(value []byte) (string, string, map[string]interface{
 	case "c", "r", "u":
 		doc, id, err := extractDocument(payload)
 		if err != nil {
-			return "", "", nil, "", fmt.Errorf("提取文档失败: %w", err)
+			return "", "", nil, "", 0, "", fmt.Errorf("提取文档失败: %w", err)
 		}
 		if id == "" {
-			return "", "", nil, "", fmt.Errorf("插入/更新文档时 id 为空: %v", doc)
+			return "", "", nil, "", 0, "", fmt.Errorf("插入/更新文档时 id 为空: %v", doc)
 		}
-		return payload.Op, id, doc, "", nil
+		return payload.Op, id, doc, "", revision, epoch, nil
 	case "d":
 		// 删除操作从 before 中取 id 作为主键
 		if payload.Before == nil {
-			return "", "", nil, "", fmt.Errorf("删除操作缺少 before 字段")
+			return "", "", nil, "", 0, "", fmt.Errorf("删除操作缺少 before 字段")
 		}
 		id, err := documentID(payload.Before)
 		if err != nil {
-			return "", "", nil, "", fmt.Errorf("删除操作主键无效: %w", err)
+			return "", "", nil, "", 0, "", fmt.Errorf("删除操作主键无效: %w", err)
 		}
 		before := payload.Before
 		before["id"] = id
-		return payload.Op, "", before, id, nil
+		return payload.Op, "", before, id, revision, epoch, nil
 	default:
-		return "", "", nil, "", fmt.Errorf("未知的操作类型 %q", payload.Op)
+		return "", "", nil, "", 0, "", fmt.Errorf("未知的操作类型 %q", payload.Op)
 	}
 }
 
-func processSearchOutbox(after map[string]interface{}) (string, string, map[string]interface{}, string, error) {
+func processSearchOutbox(after map[string]interface{}) (string, string, map[string]interface{}, string, int64, string, error) {
+	revision, epoch := extractRevisionEpoch(after)
 	appID, ok := nonEmptyString(after["app_id"])
 	if !ok {
-		return "", "", nil, "", fmt.Errorf("outbox 事件缺少 app_id")
+		return "", "", nil, "", 0, "", fmt.Errorf("outbox 事件缺少 app_id")
 	}
 	collection, ok := nonEmptyString(after["collection"])
 	if !ok {
-		return "", "", nil, "", fmt.Errorf("outbox 事件缺少 collection")
+		return "", "", nil, "", 0, "", fmt.Errorf("outbox 事件缺少 collection")
 	}
 	documentID, err := scalarString(after["document_id"])
 	if err != nil || strings.TrimSpace(documentID) == "" {
-		return "", "", nil, "", fmt.Errorf("outbox 事件缺少 document_id")
+		return "", "", nil, "", 0, "", fmt.Errorf("outbox 事件缺少 document_id")
 	}
 	operation, ok := nonEmptyString(after["operation"])
 	if !ok {
-		return "", "", nil, "", fmt.Errorf("outbox 事件缺少 operation")
+		return "", "", nil, "", 0, "", fmt.Errorf("outbox 事件缺少 operation")
 	}
 
 	route := map[string]interface{}{
@@ -242,20 +245,28 @@ func processSearchOutbox(after map[string]interface{}) (string, string, map[stri
 	case "upsert":
 		raw, exists := after["document"]
 		if !exists || raw == nil {
-			return "", "", nil, "", fmt.Errorf("outbox upsert 事件缺少 document")
+			return "", "", nil, "", 0, "", fmt.Errorf("outbox upsert 事件缺少 document")
 		}
-		document, ok := raw.(map[string]interface{})
-		if !ok {
-			return "", "", nil, "", fmt.Errorf("outbox document 必须是对象")
+		var document map[string]interface{}
+		// Debezium JsonConverter with schemas.enable=true serializes the
+		// io.debezium.data.Json document column as a JSON string.
+		if docStr, ok := raw.(string); ok {
+			if err := json.Unmarshal([]byte(docStr), &document); err != nil {
+				return "", "", nil, "", 0, "", fmt.Errorf("outbox document 必须是对象")
+			}
+		} else if docMap, ok := raw.(map[string]interface{}); ok {
+			document = docMap
+		} else {
+			return "", "", nil, "", 0, "", fmt.Errorf("outbox document 必须是对象")
 		}
 		document["id"] = documentID
 		document["app_id"] = appID
 		document["collection"] = collection
-		return "c", documentID, document, "", nil
+		return "c", documentID, document, "", revision, epoch, nil
 	case "delete":
-		return "d", "", route, documentID, nil
+		return "d", "", route, documentID, revision, epoch, nil
 	default:
-		return "", "", nil, "", fmt.Errorf("outbox operation 无效: %q", operation)
+		return "", "", nil, "", 0, "", fmt.Errorf("outbox operation 无效: %q", operation)
 	}
 }
 

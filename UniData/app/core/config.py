@@ -39,8 +39,7 @@ class Settings(BaseSettings):
     log_json: bool = False
     log_file_enabled: bool = True
 
-    # 容器运行时资源目录；留空时自动使用仓库内的开发路径
-    open_platform_dist_dir: str = ""
+    # 可选的 Python SDK 下载包；留空时从仓库源码按请求构建
     python_sdk_archive: str = ""
 
     # 代理节点健康检查配置
@@ -49,6 +48,9 @@ class Settings(BaseSettings):
     agent_health_timeout_seconds: int = 5
     agent_online_ttl_seconds: int = 120
     agent_registration_token: str = ""
+    # 允许 Agent 使用私网/受限地址的 CIDR 白名单（逗号分隔）。
+    # 仅当 Agent 必须落在内网时才配置；留空表示一律禁止受限地址（SSRF 防护）。
+    agent_allowed_cidrs: str = ""
 
     # search_outbox 的 CDC 读取角色（Debezium 快照 SELECT 需绕过 RLS）。
     # 留空则不创建豁免策略：业务角色与复制角色都会被 RLS 限制（仅建议在非标准部署时留空）。

@@ -33,26 +33,28 @@ type DebeziumMessage struct {
 // filterable/sortable 为既有覆盖语义（空数组=清空）；新增配置项用指针，
 // nil 表示「未配置」——Go 侧不下发该字段，避免重置 Meilisearch 默认值。
 type MeiliCommandPayload struct {
-	FilterableAttributes       []string `json:"filterableAttributes"`
-	SortableAttributes         []string `json:"sortableAttributes"`
-	SearchableAttributes       []string `json:"searchableAttributes"`
-	DisplayedAttributes        []string `json:"displayedAttributes"`
-	DistinctAttribute          *string  `json:"distinctAttribute"`
-	TypoToleranceEnabled       *bool    `json:"typoToleranceEnabled"`
-	PaginationMaxTotalHits     *int64   `json:"paginationMaxTotalHits"`
-	FacetingMaxValuesPerFacet  *int64   `json:"facetingMaxValuesPerFacet"`
+	FilterableAttributes      []string `json:"filterableAttributes"`
+	SortableAttributes        []string `json:"sortableAttributes"`
+	SearchableAttributes      []string `json:"searchableAttributes"`
+	DisplayedAttributes       []string `json:"displayedAttributes"`
+	DistinctAttribute         *string  `json:"distinctAttribute"`
+	TypoToleranceEnabled      *bool    `json:"typoToleranceEnabled"`
+	PaginationMaxTotalHits    *int64   `json:"paginationMaxTotalHits"`
+	FacetingMaxValuesPerFacet *int64   `json:"facetingMaxValuesPerFacet"`
 }
 
 // MeiliCommand 是跨地域同步的命令消息结构。
 type MeiliCommand struct {
-	Version    int                 `json:"version"`
-	CommandID  string              `json:"command_id"`
-	AppID      string              `json:"app_id"`
-	Collection string              `json:"collection"`
-	IndexUID   string              `json:"index_uid"`
-	Action     string              `json:"action"`
-	Payload    MeiliCommandPayload `json:"payload"`
-	Ts         int64               `json:"ts"`
+	Version       int                 `json:"version"`
+	CommandID     string              `json:"command_id"`
+	AppID         string              `json:"app_id"`
+	Collection    string              `json:"collection"`
+	IndexUID      string              `json:"index_uid"`
+	Action        string              `json:"action"`
+	Payload       MeiliCommandPayload `json:"payload"`
+	CleanupTaskID string              `json:"cleanup_task_id"`
+	TargetRegions []string            `json:"target_regions"`
+	Ts            int64               `json:"ts"`
 }
 
 // SearchOutboxEvent is the stable CDC contract emitted by PostgreSQL.

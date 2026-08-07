@@ -28,6 +28,7 @@ from app.api.v1.validation import valid_collection_name
 from app.schemas.document import CollectionDetail, CollectionSettingsUpdate
 from app.services.agent_service import agent_service
 from app.services.collection_service import collection_service
+from app.services import cleanup_service
 from app.services.open_platform_service import OpenPlatformService, app_event, open_platform_service
 
 
@@ -116,6 +117,24 @@ class AuditResponse(BaseModel):
     source_ip: str | None
     details: dict | None
     created_at: datetime
+
+
+class CleanupCollectionStatus(BaseModel):
+    collection: str
+    status: str
+    attempts: int
+    error: str | None = None
+    finished_at: str | None = None
+
+
+class CleanupStatusResponse(BaseModel):
+    app_id: str
+    state: str
+    attempts: int
+    last_error: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    collections: list[CleanupCollectionStatus]
 
 
 class AgentNodeResponse(BaseModel):
@@ -307,6 +326,37 @@ async def delete_app(
         source_ip=source_ip(request),
     )
     return ok(serialize_app(app))
+
+
+@router.get("/apps/{app_id}/cleanup", summary="获取应用删除清理任务状态")
+async def get_app_cleanup(
+    app_id: str,
+    identity: AnySession = Depends(get_any_session),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[CleanupStatusResponse]:
+    """返回清理状态机进度，供前端展示删除进行中/失败而非假设同步完成（plan §5）。"""
+    app = await open_platform_service.get_app(db, app_id)
+    _assert_owned(identity, app)
+    task = await cleanup_service.get_task(db, app_id)
+    if task is None:
+        return ok(CleanupStatusResponse(
+            app_id=app_id,
+            state=app.status,
+            attempts=0,
+            last_error=None,
+            started_at=None,
+            finished_at=None,
+            collections=[],
+        ))
+    return ok(CleanupStatusResponse(
+        app_id=task.app_id,
+        state=task.state,
+        attempts=task.attempts,
+        last_error=task.last_error,
+        started_at=task.started_at,
+        finished_at=task.finished_at,
+        collections=[CleanupCollectionStatus(**c) for c in (task.collection_cleanup or [])],
+    ))
 
 
 @router.get("/apps/{app_id}/keys", summary="获取应用 API Key")

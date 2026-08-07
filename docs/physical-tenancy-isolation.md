@@ -107,7 +107,7 @@ Go 同步（`internal/service/sync.go`）：识别 `payload.after.operation`；u
 
 **创建**（`open_platform_service.create_app`）：写 `open_platform_apps`→`provision_tenant()`（确保 outbox + `CREATE SCHEMA` + 建表/索引/约束 + 启用 RLS + 装 CDC 触发器；入口先取 `pg_advisory_xact_lock(hashtext(schema))` 串行化并发懒初始化）→写 `app.upsert` outbox→写审计→事务提交后可见。失败整体回滚；`provision_tenant()` 幂等可重试。
 
-**删除**（`DELETE /api/v1/open-platform/apps/{app_id}`）：先提交 `deleting`（立即拒绝新 Key）→撤销全部 active Key 并写 `key.revoked`→分页列出含软删除文档的全部 collection 并发 `delete_index` Kafka 命令→`CASCADE` 删 schema→状态置 `deleted`+写 `app.delete` 审计。索引清理失败时保留 `deleting`，同一接口可安全重试；成功后才回收 schema。前端入口在应用详情页。
+**删除**（`DELETE /api/v1/open-platform/apps/{app_id}`）：先提交 `deleting`（立即拒绝数据面写入）→撤销全部 active Key 并写 `key.revoked`→创建可恢复 cleanup task。任务合并文档和 collection settings 中的集合，并快照在线 Agent 区域；每个区域完成 `delete_index` 的 Meilisearch task 后回传确认。仅在全部快照区域确认后，才 `CASCADE` 删除 schema、置应用为 `deleted` 并写 `app.delete` 审计。索引清理或确认失败时保留 `deleting`，可安全重试。
 
 ## 8. 数据库角色与部署
 
@@ -133,7 +133,6 @@ RLS 真正生效要求业务账号非超级用户。初始化脚本 `docker/post
   cd UniData && TEST_PG_CONN_STRING=postgres://...@127.0.0.1:5432/unidata_test pytest -q
   ```
 - Go：`cd meilisearch-sync-service && go test ./...`——覆盖 `IndexUID` 稳定性、租户索引隔离、outbox 解析、缺路由字段进 DLQ、命令 `index_uid` 不匹配拒绝、删除不跨租户、租户状态门禁（deleting/deleted 跳过、注册表错误和未知租户均可重试）。
-- 前端：`cd open-platform-web && npm run build`。
 
 ## 11. 运维注意与后续工作
 

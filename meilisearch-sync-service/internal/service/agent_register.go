@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"meilisearch-sync-service/internal/config"
+	"meilisearch-sync-service/internal/model"
 )
 
 type agentRegisterPayload struct {
@@ -22,6 +23,43 @@ type agentRegisterPayload struct {
 	Hostname string                 `json:"hostname,omitempty"`
 	Version  string                 `json:"version,omitempty"`
 	Meta     map[string]interface{} `json:"meta,omitempty"`
+}
+
+type cleanupConfirmationPayload struct {
+	TaskID     string `json:"task_id"`
+	Collection string `json:"collection"`
+	Region     string `json:"region"`
+}
+
+// ConfirmCleanupDeletion reports a completed regional index deletion to UniData.
+// A non-2xx response is returned so Kafka retries the command rather than losing
+// the control-plane confirmation.
+func ConfirmCleanupDeletion(ctx context.Context, cfg config.AppConfig, cmd model.MeiliCommand) error {
+	if strings.TrimSpace(cfg.UniDataURL) == "" {
+		return fmt.Errorf("UNIDATA_URL 未配置，无法确认清理任务")
+	}
+	body, err := json.Marshal(cleanupConfirmationPayload{
+		TaskID: cmd.CleanupTaskID, Collection: cmd.Collection, Region: cfg.RegionID,
+	})
+	if err != nil {
+		return fmt.Errorf("序列化清理确认失败: %w", err)
+	}
+	url := config.JoinURL(normalizeURL(cfg.UniDataURL), "api/v1/agents/cleanup-confirmations")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("构造清理确认请求失败: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Agent-Token", cfg.AgentRegistrationToken)
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+	if err != nil {
+		return fmt.Errorf("清理确认请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("清理确认响应状态码=%d", resp.StatusCode)
+	}
+	return nil
 }
 
 // RegisterAgent 执行一次代理注册请求，保留给一次性调用方使用。

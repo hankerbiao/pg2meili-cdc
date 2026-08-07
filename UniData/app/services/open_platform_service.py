@@ -16,10 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.database import get_db_context
 from app.core.kafka_manager import get_kafka_manager
+from app.models.cleanup_task import AppCleanupTask, CLEANUP_STATE_DELETED
 from app.models.open_platform import ApiKey, OpenPlatformApp, OpenPlatformAuditLog, OpenPlatformOutbox
-from app.repositories.document_repository import document_repository
-from app.services.index_service import index_service
-from app.services.tenant_service import drop_tenant, provision_tenant, tenant_exists
+from app.services import cleanup_service
+from app.services.tenant_service import provision_tenant
 
 
 ALLOWED_SCOPES = {"search:read", "data:read", "data:write"}
@@ -61,6 +61,9 @@ def app_event(app: OpenPlatformApp) -> dict[str, Any]:
         "app_name": app.app_name,
         "status": app.status,
         "resource_version": app.version,
+        # 生命周期 epoch：应用删除/重建会推进 version，使 epoch 变化；
+        # Go Agent 据此丢弃旧 epoch 的迟到 CDC 事件，防止删除后索引复活。
+        "lifecycle_epoch": f"{app.id}:{app.version}",
         "ts": int(utc_now().timestamp()),
     }
 
@@ -169,7 +172,13 @@ class OpenPlatformService:
         actor: str,
         source_ip: str | None,
     ) -> OpenPlatformApp:
-        """物理回收租户：先冻结鉴权，再删除索引，最后删除租户 schema。"""
+        """异步回收租户：标记 deleting + 冻结密钥 + 写 lifecycle_epoch + 创建 cleanup task，
+        由 cleanup_service 推进可恢复状态机完成索引与 schema 清理。
+
+        - 应用进入 deleting 后，文档/配置写入被 409 APP_DELETING 拒绝（见 app/core/auth.py）。
+        - 清理失败不会回退为 active：deleting 态与 cleanup_failed 任务均落盘，可重试。
+        - P1 将把清理执行迁移到独立 lifecycle-cleaner worker；此处请求内同步推进以完成删除。
+        """
         app = await db.scalar(
             select(OpenPlatformApp)
             .where(OpenPlatformApp.id == app_id)
@@ -180,63 +189,74 @@ class OpenPlatformService:
         if app.status == "deleted":
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="应用已删除")
 
-        if app.status == "active":
-            app.status = "deleting"
-            app.version += 1
-            app.updated_at = utc_now()
-            await db.flush()
-            cls._add_outbox(db, app.id, "app.upsert", app_event(app))
-
-            for key in await cls.list_keys(db, app_id):
-                if key.status != "active":
-                    continue
-                key.status = "revoked"
-                key.revoked_at = utc_now()
-                key.updated_at = utc_now()
-                key.version += 1
-                cls._add_outbox(db, key.id, "key.revoked", key_event(key, app, "key.revoked"))
-
-            # 先提交冻结状态，清理失败时可由同一接口重试，不会恢复为 active。
+        if app.status == "deleting":
+            # 已在删除中：恢复/继续清理任务（plan §5 可恢复），不回退为 active。
+            task = await cleanup_service.get_task(db, app_id) or await cleanup_service.create_task(
+                db, app_id=app.id, app_name=app.app_name
+            )
             await db.commit()
-
-        collections: list[str] = []
-        if await tenant_exists(db, app_id):
-            async for collection in document_repository.iter_collections_by_app(
-                db,
-                app_id,
-                include_deleted=True,
-            ):
-                collections.append(collection)
-        for collection in collections:
             try:
-                await index_service.delete_index_async(
-                    app_id=app_id,
-                    app_name=app.app_name,
-                    collection=collection,
-                )
-            except Exception as exc:  # noqa: BLE001 - 保留 deleting 状态，允许安全重试
-                logger.warning("删除租户索引命令失败 app=%s collection=%s: %s", app_id, collection, exc)
-                raise RuntimeError(
-                    f"租户索引清理失败 app={app_id} collection={collection}"
-                ) from exc
+                await cleanup_service.run_cleanup_task_by_id(task.id)
+            except Exception as exc:  # noqa: BLE001 - deleting 态已落盘，可重试
+                logger.warning("应用清理未在一次请求内完成 app=%s: %s", app_id, exc)
+            await db.refresh(task)
+            await cls._finalize_deletion(db, app, task, actor, source_ip)
+            return app
 
-        await drop_tenant(db, app_id)
-        app.status = "deleted"
+        # active：标记 deleting、冻结密钥、写 lifecycle_epoch、创建 cleanup task。
+        app.status = "deleting"
         app.version += 1
         app.updated_at = utc_now()
         await db.flush()
         cls._add_outbox(db, app.id, "app.upsert", app_event(app))
-        cls.add_audit(
-            db,
-            actor=actor,
-            action="app.delete",
-            target_type="app",
-            target_id=app.id,
-            app_id=app.id,
-            source_ip=source_ip,
-            details={"collections": collections},
-        )
+        for key in await cls.list_keys(db, app_id):
+            if key.status != "active":
+                continue
+            key.status = "revoked"
+            key.revoked_at = utc_now()
+            key.updated_at = utc_now()
+            key.version += 1
+            cls._add_outbox(db, key.id, "key.revoked", key_event(key, app, "key.revoked"))
+
+        task = await cleanup_service.create_task(db, app_id=app.id, app_name=app.app_name)
+        # 先提交冻结状态与 cleanup task；清理失败可由 worker / 重新调用恢复，不会回退为 active。
+        await db.commit()
+
+        # 推进清理（独立会话，可恢复；P1 交由 lifecycle-cleaner worker）。
+        try:
+            await cleanup_service.run_cleanup_task_by_id(task.id)
+        except Exception as exc:  # noqa: BLE001 - deleting 态已落盘，可重试
+            logger.warning("应用清理未在一次请求内完成 app=%s: %s", app_id, exc)
+        await db.refresh(task)
+        await cls._finalize_deletion(db, app, task, actor, source_ip)
         return app
+
+    @classmethod
+    async def _finalize_deletion(
+        cls,
+        db: AsyncSession,
+        app: OpenPlatformApp,
+        task: AppCleanupTask,
+        actor: str,
+        source_ip: str | None,
+    ) -> None:
+        """清理成功后把应用标记为 deleted，并补发 app.upsert 事件与审计。"""
+        if task.state == CLEANUP_STATE_DELETED and app.status != "deleted":
+            app.status = "deleted"
+            app.version += 1
+            app.updated_at = utc_now()
+            await db.flush()
+            cls._add_outbox(db, app.id, "app.upsert", app_event(app))
+            cls.add_audit(
+                db,
+                actor=actor,
+                action="app.delete",
+                target_type="app",
+                target_id=app.id,
+                app_id=app.id,
+                source_ip=source_ip,
+                details={"collections": [r.get("collection") for r in task.collection_cleanup]},
+            )
 
     @staticmethod
     async def list_keys(db: AsyncSession, app_id: str) -> list[ApiKey]:

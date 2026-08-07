@@ -1,7 +1,10 @@
 package app
 
 import (
+	"context"
 	"meilisearch-sync-service/internal/apikey"
+	"meilisearch-sync-service/internal/config"
+	"meilisearch-sync-service/internal/model"
 	"meilisearch-sync-service/internal/service"
 
 	"github.com/meilisearch/meilisearch-go"
@@ -18,7 +21,7 @@ type Topics struct {
 }
 
 // BuildHandlers 将消费 topic 绑定到对应的消息处理器。
-func BuildHandlers(topics Topics, meiliClient meilisearch.ServiceManager, registry *apikey.Registry) map[string]service.RecordHandler {
+func BuildHandlers(topics Topics, meiliClient meilisearch.ServiceManager, registry *apikey.Registry, cfg config.AppConfig) map[string]service.RecordHandler {
 	handlers := make(map[string]service.RecordHandler)
 	register := func(topic string, handler service.RecordHandler) {
 		if topic == "" {
@@ -30,12 +33,25 @@ func BuildHandlers(topics Topics, meiliClient meilisearch.ServiceManager, regist
 		handlers[topic] = handler
 	}
 
-	// registry 同时充当租户状态门禁：跳过已回收租户的 CDC 消息，防止索引复活。
-	cdcHandler := service.DebeziumHandler{MeiliClient: meiliClient, TenantGate: registry}
+	// registry 同时充当租户状态门禁与生命周期 epoch 门禁：跳过已回收租户的
+	// CDC 消息，并丢弃应用删除/重建后旧 epoch 的迟到事件，防止索引复活。
+	// Revisions 提供文档级 revision 门禁（内存实现），丢弃乱序/重放的旧版本事件。
+	cdcHandler := service.DebeziumHandler{
+		MeiliClient: meiliClient,
+		TenantGate:  registry,
+		EpochGate:   registry,
+		Revisions:   service.NewMemoryRevisionStore(),
+	}
 	for _, topic := range topics.CDC {
 		register(topic, cdcHandler)
 	}
-	register(topics.Command, service.MeiliCommandHandler{MeiliClient: meiliClient})
+	register(topics.Command, service.MeiliCommandHandler{
+		MeiliClient: meiliClient,
+		RegionID:    cfg.RegionID,
+		ConfirmCleanup: func(ctx context.Context, cmd model.MeiliCommand) error {
+			return service.ConfirmCleanupDeletion(ctx, cfg, cmd)
+		},
+	})
 	if registry != nil {
 		register(topics.APIKey, service.APIKeyEventHandler{Registry: registry})
 	}

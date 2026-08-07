@@ -38,12 +38,18 @@ ALTER TABLE collection_settings
     ADD COLUMN IF NOT EXISTS faceting_max_values_per_facet INTEGER;
 """
 
+_CLEANUP_TASKS_EXTEND_SQL = """
+ALTER TABLE app_cleanup_tasks
+    ADD COLUMN IF NOT EXISTS target_regions JSONB;
+"""
+
 
 MIGRATION_VERSION = "20260730_open_platform_api_keys"
 MIGRATION_VERSION_OA_USER_STATUS = "20260805_oa_user_status"
 MIGRATION_VERSION_COLLECTION_SETTINGS = "20260805_collection_settings"
 MIGRATION_VERSION_COLLECTION_SETTINGS_EXTEND = "20260805_collection_settings_extend"
 MIGRATION_VERSION_COLLECTION_SETTINGS_RLS = "20260806_collection_settings_rls"
+MIGRATION_VERSION_CLEANUP_TASKS_REGIONS = "20260807_cleanup_task_regions"
 
 
 async def migrate() -> None:
@@ -95,6 +101,14 @@ async def migrate() -> None:
                 "ON CONFLICT (version) DO NOTHING"
             ),
             {"version": MIGRATION_VERSION_COLLECTION_SETTINGS_EXTEND},
+        )
+        await connection.execute(text(_CLEANUP_TASKS_EXTEND_SQL))
+        await connection.execute(
+            text(
+                "INSERT INTO unidata_schema_migrations (version) VALUES (:version) "
+                "ON CONFLICT (version) DO NOTHING"
+            ),
+            {"version": MIGRATION_VERSION_CLEANUP_TASKS_REGIONS},
         )
         await ensure_collection_settings_rls(connection)
         await connection.execute(

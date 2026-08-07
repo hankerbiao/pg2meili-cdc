@@ -72,6 +72,14 @@ class AgentRegisterResponse(BaseModel):
     port: int
 
 
+class AgentCleanupConfirmationRequest(BaseModel):
+    """Agent 在本区域 Meilisearch 删除任务成功后提交的确认。"""
+
+    task_id: str = Field(..., min_length=1, max_length=128)
+    collection: str = Field(..., min_length=1, max_length=128)
+    region: str = Field(..., min_length=1, max_length=64)
+
+
 class AgentOnlineResponse(BaseModel):
     """在线代理信息返回模型。"""
     id: str

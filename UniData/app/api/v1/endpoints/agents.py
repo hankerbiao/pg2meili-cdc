@@ -7,8 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AppIdentity, get_current_app, require_scopes
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.schemas.document import AgentRegisterRequest, AgentRegisterResponse, AgentOnlineResponse
+from app.schemas.document import (
+    AgentCleanupConfirmationRequest,
+    AgentOnlineResponse,
+    AgentRegisterRequest,
+    AgentRegisterResponse,
+)
 from app.services.agent_service import agent_service
+from app.services import cleanup_service
+from app.services.open_platform_service import open_platform_service
+from app.models.open_platform import OpenPlatformApp
 from app.api.v1.response import ApiResponse, ok
 
 router = APIRouter()
@@ -41,15 +49,47 @@ async def register_agent(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(require_agent_registration_token),
 ) -> ApiResponse[AgentRegisterResponse]:
-    agent = await agent_service.register(
-        db=db,
-        ip=body.ip,
-        port=body.port,
-        hostname=body.hostname,
-        version=body.version,
-        meta=body.meta,
-    )
+    try:
+        agent = await agent_service.register(
+            db=db,
+            ip=body.ip,
+            port=body.port,
+            hostname=body.hostname,
+            version=body.version,
+            meta=body.meta,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
     return ok(AgentRegisterResponse(id=agent.id, ip=agent.ip, port=agent.port))
+
+
+@router.post(
+    "/cleanup-confirmations",
+    status_code=status.HTTP_200_OK,
+    summary="确认区域索引删除",
+)
+async def confirm_cleanup(
+    body: AgentCleanupConfirmationRequest,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_agent_registration_token),
+) -> ApiResponse[dict[str, str]]:
+    try:
+        task = await cleanup_service.confirm_cleanup(
+            db, task_id=body.task_id, collection=body.collection, region=body.region
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="清理任务不存在")
+    app = await db.get(OpenPlatformApp, task.app_id)
+    if app is not None:
+        await open_platform_service._finalize_deletion(
+            db, app, task, actor=f"agent:{body.region}", source_ip=None
+        )
+    return ok({"task_id": task.id, "state": task.state})
 
 
 @router.get(

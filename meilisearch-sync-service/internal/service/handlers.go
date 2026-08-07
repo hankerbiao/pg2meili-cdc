@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"meilisearch-sync-service/internal/logger"
@@ -55,6 +56,12 @@ type DebeziumHandler struct {
 	MeiliClient meilisearch.ServiceManager
 	// TenantGate 可选；为 nil 时不启用租户状态门禁（测试/单机场景）。
 	TenantGate TenantGate
+	// EpochGate 可选；为 nil 时不启用生命周期 epoch 门禁。应用删除/重建后旧
+	// epoch 的迟到事件会被确认丢弃，避免旧 Kafka 消息重建 index 或文档。
+	EpochGate EpochGate
+	// Revisions 可选；为 nil 时不启用文档 revision 门禁。revision 严格大于已
+	// 处理值才执行，旧版本事件确认丢弃，防止乱序/重放覆盖新数据。
+	Revisions RevisionStore
 }
 
 const (
@@ -100,7 +107,7 @@ func (h DebeziumHandler) deleteDocument(ctx context.Context, indexName, id, labe
 }
 
 func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
-	op, id, doc, delID, err := processDebeziumMessage(record.Value)
+	op, id, doc, delID, revision, epoch, err := processDebeziumMessage(record.Value)
 	if err != nil {
 		return permanent(fmt.Errorf("处理 Debezium 消息失败: %w", err))
 	}
@@ -120,6 +127,42 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 		}
 	}
 
+	appID, _ := nonEmptyString(doc["app_id"])
+	collection, _ := nonEmptyString(doc["collection"])
+
+	// 生命周期 epoch 门禁：应用删除/重建会生成新 epoch，旧 epoch 的迟到事件
+	// 直接确认丢弃，防止旧 Kafka 消息重建已删除的 index 或文档。
+	if h.EpochGate != nil && epoch != "" {
+		cur, found, eerr := h.EpochGate.AppEpoch(ctx, appID)
+		if eerr != nil {
+			return eerr
+		}
+		if found && cur != "" && cur != epoch {
+			logger.DebugLogf(
+				"跳过过期 epoch 事件 app=%s eventEpoch=%s currentEpoch=%s topic=%s partition=%d offset=%d",
+				appID, epoch, cur, record.Topic, record.Partition, record.Offset,
+			)
+			return nil
+		}
+	}
+
+	// 文档 revision 门禁：只读已成功应用的版本；实际推进必须在 Meilisearch
+	// 成功后进行，避免瞬时故障后重投被错误去重。
+	var revisionKeyID string
+	if h.Revisions != nil && revision > 0 {
+		revisionKeyID = id
+		if op == "d" {
+			revisionKeyID = delID
+		}
+		if h.Revisions.Applied(appID, collection, revisionKeyID) >= revision {
+			logger.DebugLogf(
+				"跳过旧版本事件 app=%s collection=%s id=%s revision=%d topic=%s partition=%d offset=%d",
+				appID, collection, revisionKeyID, revision, record.Topic, record.Partition, record.Offset,
+			)
+			return nil
+		}
+	}
+
 	logger.DebugLogf("收到消息 topic=%s partition=%d offset=%d op=%s id=%s delID=%s", record.Topic, record.Partition, record.Offset, op, id, delID)
 
 	switch op {
@@ -135,7 +178,7 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 				return err
 			}
 			log.Printf("[delete-by-flag] Meilisearch 索引=%s id=%s", indexName, id)
-			return nil
+			return h.markRevisionApplied(appID, collection, revisionKeyID, revision)
 		}
 
 		if doc != nil {
@@ -171,6 +214,13 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 		return fmt.Errorf("未知的操作类型 %q", op)
 	}
 
+	return h.markRevisionApplied(appID, collection, revisionKeyID, revision)
+}
+
+func (h DebeziumHandler) markRevisionApplied(appID, collection, documentID string, revision int64) error {
+	if h.Revisions != nil && revision > 0 {
+		h.Revisions.TryAdvance(appID, collection, documentID, revision)
+	}
 	return nil
 }
 
@@ -200,7 +250,9 @@ func (h DebeziumHandler) tenantGateDecision(ctx context.Context, record *kgo.Rec
 
 // MeiliCommandHandler 负责处理索引设置与管理命令。
 type MeiliCommandHandler struct {
-	MeiliClient meilisearch.ServiceManager
+	MeiliClient    meilisearch.ServiceManager
+	RegionID       string
+	ConfirmCleanup func(context.Context, model.MeiliCommand) error
 }
 
 func (h MeiliCommandHandler) Handle(ctx context.Context, record *kgo.Record) error {
@@ -250,18 +302,51 @@ func (h MeiliCommandHandler) Handle(ctx context.Context, record *kgo.Record) err
 			derefStr(cmd.Payload.DistinctAttribute), derefBool(cmd.Payload.TypoToleranceEnabled),
 			derefInt64(cmd.Payload.PaginationMaxTotalHits), derefInt64(cmd.Payload.FacetingMaxValuesPerFacet))
 	case "delete_index":
+		if cmd.CleanupTaskID != "" && !commandTargetsRegion(cmd.TargetRegions, h.RegionID) {
+			return nil
+		}
 		task, err := h.MeiliClient.DeleteIndexWithContext(ctx, cmd.IndexUID)
 		if err != nil {
-			return meiliOperationError(fmt.Sprintf("Meilisearch 删除索引失败 index=%s", cmd.IndexUID), err)
+			if !isMeiliNotFound(err) {
+				return meiliOperationError(fmt.Sprintf("Meilisearch 删除索引失败 index=%s", cmd.IndexUID), err)
+			}
 		}
-		if err := waitForTask(ctx, h.MeiliClient, task, "Meilisearch 删除索引"); err != nil {
-			return err
+		if task != nil {
+			if err := waitForTask(ctx, h.MeiliClient, task, "Meilisearch 删除索引"); err != nil {
+				return err
+			}
+		}
+		if cmd.CleanupTaskID != "" && h.ConfirmCleanup != nil {
+			if err := h.ConfirmCleanup(ctx, cmd); err != nil {
+				return fmt.Errorf("确认索引删除失败 task=%s region=%s: %w", cmd.CleanupTaskID, h.RegionID, err)
+			}
+		}
+		if cmd.CleanupTaskID != "" && h.ConfirmCleanup == nil {
+			return fmt.Errorf("清理命令缺少确认回调 task=%s", cmd.CleanupTaskID)
 		}
 		log.Printf("[delete-index] Meilisearch 索引=%s", cmd.IndexUID)
 	default:
 		return permanent(fmt.Errorf("未知命令 action=%s", cmd.Action))
 	}
 	return nil
+}
+
+func commandTargetsRegion(targetRegions []string, region string) bool {
+	region = strings.TrimSpace(region)
+	if region == "" {
+		return false
+	}
+	for _, target := range targetRegions {
+		if strings.TrimSpace(target) == region {
+			return true
+		}
+	}
+	return false
+}
+
+func isMeiliNotFound(err error) bool {
+	var apiErr *meilisearch.Error
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
 }
 
 func validateMeiliCommand(cmd model.MeiliCommand) error {

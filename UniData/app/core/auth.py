@@ -59,6 +59,9 @@ async def get_current_app(
     now = datetime.now(timezone.utc)
     expires_at = key.expires_at if key.expires_at.tzinfo else key.expires_at.replace(tzinfo=timezone.utc)
     digest = hashlib.sha256(secret.encode()).hexdigest()
+    # 应用删除/已删除期间拒绝数据面写入，返回明确的 409 而非 401（plan §4.2）。
+    if app.status in ("deleting", "deleted"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="APP_DELETING")
     invalid = (
         not hmac.compare_digest(digest, key.secret_hash)
         or key.status != "active"

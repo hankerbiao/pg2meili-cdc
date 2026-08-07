@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"meilisearch-sync-service/internal/apikey"
@@ -102,7 +103,7 @@ func (a *App) Run(ctx context.Context) error {
 
 	g.Go(func() error {
 		// 根据 topics 构建 topic -> handler 路由表。
-		handlers := BuildHandlers(a.topics, meiliClient, keyRegistry)
+		handlers := BuildHandlers(a.topics, meiliClient, keyRegistry, a.cfg)
 		// 启动消费主循环：从 Kafka 拉取消息，按 topic 分发给对应 handler。
 		return service.Run(ctx, client, a.cfg, handlers)
 	})
@@ -200,7 +201,7 @@ func newHTTPServer(cfg config.AppConfig, keyRegistry *apikey.Registry) *http.Ser
 
 	return &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           withCORS(mux),
+		Handler:           withCORS(cfg.CORSAllowedOrigins)(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -208,26 +209,54 @@ func newHTTPServer(cfg config.AppConfig, keyRegistry *apikey.Registry) *http.Ser
 	}
 }
 
-func withCORS(h http.Handler) http.Handler {
-	// withCORS 为 HTTP 接口增加简单的 CORS 支持，方便跨域调用搜索代理。
-	// 当前策略较为宽松（允许任意 Origin），如需收紧可在此调整。
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID, Retry-After")
-
-		reqHeaders := r.Header.Get("Access-Control-Request-Headers")
-		if reqHeaders != "" {
-			w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
-		} else {
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-App-Name, X-Request-ID")
+func withCORS(allowed []string) func(http.Handler) http.Handler {
+	// withCORS 为 HTTP 接口增加跨域支持。
+	// 生产环境应配置 CORS_ALLOWED_ORIGINS 白名单：仅反射白名单内的 Origin，
+	// 未匹配的跨域请求不返回 ACAO，浏览器将拒绝；预检也返回 403。
+	// 白名单为空时退化为允许任意 Origin（*），仅用于本地/开发，且需配合
+	// CORS_REQUIRE_ALLOWLIST=true 在生产启动阶段拦截空配置。
+	allowAll := len(allowed) == 0
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, o := range allowed {
+		if o = strings.TrimSpace(o); o != "" {
+			allowedSet[o] = struct{}{}
 		}
+	}
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin != "" {
+				if allowAll {
+					w.Header().Set("Access-Control-Allow-Origin", "*")
+				} else if _, ok := allowedSet[origin]; ok {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Set("Vary", "Origin")
+				}
+			} else if allowAll {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+			}
 
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
+			w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+			w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID, Retry-After")
 
-		h.ServeHTTP(w, r)
-	})
+			reqHeaders := r.Header.Get("Access-Control-Request-Headers")
+			if reqHeaders != "" {
+				w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
+			} else {
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-App-Name, X-Request-ID")
+			}
+
+			if r.Method == http.MethodOptions {
+				_, originOK := allowedSet[origin]
+				if allowAll || (origin != "" && originOK) {
+					w.WriteHeader(http.StatusNoContent)
+				} else {
+					w.WriteHeader(http.StatusForbidden)
+				}
+				return
+			}
+
+			h.ServeHTTP(w, r)
+		})
+	}
 }
