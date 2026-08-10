@@ -9,10 +9,9 @@ import { ApiKeySecretDialog } from '../components/ApiKeySecretDialog'
 import { ConfirmDialog, Dialog } from '../components/Dialog'
 import { formatDate } from './AppsPage'
 
-const allScopes: Array<{ value: Scope; label: string; detail: string }> = [
-  { value: 'search:read', label: '搜索只读', detail: '发现区域节点并执行搜索' },
-  { value: 'data:read', label: '数据只读', detail: '读取文档与集合' },
-  { value: 'data:write', label: '数据写入', detail: '写入、删除与配置索引' },
+const keyProfiles: Array<{ value: 'backend' | 'frontend'; label: string; detail: string; scopes: Scope[] }> = [
+  { value: 'backend', label: '后端完整访问', detail: '读写文档、管理索引并搜索文档，仅限服务端保存。', scopes: ['data:read', 'data:write', 'search:read'] },
+  { value: 'frontend', label: '前端搜索只读', detail: '仅可搜索本应用文档，可安全提供给浏览器。', scopes: ['search:read'] },
 ]
 
 export function AppDetailPage() {
@@ -82,11 +81,11 @@ function EditAppDialog({ app, open, onOpenChange, pending, error, ownerReadonly,
 }
 
 function CreateKeyDialog({ open, onOpenChange, pending, error, onSubmit }: { open: boolean; onOpenChange: (open: boolean) => void; pending: boolean; error?: string; onSubmit: (input: KeyCreateInput) => void }) {
-  const [scopes, setScopes] = useState<Scope[]>(['search:read'])
-  useEffect(() => { if (!open) setScopes(['search:read']) }, [open])
+  const [profile, setProfile] = useState<'backend' | 'frontend'>('backend')
+  useEffect(() => { if (!open) setProfile('backend') }, [open])
   const defaultExpiry = new Date(Date.now() + 30 * 86400000); defaultExpiry.setMinutes(defaultExpiry.getMinutes() - defaultExpiry.getTimezoneOffset())
-  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); if (!scopes.length) return; onSubmit({ name: String(data.get('name')), scopes, expires_at: new Date(String(data.get('expires_at'))).toISOString() }) }
-  return <Dialog open={open} onOpenChange={onOpenChange} title="创建 API Key" description="按调用场景授予最小权限。完整密钥只显示一次。"><form className="form-stack" onSubmit={submit}><label>Key 名称<input name="name" required maxLength={128} placeholder="production-search" /></label><fieldset><legend>Scopes</legend><div className="scope-options">{allScopes.map((scope) => <label key={scope.value} className={scopes.includes(scope.value) ? 'selected' : ''}><input type="checkbox" checked={scopes.includes(scope.value)} onChange={(event) => setScopes((current) => event.target.checked ? [...current, scope.value] : current.filter((item) => item !== scope.value))} /><span><strong>{scope.label}</strong><small>{scope.detail}</small><code>{scope.value}</code></span></label>)}</div>{!scopes.length && <span className="field-error">至少选择一个 scope</span>}</fieldset><label>到期时间<input type="datetime-local" name="expires_at" required defaultValue={defaultExpiry.toISOString().slice(0, 16)} /></label>{error && <div className="form-error">{error}</div>}<div className="dialog-actions"><button className="button button-secondary" type="button" onClick={() => onOpenChange(false)}>取消</button><button className="button button-primary" type="submit" disabled={pending || !scopes.length}>{pending ? '正在创建' : '创建密钥'}</button></div></form></Dialog>
+  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); const selected = keyProfiles.find((item) => item.value === profile)!; onSubmit({ name: String(data.get('name')), scopes: selected.scopes, expires_at: new Date(String(data.get('expires_at'))).toISOString() }) }
+  return <Dialog open={open} onOpenChange={onOpenChange} title="创建 API Key" description="选择调用方类型，系统会授予固定的最小权限。完整密钥只显示一次。"><form className="form-stack" onSubmit={submit}><label>Key 名称<input name="name" required maxLength={128} placeholder="backend-production" /></label><fieldset><legend>调用方类型</legend><div className="scope-options">{keyProfiles.map((item) => <label key={item.value} className={profile === item.value ? 'selected' : ''}><input type="radio" name="key_profile" checked={profile === item.value} onChange={() => setProfile(item.value)} /><span><strong>{item.label}</strong><small>{item.detail}</small><code>{item.scopes.join(' + ')}</code></span></label>)}</div></fieldset><label>到期时间<input type="datetime-local" name="expires_at" required defaultValue={defaultExpiry.toISOString().slice(0, 16)} /></label>{error && <div className="form-error">{error}</div>}<div className="dialog-actions"><button className="button button-secondary" type="button" onClick={() => onOpenChange(false)}>取消</button><button className="button button-primary" type="submit" disabled={pending}>{pending ? '正在创建' : '创建密钥'}</button></div></form></Dialog>
 }
 
 const FIELD_NAME_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/

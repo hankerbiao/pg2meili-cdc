@@ -55,9 +55,9 @@ const frontendKey: ApiKeySecret = {
 const backendKey: ApiKeySecret = {
   ...frontendKey,
   id: 'ak_backend',
-  name: 'backend-data',
+  name: 'backend-full-access',
   prefix: 'ud_live_ak_backend',
-  scopes: ['data:read', 'data:write'],
+  scopes: ['data:read', 'data:write', 'search:read'],
   api_key: 'ud_live_ak_backend.complete-backend-secret',
 }
 
@@ -92,7 +92,7 @@ describe('AppsPage', () => {
       owner_itcode: 'admin',
       initial_keys: [
         { name: 'frontend-search', scopes: ['search:read'] },
-        { name: 'backend-data', scopes: ['data:read', 'data:write'] },
+        { name: 'backend-full-access', scopes: ['data:read', 'data:write', 'search:read'] },
       ],
     })
     expect(await screen.findByRole('heading', { name: '保存你的 API Keys' })).toBeVisible()

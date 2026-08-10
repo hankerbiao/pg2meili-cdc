@@ -80,8 +80,8 @@ class TestOpenPlatform:
                         ).isoformat(),
                     },
                     {
-                        "name": "backend-data",
-                        "scopes": ["data:read", "data:write"],
+                        "name": "backend-full-access",
+                        "scopes": ["data:read", "data:write", "search:read"],
                         "expires_at": (
                             datetime.now(timezone.utc) + timedelta(days=90)
                         ).isoformat(),
@@ -97,10 +97,10 @@ class TestOpenPlatform:
         assert result["app"]["owner_itcode"] == "admin"
         assert [key["name"] for key in result["keys"]] == [
             "frontend-search",
-            "backend-data",
+            "backend-full-access",
         ]
         assert result["keys"][0]["scopes"] == ["search:read"]
-        assert result["keys"][1]["scopes"] == ["data:read", "data:write"]
+        assert result["keys"][1]["scopes"] == ["data:read", "data:write", "search:read"]
         assert all(key["api_key"].startswith("ud_live_ak_") for key in result["keys"])
 
         listed = await platform_client.get(
@@ -109,7 +109,7 @@ class TestOpenPlatform:
         assert listed.status_code == 200
         assert {key["name"] for key in listed.json()["data"]} == {
             "frontend-search",
-            "backend-data",
+            "backend-full-access",
         }
         assert all("api_key" not in key for key in listed.json()["data"])
 

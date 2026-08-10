@@ -1,4 +1,4 @@
-import { ArrowRight, CheckCircle2, KeyRound, PackageCheck, Search, UploadCloud } from 'lucide-react'
+import { ArrowRight, Braces, CheckCircle2, KeyRound, PackageCheck, Search, ShieldCheck, UploadCloud } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { CodeBlock } from '../components/CodeBlock'
 import { CodeExamples } from '../components/CodeExamples'
@@ -59,7 +59,7 @@ if (!response.ok) throw new Error(await response.text())`,
 
 export function QuickstartPage() {
   return (
-    <DocsLayout toc={[{ href: '#create-key', label: '获取 API Key' }, { href: '#write', label: '写入数据' }, { href: '#search', label: '区域搜索' }, { href: '#next', label: '下一步' }]}>
+    <DocsLayout toc={[{ href: '#create-key', label: '获取 API Key' }, { href: '#write', label: '写入数据' }, { href: '#search', label: '区域搜索' }, { href: '#guides', label: '集成文档' }]}>
       <article className="doc-article">
         <div className="eyebrow">QUICKSTART</div>
         <h1>用一把 Key，连接数据与搜索</h1>
@@ -76,7 +76,7 @@ export function QuickstartPage() {
 
         <section id="create-key">
           <span className="step-number">01</span><h2>获取 API Key</h2>
-          <p>管理员创建应用时默认获得前端搜索只读和后端数据读写两把独立 Key，也可以选择仅创建后端读写 Key。之后仍可为不同调用方创建更多 Key。密钥格式固定为：</p>
+          <p>管理员创建应用时默认获得前端搜索只读和后端完整访问两把独立 Key，也可以选择仅创建后端完整访问 Key。后端 Key 包含数据读写与搜索权限；前端 Key 仅可搜索。之后仍可为不同调用方创建更多 Key。密钥格式固定为：</p>
           <CodeBlock language="text" code="ud_live_ak_0123456789abcdef.<256-bit-random-secret>" />
           <div className="callout"><CheckCircle2 size={18} /><span>将密钥保存到服务端密钥管理系统，并通过 <code>MELIDATA_API_KEY</code> 环境变量注入。</span></div>
         </section>
@@ -93,13 +93,13 @@ export function QuickstartPage() {
           <CodeExamples examples={searchExamples} />
         </section>
 
-        <section id="next" className="next-section">
-          <h2>继续集成</h2>
-          <div className="next-links">
-            <Link to="/docs/python-sdk"><span>安装并使用 Python SDK</span><ArrowRight size={18} /></Link>
-            <Link to="/docs/authentication"><span>认证、scope 与错误码</span><ArrowRight size={18} /></Link>
-            <Link to="/docs/api-reference"><span>浏览完整 API Reference</span><ArrowRight size={18} /></Link>
-            <Link to="/docs/agent-guide"><span>AI Agent 集成指南</span><ArrowRight size={18} /></Link>
+        <section id="guides" className="next-section">
+          <h2>完善集成</h2>
+          <p>快速开始将认证、SDK 和 API 契约汇集在同一组导航中；按你的接入方式继续深入。</p>
+          <div className="next-links integration-links">
+            <Link to="/docs/authentication"><ShieldCheck size={18} /><span><strong>认证与权限</strong><small>请求头、scope 与安全实践</small></span><ArrowRight size={18} /></Link>
+            <Link to="/docs/python-sdk"><PackageCheck size={18} /><span><strong>Python SDK</strong><small>安装、客户端与常用接口</small></span><ArrowRight size={18} /></Link>
+            <Link to="/docs/api-reference"><Braces size={18} /><span><strong>API Reference</strong><small>浏览端点与请求契约</small></span><ArrowRight size={18} /></Link>
           </div>
         </section>
       </article>

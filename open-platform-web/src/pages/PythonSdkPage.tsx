@@ -242,9 +242,9 @@ export function PythonSdkPage() {
               <tr><td><code>search:read</code></td><td>发起搜索请求（仅搜索 Agent）</td><td>前端页面、C 端查询</td></tr>
             </tbody>
           </table>
-          <p>前端不应持有 <code>data:write</code>。推荐为「数据写入」与「前端搜索」分别创建 Key，前端只注入 <code>search:read</code> 的 Key，即使泄露也只暴露查询能力。</p>
+          <p>控制台会创建「后端完整访问」与「前端搜索只读」两类 Key。后端 Key 包含全部三个 scope，可读写并搜索文档；前端只注入 <code>search:read</code> 的 Key，即使泄露也只暴露查询能力。</p>
           <CodeBlock language="python" code={keysCode} />
-          <div className="callout"><AlertCircle size={18} /><span>在开放平台「应用与密钥」中创建 Key 时可勾选 scope；Key 的明文仅在创建时展示一次，遗失需吊销后重新生成。</span></div>
+          <div className="callout"><AlertCircle size={18} /><span>在开放平台「应用与密钥」中按调用方类型创建 Key；Key 的明文仅在创建时展示一次，遗失需吊销后重新生成。</span></div>
         </section>
 
         <section id="search">

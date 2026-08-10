@@ -86,7 +86,7 @@ class TestCallerJourney:
                 "display_name": "E2E Caller App",
                 "owner_itcode": "pytest",
                 "initial_keys": [
-                    {"name": "data-key", "scopes": ["data:read", "data:write"], "expires_at": _iso(90)},
+                    {"name": "backend-full-access", "scopes": ["data:read", "data:write", "search:read"], "expires_at": _iso(90)},
                     {"name": "search-key", "scopes": ["search:read"], "expires_at": _iso(90)},
                 ],
             },
@@ -96,6 +96,7 @@ class TestCallerJourney:
         data_key = next(k for k in data["keys"] if "data:write" in k["scopes"])
         search_key = next(k for k in data["keys"] if k["scopes"] == ["search:read"])
         assert data_key["api_key"].startswith("ud_live_ak_")
+        assert data_key["scopes"] == ["data:read", "data:write", "search:read"]
 
         auth = {"Authorization": f"Bearer {data_key['api_key']}"}
 
@@ -135,21 +136,29 @@ class TestCallerJourney:
         assert indexes.status_code == 200
         assert "products" in indexes.json()["data"]
 
-        # 7) 搜索密钥查询在线代理（search:read 权限）
-        agents = await client.get(
-            "/api/v1/agents/online",
-            headers={"Authorization": f"Bearer {search_key['api_key']}"},
-        )
+        # 7) 后端完整访问密钥也可查询在线代理（包含 search:read 权限）
+        agents = await client.get("/api/v1/agents/online", headers=auth)
         assert agents.status_code == 200
         assert isinstance(agents.json()["data"], list)
 
-        # 8) 软删除文档后不可见
+        # 8) 前端搜索只读密钥可查询代理，但不能写入文档。
+        search_auth = {"Authorization": f"Bearer {search_key['api_key']}"}
+        frontend_agents = await client.get("/api/v1/agents/online", headers=search_auth)
+        assert frontend_agents.status_code == 200
+        forbidden_write = await client.post(
+            "/api/v1/data/products",
+            headers=search_auth,
+            json={"id": "frontend-write"},
+        )
+        assert forbidden_write.status_code == 403
+
+        # 9) 软删除文档后不可见
         deleted = await client.delete("/api/v1/data/products/sku-001", headers=auth)
         assert deleted.status_code == 200, deleted.text
         gone = await client.get("/api/v1/data/products/sku-001", headers=auth)
         assert gone.status_code == 404
 
-        # 9) 吊销数据密钥后，原 Bearer 访问被拒（401）
+        # 10) 吊销数据密钥后，原 Bearer 访问被拒（401）
         revoke = await client.post(
             f"/api/v1/open-platform/keys/{data_key['id']}/revoke",
             headers={"X-CSRF-Token": csrf},

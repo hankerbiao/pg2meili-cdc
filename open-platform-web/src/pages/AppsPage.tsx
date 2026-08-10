@@ -20,19 +20,19 @@ const accessProfiles: Array<{
   {
     value: 'standard',
     label: '标准双密钥（推荐）',
-    detail: '同时创建前端搜索只读 Key 和后端数据读写 Key。',
-    scopeSummary: 'search:read / data:read + data:write',
+    detail: '同时创建前端搜索只读 Key 和后端完整访问 Key。',
+    scopeSummary: 'search:read / data:read + data:write + search:read',
     keys: [
       { name: 'frontend-search', scopes: ['search:read'] },
-      { name: 'backend-data', scopes: ['data:read', 'data:write'] },
+      { name: 'backend-full-access', scopes: ['data:read', 'data:write', 'search:read'] },
     ],
   },
   {
     value: 'backend-only',
-    label: '仅后端读写',
-    detail: '不允许浏览器直连搜索，只创建服务端数据读写 Key。',
-    scopeSummary: 'data:read + data:write',
-    keys: [{ name: 'backend-data', scopes: ['data:read', 'data:write'] }],
+    label: '仅后端完整访问',
+    detail: '不允许浏览器直连搜索，只创建服务端完整访问 Key。',
+    scopeSummary: 'data:read + data:write + search:read',
+    keys: [{ name: 'backend-full-access', scopes: ['data:read', 'data:write', 'search:read'] }],
   },
 ]
 
