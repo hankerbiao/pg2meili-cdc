@@ -64,13 +64,10 @@
 
 ## API 与开放平台
 
-UniData Docker 镜像与根目录 Docker Compose 只构建和运行后端 API；运行后可通过
-`/docs` 查看 FastAPI 自动生成的 OpenAPI 文档。Python SDK 作为独立客户端包维护，
-并可通过 API 下载。
-
-`open-platform-web/` 保留开放平台门户的 React 源码、单元测试和端到端测试，但不再由
-UniData 托管，也不包含在当前 Docker Compose 部署中。需要本地开发或单独构建该门户时，
-请进入该目录执行 `npm install`、`npm run dev` 或 `npm run build`。
+UniData Docker 镜像在构建时会编译 `open-platform-web`，并将产物随镜像发布。UniData
+运行后同时提供 API、FastAPI OpenAPI 文档、Python SDK 下载和 `/open-platform/` 门户；
+根路径 `/` 会跳转至开放平台。前端源码仍可在 `open-platform-web/` 独立运行开发服务器，
+但生产环境不应再部署第二份静态产物。
 
 ## 快速开始
 
@@ -97,8 +94,8 @@ docker compose --env-file .env.docker run --rm unidata \
 # 摘要包含 $，在 .env.docker 中必须用单引号包住
 # OPEN_PLATFORM_ADMIN_PASSWORD_HASH='$argon2id$...'
 
-docker compose --env-file .env.docker up -d --build
-docker compose ps
+docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml up -d --build --wait
+DEPLOY_HOST=your-domain.com ./scripts/verify-center-deployment.sh
 ```
 
 ## CDC 连接器自动注册

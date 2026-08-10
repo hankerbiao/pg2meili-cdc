@@ -1,6 +1,6 @@
 # UniData 域名绑定（HTTP 反向代理）
 
-> 目标：把 API 域名（占位 `your-domain.com`）经 nginx 80 端口反代到 UniData 服务。开放平台前端需单独部署，并将 `/open-platform/` 代理到前端站点。
+> 目标：把域名（占位 `your-domain.com`）经 nginx 80 端口统一反代到 UniData 服务。开放平台前端已构建进 UniData 镜像，**不得再单独部署或由 nginx 读取另一份静态产物**。如启用 HTTPS，443 站点应复用相同的 UniData upstream。
 > 约束：**不启用 HTTPS**，全程 HTTP。本文档为操作步骤，若与仓库实际状态冲突，以仓库为准并报告差异。
 
 ## 1. 关键事实（执行前必读）
@@ -65,18 +65,13 @@ upstream unidata_backend {
     keepalive 32;
 }
 
-upstream open_platform_frontend {
-    server 127.0.0.1:4173;
-    keepalive 16;
-}
-
 server {
     listen 80;
     server_name your-domain.com;
     client_max_body_size 100m;
 
-    # API 和 SDK 下载转发到 UniData
-    location /api/ {
+    # API、门户、SPA 路由、SDK 下载和健康检查均由 UniData 提供。
+    location / {
         proxy_pass http://unidata_backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -90,21 +85,11 @@ server {
         proxy_buffering off;
     }
 
-    location = /health { proxy_pass http://unidata_backend; }
-    location = /ready { proxy_pass http://unidata_backend; }
-    location = /docs { proxy_pass http://unidata_backend; }
-
-    # 独立部署的 open-platform-web（示例前端上游）
-    location /open-platform/ {
-        proxy_pass http://open_platform_frontend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
 }
 ```
 
-在 `upstream` 区域增加前端上游（例如 `server 127.0.0.1:4173;`，按实际部署端口调整）。前端构建时使用仓库既定的 `/open-platform` basename，并配置 SPA fallback。UniData 无 WebSocket 端点，无需 `Upgrade` 头转发。
+Nginx 只保留到 `127.0.0.1:8080` 的一个 upstream。`/` 会由 UniData 重定向到
+`/open-platform`，而 `/open-platform/*` 的 SPA fallback 同样由 UniData 提供。
 
 ### Step 2：校验并重载
 
@@ -149,13 +134,13 @@ docker compose exec unidata sh -c 'echo $CORS_ALLOW_ORIGINS'          # 含 your
 sudo rm -f /etc/nginx/conf.d/unidata-your-domain.conf
 # sites-available 方式还需：sudo rm -f /etc/nginx/sites-enabled/unidata-your-domain
 sudo nginx -t && sudo nginx -s reload
-# 回滚 CORS：编辑 .env.docker 删去域名后 docker compose up -d unidata
+# 回滚 CORS：编辑 .env.docker 删去域名后 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d unidata
 ```
 
 ## 5. 注意事项
 
 1. `OPEN_PLATFORM_COOKIE_SECURE` 保持 `false`。
 2. CORS 等应用配置改 `.env.docker`（不再是根目录 `.env`）；保留原有 localhost 开发源。
-3. 可选加固：生产把宿主端口绑定改 `127.0.0.1:${UNIDATA_PORT:-8080}:8080`，使局域网无法绕过 nginx 直连 8080（需确认无其他客户端依赖直连）。
+3. 生产必须使用 `docker-compose.prod.yml`，它会把内部服务绑定到 `127.0.0.1`，并取消 Redis 的宿主端口映射。
 4. 云服务器安全组放行 80（TCP）。
 5. 命令输出与预期不符时**停止并报告**，不要自行绕过。
