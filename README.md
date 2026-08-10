@@ -103,12 +103,15 @@ DEPLOY_HOST=your-domain.com ./scripts/verify-center-deployment.sh
 启动后 `connect-init` 服务会向 Kafka Connect 注册 Debezium PostgreSQL CDC connector，
 打通「PostgreSQL → Kafka → Meilisearch」同步链路。监控的表由 `.env.docker` 的
 `CDC_TABLE_INCLUDE_LIST` 控制（默认仅公共 `public.search_outbox`；租户业务表通过
-触发器原子写入 outbox，不再被 Debezium 直接监听）。
+触发器原子写入 outbox，不再被 Debezium 直接监听）。`postgres-role-init` 会在每次
+部署时幂等对齐 `unidata_app` 与 `unidata_cdc` 的凭证和授权，确保已有 PostgreSQL
+数据卷也能使用当前 `.env.docker` 中的角色配置。
 
 检查注册状态：
 
 ```bash
-curl -s http://localhost:8083/connectors/pg-search-outbox-connector/status | jq
+connector_name=$(awk -F= '$1 == "CDC_CONNECTOR_NAME" { name = $2 } END { print name }' .env.docker)
+curl -s "http://localhost:8083/connectors/${connector_name:-pg-search-outbox-connector}/status" | jq
 ```
 
 如需调整监控表或重建 connector，修改 `CDC_TABLE_INCLUDE_LIST` 后重跑：

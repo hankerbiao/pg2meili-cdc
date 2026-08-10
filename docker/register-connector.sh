@@ -66,7 +66,7 @@ if curl -fsS "${CONNECT_URL}/connectors/${CONNECTOR_NAME}" >/dev/null 2>&1; then
   sleep 2
 fi
 
-curl -fsS -X POST "${CONNECT_URL}/connectors" \
+curl -fsS -o /dev/null -X POST "${CONNECT_URL}/connectors" \
   -H "Content-Type: application/json" \
   -d "${JSON}"
 echo "Debezium connector 已注册: ${CONNECTOR_NAME} (tables: ${TABLE_INCLUDE_LIST})"

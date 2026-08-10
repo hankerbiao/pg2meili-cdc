@@ -118,7 +118,11 @@ RLS 真正生效要求业务账号非超级用户。初始化脚本 `docker/post
 | `unidata_app` | 业务写入/DDL | LOGIN；CONNECT+CREATE；public USAGE+CREATE；业务表所有者（FORCE RLS 同样生效） |
 | `unidata_cdc` | Debezium 逻辑复制 | LOGIN+REPLICATION+BYPASSRLS；CONNECT+CREATE；public USAGE；对 public 新表 SELECT 默认权限；outbox 上另有 `outbox_cdc_full_read` 策略豁免 |
 
-注意：脚本仅 PostgreSQL 数据目录首次初始化时执行；已有数据卷不自动重跑，需重建数据卷或手动建角色授权。`.env.docker` 需配 `UNIDATA_PG_USER/PASSWORD`、`CDC_PG_USER/PASSWORD`，`PG_CONN_STRING` 指向 `unidata_app`；`register-connector.sh` 用 `CDC_PG_USER` 连接。
+注意：初始化脚本只会在 PostgreSQL 数据目录首次初始化时自动执行。Compose 的
+`postgres-role-init` 会在每次部署前按同一幂等逻辑对齐已有数据卷中的角色、密码和授权，
+无需重建卷；该服务必须成功后才会执行迁移与 connector 注册。`.env.docker` 需配
+`UNIDATA_PG_USER/PASSWORD`、`CDC_PG_USER/PASSWORD`，`PG_CONN_STRING` 指向
+`unidata_app`；`register-connector.sh` 用 `CDC_PG_USER` 连接。
 
 ## 9. 迁移
 

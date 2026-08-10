@@ -20,35 +20,34 @@ case "${cdc_role}" in
   ''|*[!A-Za-z0-9_]*) echo "invalid CDC_PG_USER" >&2; exit 1 ;;
 esac
 
-role_exists() {
-  psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = '${1}'" | grep -q 1
-}
+psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" \
+  --set=app_role="${app_role}" \
+  --set=app_password="${app_password}" \
+  --set=cdc_role="${cdc_role}" \
+  --set=cdc_password="${cdc_password}" <<'SQL'
+SELECT format(
+  CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'app_role')
+    THEN 'ALTER ROLE %I LOGIN PASSWORD %L'
+    ELSE 'CREATE ROLE %I LOGIN PASSWORD %L'
+  END,
+  :'app_role', :'app_password'
+) \gexec
 
-if role_exists "${app_role}"; then
-  psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" \
-    --set=unidata_app_password="${app_password}" \
-    -c "ALTER ROLE \"${app_role}\" LOGIN PASSWORD :'unidata_app_password'"
-else
-  psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" \
-    --set=unidata_app_password="${app_password}" \
-    -c "CREATE ROLE \"${app_role}\" LOGIN PASSWORD :'unidata_app_password'"
-fi
+SELECT format(
+  CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'cdc_role')
+    THEN 'ALTER ROLE %I LOGIN REPLICATION BYPASSRLS PASSWORD %L'
+    ELSE 'CREATE ROLE %I LOGIN REPLICATION BYPASSRLS PASSWORD %L'
+  END,
+  :'cdc_role', :'cdc_password'
+) \gexec
 
-if role_exists "${cdc_role}"; then
-  psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" \
-    --set=unidata_cdc_password="${cdc_password}" \
-    -c "ALTER ROLE \"${cdc_role}\" LOGIN REPLICATION BYPASSRLS PASSWORD :'unidata_cdc_password'"
-else
-  psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" \
-    --set=unidata_cdc_password="${cdc_password}" \
-    -c "CREATE ROLE \"${cdc_role}\" LOGIN REPLICATION BYPASSRLS PASSWORD :'unidata_cdc_password'"
-fi
-
-psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" <<SQL
-GRANT CONNECT, CREATE ON DATABASE "${POSTGRES_DB}" TO "${app_role}";
-GRANT USAGE, CREATE ON SCHEMA public TO "${app_role}";
-GRANT CONNECT, CREATE ON DATABASE "${POSTGRES_DB}" TO "${cdc_role}";
-GRANT USAGE ON SCHEMA public TO "${cdc_role}";
-ALTER DEFAULT PRIVILEGES FOR ROLE "${app_role}" IN SCHEMA public
-  GRANT SELECT ON TABLES TO "${cdc_role}";
+SELECT format('GRANT CONNECT, CREATE ON DATABASE %I TO %I', current_database(), :'app_role') \gexec
+SELECT format('GRANT USAGE, CREATE ON SCHEMA public TO %I', :'app_role') \gexec
+SELECT format('GRANT CONNECT, CREATE ON DATABASE %I TO %I', current_database(), :'cdc_role') \gexec
+SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'cdc_role') \gexec
+SELECT format('GRANT SELECT ON ALL TABLES IN SCHEMA public TO %I', :'cdc_role') \gexec
+SELECT format(
+  'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT SELECT ON TABLES TO %I',
+  :'app_role', :'cdc_role'
+) \gexec
 SQL

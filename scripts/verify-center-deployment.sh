@@ -5,7 +5,19 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 COMPOSE=(docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml)
-CONNECTOR_NAME="${CDC_CONNECTOR_NAME:-pg-search-outbox-connector}"
+env_file_value() {
+  awk -v key="$1" '
+    index($0, key "=") == 1 { value = substr($0, length(key) + 2) }
+    END { print value }
+  ' .env.docker
+}
+
+CONNECTOR_NAME="${CDC_CONNECTOR_NAME:-$(env_file_value CDC_CONNECTOR_NAME)}"
+CONNECTOR_NAME="${CONNECTOR_NAME:-pg-search-outbox-connector}"
+UNIDATA_PORT="${UNIDATA_PORT:-$(env_file_value UNIDATA_PORT)}"
+UNIDATA_PORT="${UNIDATA_PORT:-8080}"
+CONNECT_PORT="${CONNECT_PORT:-$(env_file_value CONNECT_PORT)}"
+CONNECT_PORT="${CONNECT_PORT:-8083}"
 HOST_HEADER="${DEPLOY_HOST:-}"
 
 curl_local() {
@@ -23,10 +35,10 @@ for service in postgres kafka meilisearch redis unidata; do
 done
 
 echo "== UniData readiness =="
-curl_local http://127.0.0.1:"${UNIDATA_PORT:-8080}"/ready
+curl_local http://127.0.0.1:"$UNIDATA_PORT"/ready
 
 echo "== Debezium connector =="
-connector_status="$(curl_local http://127.0.0.1:"${CONNECT_PORT:-8083}"/connectors/"$CONNECTOR_NAME"/status)"
+connector_status="$(curl_local http://127.0.0.1:"$CONNECT_PORT"/connectors/"$CONNECTOR_NAME"/status)"
 printf '%s\n' "$connector_status"
 [[ "$(printf '%s' "$connector_status" | grep -o '"state":"RUNNING"' | wc -l | tr -d ' ')" -ge 2 ]]
 

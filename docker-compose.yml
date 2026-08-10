@@ -146,6 +146,8 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
+      postgres-role-init:
+        condition: service_completed_successfully
 
   meilisearch:
     image: getmeili/meilisearch:v1.8
@@ -176,6 +178,29 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+
+  # PostgreSQL init scripts run only for new volumes. Reconcile credentials and
+  # grants on each deployment so existing volumes follow the current .env.docker.
+  postgres-role-init:
+    image: postgres:16
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGPASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      UNIDATA_PG_USER: ${UNIDATA_PG_USER:-unidata_app}
+      UNIDATA_PG_PASSWORD: ${UNIDATA_PG_PASSWORD:-change-me}
+      CDC_PG_USER: ${CDC_PG_USER:-unidata_cdc}
+      CDC_PG_PASSWORD: ${CDC_PG_PASSWORD:-change-me}
+    volumes:
+      - ./docker/postgres-init/01-create-unidata-roles.sh:/docker-entrypoint-initdb.d/01-create-unidata-roles.sh:ro
+      - ./docker/reconcile-postgres-roles.sh:/opt/unidata/reconcile-postgres-roles.sh:ro
+    entrypoint: ["/bin/bash", "/opt/unidata/reconcile-postgres-roles.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   unidata-migrate:
     build:
@@ -213,6 +238,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      postgres-role-init:
+        condition: service_completed_successfully
       kafka-init:
         condition: service_completed_successfully
       unidata-migrate:
