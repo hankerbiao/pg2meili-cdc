@@ -117,9 +117,7 @@ Pydantic 模型见：
 
 - `GET /health`：基础探活，返回 `{ "status": "healthy" }`。
 
-下面分块说明核心接口。运行服务后，可在
-`/open-platform/docs/quickstart` 查看接入说明，在
-`/open-platform/docs/api-reference` 查看公开 API Reference。
+下面分块说明核心接口。运行服务后，可在 `/docs` 查看完整的 OpenAPI 文档。
 
 ---
 
@@ -187,9 +185,8 @@ curl -X POST "http://localhost:8080/api/v1/data/requirements" \
 ## 7. API Key 认证
 
 所有需要写入、读取或管理数据的调用方接口都要求携带
-`Authorization: Bearer <api_key>`。应用和 API Key 由开放平台控制台管理，
-scope、轮换、撤销和错误码说明见运行时页面
-`/open-platform/docs/authentication`。
+`Authorization: Bearer <api_key>`。应用和 API Key 由开放平台 API 管理，
+scope、轮换、撤销和错误码说明见 `/docs` 中对应的 OpenAPI 定义。
 
 ---
 
@@ -228,15 +225,7 @@ scope、轮换、撤销和错误码说明见运行时页面
 
 ## 9. 环境配置与运行
 
-开放平台页面由仓库根目录下的 `open-platform-web` 构建并由 UniData 同源托管。首次启动或前端变更后先执行：
-
-```bash
-cd ../open-platform-web
-npm install
-npm run build
-```
-
-使用仓库根目录的 Docker Compose 时，React 构建会在多阶段镜像中自动完成，不需要在宿主机安装 Node.js。镜像同时预构建 Python SDK 下载包，并通过固定的容器资源目录交给 UniData 托管。
+使用仓库根目录的 Docker Compose 时，镜像会预构建 Python SDK 下载包。
 
 ### 9.1 配置项
 
@@ -256,7 +245,6 @@ npm run build
 - `agent_registration_token`：Go Agent 注册与内部快照接口访问凭证；
 - `open_platform_admin_username` / `open_platform_admin_password_hash` / `open_platform_session_secret`：开放平台管理员与会话配置；
 - `kafka_api_key_topic`：开放平台应用与 API Key 变更事件 topic。
-- `open_platform_dist_dir`：预构建开放平台静态资源目录；容器默认 `/opt/unidata/open-platform`；
 - `python_sdk_archive`：可下载 Python SDK ZIP；容器默认 `/opt/unidata/downloads/unidata-sdk.zip`；
 - `log_file_enabled`：容器中建议关闭，仅写 stdout。
 
@@ -307,7 +295,7 @@ docker compose --env-file .env.docker watch unidata
 管理员 Argon2 摘要写入 `.env.docker` 时必须使用单引号，例如
 `OPEN_PLATFORM_ADMIN_PASSWORD_HASH='$argon2id$...'`，避免摘要中的 `$` 被 Compose 解释为变量。
 
-Compose 会先等待 PostgreSQL，运行 `migrations/` 中带版本记录的数据库迁移，再初始化 Kafka topics，最后启动单 worker UniData。Python `app/`、`scripts/` 和 `migrations/` 使用 `sync+restart`；前端、SDK、依赖锁文件和 Dockerfile 变化使用 `rebuild`。
+Compose 会先等待 PostgreSQL，运行 `migrations/` 中带版本记录的数据库迁移，再初始化 Kafka topics，最后启动单 worker UniData。Python `app/`、`scripts/` 和 `migrations/` 使用 `sync+restart`；SDK、依赖锁文件和 Dockerfile 变化使用 `rebuild`。
 
 文档租户迁移会为历史记录回填 `app_id`；无法识别的空应用名归入自动创建的 `legacy` 应用。迁移会把文档主键切换为内部 `row_id`，并设置 `REPLICA IDENTITY FULL` 以保留 Debezium 删除事件所需的路由字段。生产执行前必须备份数据库并确认 Debezium Connector 正常；新版本开始写入跨租户重复业务 ID 后，不能直接回退到旧的全局 ID 主键模型。
 

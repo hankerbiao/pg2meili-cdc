@@ -1,6 +1,4 @@
 """OA 单点登录普通用户模型。"""
-from datetime import datetime, timezone
-
 from sqlalchemy import Column, DateTime, String
 from sqlalchemy.dialects.postgresql import JSONB
 

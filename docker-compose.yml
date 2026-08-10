@@ -246,13 +246,6 @@ services:
         - action: rebuild
           path: ./UniData/uv.lock
         - action: rebuild
-          path: ./open-platform-web
-          ignore:
-            - node_modules
-            - dist
-            - test-results
-            - playwright-report
-        - action: rebuild
           path: ./python-sdk
           ignore:
             - .venv

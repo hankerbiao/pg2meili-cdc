@@ -1,14 +1,6 @@
 ARG PYTHON_IMAGE=python:3.12-slim
 ARG PYTHON_PACKAGE_INDEX=https://mirrors.aliyun.com/pypi/simple
 
-FROM node:20-alpine AS open-platform-builder
-WORKDIR /build/open-platform-web
-COPY open-platform-web/package.json open-platform-web/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci
-COPY open-platform-web/ ./
-RUN npm run build
-
-
 FROM ${PYTHON_IMAGE} AS sdk-builder
 WORKDIR /build/python-sdk
 COPY python-sdk/pyproject.toml python-sdk/README.md ./
@@ -44,7 +36,6 @@ ENV PATH=/opt/venv/bin:$PATH \
     PYTHONPATH=/opt/unidata/UniData \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    OPEN_PLATFORM_DIST_DIR=/opt/unidata/open-platform \
     PYTHON_SDK_ARCHIVE=/opt/unidata/downloads/unidata-sdk.zip \
     LOG_FILE_ENABLED=false
 
@@ -58,7 +49,6 @@ COPY --chown=unidata:unidata UniData/app /opt/unidata/UniData/app
 COPY --chown=unidata:unidata UniData/scripts /opt/unidata/UniData/scripts
 COPY --chown=unidata:unidata UniData/migrations /opt/unidata/UniData/migrations
 COPY --chown=unidata:unidata UniData/pyproject.toml UniData/README.md /opt/unidata/UniData/
-COPY --from=open-platform-builder --chown=unidata:unidata /build/open-platform-web/dist /opt/unidata/open-platform
 COPY --from=sdk-builder --chown=unidata:unidata /out /opt/unidata/downloads
 
 WORKDIR /opt/unidata/UniData

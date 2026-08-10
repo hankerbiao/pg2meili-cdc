@@ -54,30 +54,23 @@
 │   ├── go.mod                        # Go 模块定义
 │   └── go.sum
 │
-├── open-platform-web/               # 开放平台文档与管理控制台 (React + TypeScript)
+├── open-platform-web/                 # 开放平台门户前端 (React + TypeScript)
 ├── python-sdk/                       # 独立 Python 客户端 SDK
 ├── docker/                           # 容器初始化脚本
-├── Dockerfile                        # UniData 与开放平台镜像
+├── Dockerfile                        # UniData API 镜像
 ├── docker-compose.yml                # 核心中间件部署配置
 └── README.md
 ```
 
-## 开放平台文档
+## API 与开放平台
 
-API 使用文档、认证说明、Python SDK 和公开 API Reference 已统一到
-`open-platform-web`。生产环境由 UniData 同源托管，入口为
-`/open-platform`；FastAPI 自动生成的 OpenAPI 页面保留在 `/docs`。
+UniData Docker 镜像与根目录 Docker Compose 只构建和运行后端 API；运行后可通过
+`/docs` 查看 FastAPI 自动生成的 OpenAPI 文档。Python SDK 作为独立客户端包维护，
+并可通过 API 下载。
 
-本地开发开放平台前端：
-
-```bash
-cd open-platform-web
-npm ci
-npm run dev
-```
-
-生产构建通过根目录 `Dockerfile` 自动执行，也可以在该目录运行
-`npm run build` 单独验证。
+`open-platform-web/` 保留开放平台门户的 React 源码、单元测试和端到端测试，但不再由
+UniData 托管，也不包含在当前 Docker Compose 部署中。需要本地开发或单独构建该门户时，
+请进入该目录执行 `npm install`、`npm run dev` 或 `npm run build`。
 
 ## 快速开始
 
@@ -90,7 +83,7 @@ npm run dev
 - Apache Kafka
 - Debezium Connector
 
-### Docker 启动 UniData 与开放平台（推荐）
+### Docker 启动 UniData（推荐）
 
 Go Agent 保持在各区域独立部署，不包含在中心 Docker Compose 中。
 
@@ -136,7 +129,6 @@ docker compose --env-file .env.docker --profile debug up -d kafka-ui
 
 服务入口：
 
-- 开放平台：`http://localhost:8080/open-platform`
 - API 文档：`http://localhost:8080/docs`
 - 存活检查：`http://localhost:8080/health`
 - 就绪检查：`http://localhost:8080/ready`
@@ -147,7 +139,7 @@ docker compose --env-file .env.docker --profile debug up -d kafka-ui
 docker compose --env-file .env.docker watch unidata
 ```
 
-前端、Python 依赖或 SDK 变化会触发镜像重建。生产环境必须通过 HTTPS 反向代理访问，并将 `OPEN_PLATFORM_COOKIE_SECURE` 设置为 `true`。
+Python 依赖、SDK 或 Dockerfile 变化会触发镜像重建。生产环境必须通过 HTTPS 反向代理访问，并将 `OPEN_PLATFORM_COOKIE_SECURE` 设置为 `true`。
 
 ### 1. 安装 Python 依赖 (UniData)
 
@@ -286,5 +278,5 @@ group 以实现故障转移，不同区域使用不同 group，以保证每个�
 - **Go Modules**: 依赖管理
 
 ### 文档 & 前端
-- **React + TypeScript + Vite**: 开放平台文档与管理控制台
+- **React + TypeScript + Vite**: 独立维护的开放平台文档与管理控制台前端
 - **React + Vite**: 数据与搜索调试工具

@@ -67,7 +67,6 @@ def create_admin_session(username: str) -> tuple[str, AdminSession]:
 
 
 def decode_admin_session(token: str) -> AdminSession:
-    settings = get_settings()
     secret = get_session_secret()
     try:
         payload, signature = token.split(".", 1)

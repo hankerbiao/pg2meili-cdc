@@ -13,40 +13,21 @@ from app.api.v1.endpoints.sdk import (
     validate_python_sdk_archive,
 )
 from app.core.config import Settings
-from app.web.static import (
-    open_platform_assets_ready,
-    open_platform_dist_dir,
-    validate_runtime_assets,
-)
 
 
-def test_container_runtime_paths_are_configurable(tmp_path: Path):
-    dist = tmp_path / "portal"
-    (dist / "assets").mkdir(parents=True)
-    (dist / "index.html").write_text("<html></html>", encoding="utf-8")
+def test_sdk_archive_path_is_configurable(tmp_path: Path):
     sdk_archive = tmp_path / "unidata-sdk-0.1.0.zip"
     sdk_archive.write_bytes(b"zip")
-    settings = Settings(
-        open_platform_dist_dir=str(dist),
-        python_sdk_archive=str(sdk_archive),
-    )
+    settings = Settings(python_sdk_archive=str(sdk_archive))
 
-    assert open_platform_dist_dir(settings) == dist
-    assert open_platform_assets_ready(settings)
     assert configured_python_sdk_archive(settings) == sdk_archive
     assert python_sdk_available(settings)
-    validate_runtime_assets(settings)
     validate_python_sdk_archive(settings)
 
 
-def test_explicit_missing_container_assets_fail_validation(tmp_path: Path):
-    settings = Settings(
-        open_platform_dist_dir=str(tmp_path / "missing-portal"),
-        python_sdk_archive=str(tmp_path / "missing-sdk.zip"),
-    )
+def test_explicit_missing_sdk_archive_fails_validation(tmp_path: Path):
+    settings = Settings(python_sdk_archive=str(tmp_path / "missing-sdk.zip"))
 
-    with pytest.raises(RuntimeError, match="开放平台"):
-        validate_runtime_assets(settings)
     with pytest.raises(RuntimeError, match="Python SDK"):
         validate_python_sdk_archive(settings)
 
@@ -74,13 +55,9 @@ def test_secret_file_overrides_direct_setting(tmp_path: Path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_readiness_reports_container_dependencies(tmp_path: Path, monkeypatch):
-    dist = tmp_path / "portal"
-    (dist / "assets").mkdir(parents=True)
-    (dist / "index.html").write_text("<html></html>", encoding="utf-8")
     sdk_archive = tmp_path / "unidata-sdk-0.1.0.zip"
     sdk_archive.write_bytes(b"zip")
     settings = Settings(
-        open_platform_dist_dir=str(dist),
         python_sdk_archive=str(sdk_archive),
         open_platform_admin_password_hash="$argon2id$configured",
         open_platform_session_secret="s" * 32,

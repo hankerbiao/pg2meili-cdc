@@ -1,6 +1,6 @@
 # UniData 域名绑定（HTTP 反向代理）
 
-> 目标：把域名（占位 `your-domain.com`）经 nginx 80 端口反代到 UniData 服务。
+> 目标：把 API 域名（占位 `your-domain.com`）经 nginx 80 端口反代到 UniData 服务。开放平台前端需单独部署，并将 `/open-platform/` 代理到前端站点。
 > 约束：**不启用 HTTPS**，全程 HTTP。本文档为操作步骤，若与仓库实际状态冲突，以仓库为准并报告差异。
 
 ## 1. 关键事实（执行前必读）
@@ -11,7 +11,6 @@
 | UniData 宿主端口 | `8080` | `.env.docker` → `UNIDATA_PORT=8080` |
 | 健康检查 | `GET /ready` | `docker-compose.yml` unidata healthcheck |
 | Cookie Secure | `OPEN_PLATFORM_COOKIE_SECURE=false` | `.env.docker`；**HTTP 下必须保持 false**，改 true 会导致浏览器不发送 Cookie、登录失效 |
-| 前端静态资源 | 由 UniData 自身托管（`open_platform_dist_dir`） | nginx 只需反代 UniData 一个上游 |
 
 ### CORS / 环境变量来源（已统一）
 
@@ -25,7 +24,7 @@
 ### 其它约束
 
 - **Cookie 安全**：`OPEN_PLATFORM_COOKIE_SECURE` 保持 `false`，勿改（HTTP 下浏览器才会发送 Cookie）。
-- **SameSite**：管理员与 OA 会话 Cookie 均为 `SameSite=Strict`。Strict 只认 scheme+可注册域名、不看端口，`localhost:8080` 与同源 SPA 属同站，Cookie 正常携带；仅"前端与 API 跨域名"（如 `app.example.com` → `api.example.com`）才会失效。本部署前端与 API 同源托管，故保持 Strict（更强防 CSRF）。
+- **SameSite**：管理员与 OA 会话 Cookie 均为 `SameSite=Strict`。Strict 只认 scheme+可注册域名、不看端口；前端与 API 必须使用同一 scheme 和可注册域名（例如都挂在 `your-domain.com` 下），否则登录 Cookie 不会携带。
 - **git 卫生**：main 常有他人未提交 WIP。涉及 git 提交时只 `git add` 本次文件，禁止 `git add -A` / `git add .`；`.env` / `.env.docker` 含密钥，确认被 `.gitignore` 忽略再提交。
 
 ## 2. 前置确认
@@ -66,12 +65,18 @@ upstream unidata_backend {
     keepalive 32;
 }
 
+upstream open_platform_frontend {
+    server 127.0.0.1:4173;
+    keepalive 16;
+}
+
 server {
     listen 80;
     server_name your-domain.com;
     client_max_body_size 100m;
 
-    location / {
+    # API 和 SDK 下载转发到 UniData
+    location /api/ {
         proxy_pass http://unidata_backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -84,10 +89,22 @@ server {
         proxy_send_timeout 300s;
         proxy_buffering off;
     }
+
+    location = /health { proxy_pass http://unidata_backend; }
+    location = /ready { proxy_pass http://unidata_backend; }
+    location = /docs { proxy_pass http://unidata_backend; }
+
+    # 独立部署的 open-platform-web（示例前端上游）
+    location /open-platform/ {
+        proxy_pass http://open_platform_frontend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
 }
 ```
 
-> UniData 无 WebSocket 端点，无需 `Upgrade` 头转发；`/ready`、`/docs` 等均由 UniData 提供，统一走 `/` 反代即可。
+在 `upstream` 区域增加前端上游（例如 `server 127.0.0.1:4173;`，按实际部署端口调整）。前端构建时使用仓库既定的 `/open-platform` basename，并配置 SPA fallback。UniData 无 WebSocket 端点，无需 `Upgrade` 头转发。
 
 ### Step 2：校验并重载
 
@@ -124,7 +141,7 @@ curl -i -X OPTIONS http://your-domain.com/ \
 docker compose exec unidata sh -c 'echo $CORS_ALLOW_ORIGINS'          # 含 your-domain.com
 ```
 
-浏览器验收：访问 `http://your-domain.com/` 能打开登录页；管理员登录成功；执行一次检索/上传确认接口正常。
+浏览器验收：访问 `http://your-domain.com/open-platform/` 能打开登录页；管理员登录成功；执行一次检索/上传确认接口正常。
 
 ## 4. 回滚
 

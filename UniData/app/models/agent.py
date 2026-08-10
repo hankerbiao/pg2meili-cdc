@@ -1,6 +1,5 @@
 """代理节点数据库模型。"""
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB

@@ -4,8 +4,6 @@ from __future__ import annotations
 import logging
 from urllib.parse import quote
 
-logger = logging.getLogger("unidata.oa")
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
@@ -21,6 +19,8 @@ from app.core.oa_auth import (
     get_oa_user,
 )
 from app.services.oa_service import assert_oa_user_active, get_oa_user_profile, upsert_oa_user
+
+logger = logging.getLogger("unidata.oa")
 
 router = APIRouter(prefix="/oa")
 

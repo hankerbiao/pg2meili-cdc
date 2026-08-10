@@ -1,0 +1,56 @@
+name: Test
+
+on:
+  push:
+    branches: [main, master, "**"]
+  pull_request:
+
+jobs:
+  unidata-tests:
+    runs-on: ubuntu-latest
+    # 隔离测试库：库名必须含 'test' 段（conftest._test_database_url 强制校验）
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: unidata_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: UniData
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.6.14"
+
+      - name: Create venv and install test deps
+        run: |
+          uv venv --python 3.11
+          uv pip install -r requirements-dev.txt
+
+      - name: Run tests with coverage gate
+        env:
+          TEST_PG_CONN_STRING: postgresql://postgres:test@localhost:5432/unidata_test
+          PG_CONN_STRING: postgresql://postgres:test@localhost:5432/unidata_test
+          KAFKA_BOOTSTRAP_SERVERS: 127.0.0.1:9092
+        run: |
+          . .venv/bin/activate
+          pytest -q

@@ -16,7 +16,6 @@ Distributed CDC-based search synchronization system enabling "single-source writ
 |-----------|----------|---------|
 | `UniData/` | Python/FastAPI | Producer service - writes data to PostgreSQL |
 | `meilisearch-sync-service/` | Go | Kafka consumer - syncs changes to Meilisearch |
-| `open-platform-web/` | React/TypeScript | Documentation portal + API Key management console |
 | `python-sdk/` | Python | Client SDK for document operations |
 
 ## Commands
@@ -72,18 +71,6 @@ docker compose --env-file .env.docker watch unidata
 docker compose --env-file .env.docker --profile debug up -d kafka-ui
 ```
 
-### Open Platform Web (Frontend)
-
-```bash
-cd open-platform-web
-
-npm ci
-npm run dev                    # development
-npm run build                  # production build
-npm run test                   # vitest unit tests
-npm run test:e2e               # playwright E2E tests
-```
-
 ### Python SDK
 
 ```bash
@@ -108,11 +95,11 @@ Each region runs an independent Go sync service with its own Kafka consumer grou
 
 ### API Key Authentication
 
-Open platform uses Bearer token auth. Apps and API Keys are managed via the console at `/open-platform`. All data APIs require `Authorization: Bearer <api_key>` header.
+Open platform uses Bearer token auth. Apps and API Keys are managed via the `/api/v1/open-platform` API. All data APIs require `Authorization: Bearer <api_key>` header.
 
-### Open Platform Serving
+### SDK Serving
 
-The `open-platform-web` React app is built and served by UniData from `OPEN_PLATFORM_DIST_DIR` (default: `/opt/unidata/open-platform`). The Python SDK archive is served from `PYTHON_SDK_ARCHIVE` path.
+The Python SDK archive is served from the `PYTHON_SDK_ARCHIVE` path.
 
 ## Key Configuration Files
 
@@ -124,7 +111,6 @@ The `open-platform-web` React app is built and served by UniData from `OPEN_PLAT
 ## Health Endpoints (running service)
 
 - UniData: `http://localhost:8080/health`
-- Open Platform: `http://localhost:8080/open-platform`
 - API Docs: `http://localhost:8080/docs`
 - Kafka Connect: `http://localhost:8083/connectors/pg-cdc-connector/status`
 - Kafka UI: `http://localhost:8085` (debug profile only)

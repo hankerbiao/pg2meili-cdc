@@ -2,17 +2,16 @@
 # =============================================================================
 # pg2meili 开发/构建统一入口
 #
-# 一键完成: 重新构建 docker 镜像（前端+后端一体）/ 构建 Go 同步服务 /
-#          实时把代码同步到容器（热更新）/ 本地前端 HMR 开发
+# 一键完成: 重新构建 UniData 镜像 / 构建 Go 同步服务 /
+#          实时把代码同步到容器（热更新）
 #
 # 部署拓扑:
-#   - unidata 容器(8080): 镜像内 = open-platform-web 前端 dist + UniData 后端
+#   - unidata 容器(8080): UniData API 服务
 #   - meilisearch-sync-service(Go): 宿主进程, 不在 docker-compose 内
 #
 # 用法:
 #   ./dev.sh build [unidata|go|all] [--no-cache]  重新构建并更新
 #   ./dev.sh dev backend    后端热更新: 监听 UniData/app 同步到容器并自动重启
-#   ./dev.sh dev frontend   前端热更新: 本地 vite(3100) HMR, API 代理到容器 8080
 #   ./dev.sh dev go         本机编译 Go 服务, 监听 *.go 变更自动重编译重启
 #   ./dev.sh watch [svc]    docker compose watch 实时同步到容器
 #   ./dev.sh up [svc...]    启动环境(默认全部)
@@ -33,8 +32,6 @@ GO_CTL="$GO_DIR/start_meilisearch_sync_service.sh"
 GO_BIN_LOCAL="meilisearch-sync-service_go.local"  # 本地编译版（*.local 已被 .gitignore 忽略）
 GO_PID_FILE="$GO_DIR/.meili_local.pid"
 GO_LOG_FILE="$GO_DIR/app.local.log"
-WEB_DIR="$SCRIPT_DIR/open-platform-web"
-
 # --- 输出工具 ---------------------------------------------------------------
 info() { printf '\033[1;36m[dev]\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m[ok]\033[0m %s\n' "$*"; }
@@ -45,10 +42,10 @@ require_docker() {
   command -v docker >/dev/null 2>&1 || die "未找到 docker，请先安装/启动 Docker Desktop"
 }
 
-# --- 构建: unidata 镜像（open-platform-web 前端 + UniData 后端一体）-----------
+# --- 构建: unidata 镜像 ------------------------------------------------------
 build_unidata() {
   require_docker
-  info "构建 unidata 镜像（open-platform-web 前端 + UniData 后端）..."
+  info "构建 unidata 镜像（UniData API 服务）..."
   # 注意: macOS 自带 bash 3.2 在 set -u 下空数组 "${extra[@]}" 展开会报 unbound variable，故不用数组拼参数
   if [[ "${NO_CACHE:-0}" == "1" ]]; then
     $COMPOSE build --no-cache unidata
@@ -75,35 +72,6 @@ dev_backend() {
   $COMPOSE ps --status running unidata >/dev/null 2>&1 || warn "unidata 未运行，建议先 ./dev.sh up 或 ./dev.sh build"
   info "监听 UniData/app、scripts、migrations，改动自动同步容器并重启 (Ctrl+C 退出)"
   $COMPOSE watch unidata
-}
-
-# 探测 unidata 容器映射到宿主机的实际端口（兼容 UNIDATA_PORT 非 8080 的环境）
-unidata_host_port() {
-  local out
-  out="$($COMPOSE port unidata 8080 2>/dev/null)" || return 1
-  echo "$out" | sed -E 's/^[^:]+:([0-9]+)$/\1/'
-}
-
-# --- 实时更新: 前端 HMR（本地 vite dev + 代理到容器）-------------------------
-dev_frontend() {
-  require_docker
-  local host_port
-  if host_port="$(unidata_host_port)"; then
-    if ! curl -fsS -m 2 "http://127.0.0.1:${host_port}/ready" >/dev/null 2>&1; then
-      warn "127.0.0.1:${host_port} 未就绪，请先 ./dev.sh up 或 ./dev.sh build"
-    else
-      ok "unidata 容器可达: 127.0.0.1:${host_port}"
-      if [[ "${host_port}" != "8080" ]]; then
-        warn "当前容器映射 ${host_port}，但 vite.config.ts 代理目标写死 8080"
-        warn "如 API 请求 404/ECONNREFUSED，请改 open-platform-web/vite.config.ts 的 proxy 为 http://127.0.0.1:${host_port}"
-      fi
-    fi
-  else
-    warn "未检测到 unidata 容器端口映射，请先 ./dev.sh up 或 ./dev.sh build"
-  fi
-  [ -d "$WEB_DIR/node_modules" ] || { info "安装前端依赖..." && (cd "$WEB_DIR" && npm ci); }
-  info "启动 open-platform-web vite dev server: http://localhost:3100 （/api、/openapi.json 代理到容器）"
-  (cd "$WEB_DIR" && npm run dev)
 }
 
 # --- 实时更新: Go 服务（本机编译 + 监听 *.go/.env 自动重启）------------------
@@ -174,6 +142,65 @@ dev_go() {
   done
 }
 
+# --- 测试: 运行 UniData pytest 套件 -----------------------------------------
+# 用法:
+#   ./dev.sh test                运行全部测试（DB 用例需 TEST_PG_CONN_STRING 或 --with-db）
+#   ./dev.sh test --cov          带覆盖率报告（默认已开启 --cov=app）
+#   ./dev.sh test --with-db      临时拉起 Postgres 容器跑全量（含集成/端到端）
+#   ./dev.sh test <pytest args>  透传任意 pytest 参数，如 ./dev.sh test tests/test_kafka_manager.py
+cmd_test() {
+  local with_db=0
+  local extra=()
+  for arg in "$@"; do
+    case "$arg" in
+      --with-db) with_db=1 ;;
+      --cov) ;;  # 覆盖率已在 pyproject addopts 默认开启
+      *) extra+=("$arg") ;;
+    esac
+  done
+
+  local venv_py="$SCRIPT_DIR/UniData/.venv/bin/python"
+  [ -x "$venv_py" ] || die "未找到 UniData/.venv，请先创建虚拟环境并安装依赖（pytest pytest-asyncio pytest-cov httpx）"
+
+  if [ "$with_db" -eq 1 ]; then
+    require_docker
+    info "启动临时 Postgres 测试库 (unidata_test_ci)..."
+    cleanup_test_pg() {
+      docker rm -f unidata_test_pg >/dev/null 2>&1 || true
+    }
+    trap cleanup_test_pg EXIT INT TERM
+    cleanup_test_pg
+    docker run -d --rm --name unidata_test_pg -e POSTGRES_USER=postgres \
+      -e POSTGRES_PASSWORD=test -e POSTGRES_DB=unidata_test -p 5433:5432 postgres:16 >/dev/null
+    # 等待就绪
+    for _ in $(seq 1 30); do
+      docker exec unidata_test_pg pg_isready -U postgres >/dev/null 2>&1 && break
+      sleep 1
+    done
+    export TEST_PG_CONN_STRING="postgresql://postgres:test@127.0.0.1:5433/unidata_test"
+    info "TEST_PG_CONN_STRING 已指向临时库，运行全量测试..."
+    set +e
+    if [ "${#extra[@]}" -gt 0 ]; then
+      (cd "$SCRIPT_DIR/UniData" && "$venv_py" -m pytest "${extra[@]}")
+    else
+      (cd "$SCRIPT_DIR/UniData" && "$venv_py" -m pytest)
+    fi
+    local rc=$?
+    set -e
+    trap - EXIT INT TERM
+    cleanup_test_pg
+    unset -f cleanup_test_pg
+    return $rc
+  fi
+
+  info "运行 UniData 测试（无 DB 用例将自动 skip；如需全量请加 --with-db）"
+  if [ "${#extra[@]}" -gt 0 ]; then
+    (cd "$SCRIPT_DIR/UniData" && "$venv_py" -m pytest "${extra[@]}")
+  else
+    (cd "$SCRIPT_DIR/UniData" && "$venv_py" -m pytest)
+  fi
+}
+
 # --- 其他命令 ---------------------------------------------------------------
 cmd_watch() {
   require_docker
@@ -230,14 +257,18 @@ pg2meili 开发/构建统一入口
 
 用法:
   ./dev.sh build [unidata|go|all] [--no-cache]   重新构建并更新
-      unidata      重建 unidata 镜像(前端+后端一体)并重启容器  (默认)
+      unidata      重建 unidata API 镜像并重启容器  (默认)
       go           编译 Go 同步服务部署版(Linux amd64)
       all          上述全部
       --no-cache   强制无缓存构建(遇到 COPY 层假缓存导致代码不生效时使用)
 
+  测试:
+  ./dev.sh test                         运行 UniData pytest（无 DB 用例自动 skip）
+  ./dev.sh test --with-db               临时拉起 Postgres 跑全量(集成/端到端)
+  ./dev.sh test tests/test_kafka_manager.py  透传任意 pytest 参数
+
   实时更新到容器:
   ./dev.sh dev backend    监听后端代码同步容器并自动重启 (compose watch)
-  ./dev.sh dev frontend   本地 vite HMR(3100), API 代理到容器 8080
   ./dev.sh dev go         本机编译 Go 服务, 监听 *.go 变更自动重启
   ./dev.sh watch [svc]    docker compose watch 全部同步规则
 
@@ -274,16 +305,18 @@ case "$CMD" in
   dev)
     case "${1:-}" in
       backend)  dev_backend ;;
-      frontend) dev_frontend ;;
       go)       dev_go ;;
-      *) die "用法: ./dev.sh dev {backend|frontend|go}" ;;
+      *) die "用法: ./dev.sh dev {backend|go}" ;;
     esac
     ;;
-  watch)  shift 1; cmd_watch "$@" ;;
-  up)     shift 1; cmd_up "$@" ;;
-  logs)   shift 1; cmd_logs "$@" ;;
+  # 注：主入口上方已 `shift` 消费掉命令名，此处直接透传剩余参数，
+  # 不能再次 shift（历史上多一次 shift 导致 ./dev.sh go start 等子命令参数丢失）。
+  watch)  cmd_watch "$@" ;;
+  up)     cmd_up "$@" ;;
+  logs)   cmd_logs "$@" ;;
   status) cmd_status ;;
-  go)     shift 1; cmd_go "$@" ;;
+  go)     cmd_go "$@" ;;
+  test)   cmd_test "$@" ;;
   ""|-h|--help|help) usage ;;
   *) die "未知命令: $CMD（查看 ./dev.sh help）" ;;
 esac
