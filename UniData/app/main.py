@@ -13,7 +13,8 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
 from sqlalchemy import text
 
@@ -127,6 +128,14 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     # 挂载 API v1 的所有业务路由到统一前缀 /api/v1
     include_api_routes(app)
+
+    # 挂载静态文件
+    app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+    # 根路径返回开放平台首页
+    @app.get("/", tags=["root"])
+    async def root_page():
+        return FileResponse("app/static/index.html")
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
