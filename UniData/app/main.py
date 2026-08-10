@@ -13,8 +13,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from loguru import logger
 from sqlalchemy import text
 
@@ -27,6 +26,12 @@ from app.core.config import Settings, get_settings
 from app.core.database import close_db, get_db_context
 from app.core.logging import init_logging
 from app.api.v1.router import include_api_routes
+from app.web.static import (
+    mount_static,
+    open_platform_assets_ready,
+    register_pages,
+    validate_runtime_assets,
+)
 from app.services.agent_monitor import scan_agents_loop
 from app.services.open_platform_service import publish_outbox_loop
 
@@ -84,6 +89,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         在这里打印关键信息，便于排查环境问题，同时在应用退出时
         负责关闭数据库连接等共享资源。
         """
+        validate_runtime_assets(settings)
         validate_python_sdk_archive(settings)
         logger.info("PostgreSQL 连接: {}", mask_pg_conn_string(settings.pg_conn_string))
         logger.info("服务端口: {}", settings.server_port)
@@ -129,14 +135,6 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     # 挂载 API v1 的所有业务路由到统一前缀 /api/v1
     include_api_routes(app)
 
-    # 挂载静态文件
-    app.mount("/static", StaticFiles(directory="app/static"), name="static")
-
-    # 根路径返回开放平台首页
-    @app.get("/", tags=["root"])
-    async def root_page():
-        return FileResponse("app/static/index.html")
-
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
         return JSONResponse(
@@ -151,6 +149,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             content={"data": None, "message": "内部服务器错误"},
         )
 
+    mount_static(app, settings)
+    register_pages(app, settings)
+
     # 简单的健康检查端点，方便 K8s/监控系统探测服务状态
     @app.get("/health", tags=["health"])
     async def health_check():
@@ -160,6 +161,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     async def readiness_check():
         checks = {
             "database": False,
+            "open_platform": open_platform_assets_ready(settings),
             "python_sdk": python_sdk_available(settings),
             "admin_session": bool(
                 settings.open_platform_admin_password_hash.strip()

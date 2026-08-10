@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     log_json: bool = False
     log_file_enabled: bool = True
 
+    # 容器运行时资源目录；留空时自动使用仓库内的开发路径
+    open_platform_dist_dir: str = ""
+
     # 可选的 Python SDK 下载包；留空时从仓库源码按请求构建
     python_sdk_archive: str = ""
 
