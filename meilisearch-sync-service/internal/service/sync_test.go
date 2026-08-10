@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"meilisearch-sync-service/internal/config"
 	"meilisearch-sync-service/internal/model"
@@ -168,6 +169,27 @@ func TestSendToDLQPropagatesFailure(t *testing.T) {
 	err := sendToDLQ(context.Background(), producer, config.AppConfig{DLQTopic: "dlq"}, &kgo.Record{}, errors.New("bad message"))
 	if err == nil || !strings.Contains(err.Error(), "kafka unavailable") {
 		t.Fatalf("sendToDLQ() error = %v", err)
+	}
+}
+
+func TestSummarizeFetchErrorsDeduplicatesAndSorts(t *testing.T) {
+	errs := []kgo.FetchError{
+		{Topic: "topic-b", Partition: 0, Err: errors.New("UNKNOWN_TOPIC_ID")},
+		{Topic: "topic-a", Partition: 0, Err: errors.New("UNKNOWN_TOPIC_ID")},
+		{Topic: "topic-b", Partition: 1, Err: errors.New("UNKNOWN_TOPIC_ID")},
+	}
+	got := summarizeFetchErrors(errs)
+	want := "topic-a UNKNOWN_TOPIC_ID; topic-b UNKNOWN_TOPIC_ID（x2）"
+	if got != want {
+		t.Fatalf("summarizeFetchErrors() = %q, want %q", got, want)
+	}
+}
+
+func TestWaitForRetryHonorsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := waitForRetry(ctx, time.Hour); !errors.Is(err, context.Canceled) {
+		t.Fatalf("waitForRetry() error = %v, want context.Canceled", err)
 	}
 }
 

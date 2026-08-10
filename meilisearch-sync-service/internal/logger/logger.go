@@ -23,9 +23,11 @@ func InitLogger(debug bool) {
 	}
 
 	writer := &lumberjack.Logger{
-		Filename:   filepath.Join(logDir, "meilisearch-sync-service.log"),
-		MaxSize:    1024,
-		MaxBackups: 10,
+		Filename: filepath.Join(logDir, "meilisearch-sync-service.log"),
+		// Keep worst-case local log usage bounded. A tight Kafka retry loop
+		// must not be able to consume tens of gigabytes before intervention.
+		MaxSize:    100,
+		MaxBackups: 3,
 		Compress:   true,
 	}
 

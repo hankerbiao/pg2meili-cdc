@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,6 +20,13 @@ import (
 const (
 	maxPollRecords = 50
 	retryBackoff   = time.Second
+
+	// Kafka metadata errors (for example UNKNOWN_TOPIC_ID) can be returned
+	// for every subscribed partition while brokers converge.  Polling without
+	// a delay turns a transient broker condition into a tight log-producing loop.
+	fetchErrorInitialBackoff = time.Second
+	fetchErrorMaxBackoff     = 30 * time.Second
+	fetchErrorLogInterval    = time.Minute
 )
 
 type recordPartition struct {
@@ -34,6 +42,11 @@ func Run(
 	cfg config.AppConfig,
 	handlers map[string]RecordHandler,
 ) error {
+	fetchErrorBackoff := fetchErrorInitialBackoff
+	lastFetchError := ""
+	lastFetchLog := time.Time{}
+	var suppressedFetchErrors int
+
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -45,10 +58,36 @@ func Run(
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			for _, e := range errs {
-				log.Printf("从 Kafka 拉取消息出错: %v", e)
+			message := summarizeFetchErrors(errs)
+			now := time.Now()
+			if message != lastFetchError {
+				lastFetchError = message
+				lastFetchLog = now
+				suppressedFetchErrors = 0
+				log.Printf("从 Kafka 拉取消息出错（%d条，%s后重试）: %s", len(errs), fetchErrorBackoff, message)
+			} else {
+				suppressedFetchErrors += len(errs)
+				if now.Sub(lastFetchLog) >= fetchErrorLogInterval {
+					log.Printf("从 Kafka 拉取消息仍然失败（本次%d条，期间抑制%d条，%s后重试）: %s", len(errs), suppressedFetchErrors, fetchErrorBackoff, message)
+					lastFetchLog = now
+					suppressedFetchErrors = 0
+				}
+			}
+			if err := waitForRetry(ctx, fetchErrorBackoff); err != nil {
+				return err
+			}
+			if fetchErrorBackoff < fetchErrorMaxBackoff {
+				fetchErrorBackoff *= 2
+				if fetchErrorBackoff > fetchErrorMaxBackoff {
+					fetchErrorBackoff = fetchErrorMaxBackoff
+				}
 			}
 			continue
+		}
+		if !fetches.Empty() {
+			fetchErrorBackoff = fetchErrorInitialBackoff
+			lastFetchError = ""
+			suppressedFetchErrors = 0
 		}
 
 		// 整批处理完成后再提交，失败时允许 Kafka 重新投递。
@@ -106,6 +145,39 @@ func Run(
 			}
 		}
 	}
+}
+
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func summarizeFetchErrors(errs []kgo.FetchError) string {
+	counts := make(map[string]int, len(errs))
+	for _, err := range errs {
+		message := fmt.Sprintf("%s %v", err.Topic, err.Err)
+		counts[message]++
+	}
+	keys := make([]string, 0, len(counts))
+	for message := range counts {
+		keys = append(keys, message)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, message := range keys {
+		if counts[message] == 1 {
+			parts = append(parts, message)
+		} else {
+			parts = append(parts, fmt.Sprintf("%s（x%d）", message, counts[message]))
+		}
+	}
+	return strings.Join(parts, "; ")
 }
 
 type DLQMessage struct {
