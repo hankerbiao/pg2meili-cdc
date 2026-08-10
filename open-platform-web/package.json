@@ -8,10 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "test:e2e": "playwright test",
-    "test:e2e:mock": "playwright test --project=mock-desktop --project=tablet --project=mobile",
-    "test:e2e:integration": "playwright test --project=integration-desktop"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -23,7 +20,6 @@
     "react-router-dom": "^6.28.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.49.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.2",

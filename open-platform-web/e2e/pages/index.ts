@@ -1,6 +1,0 @@
-export { BasePage } from './base.page'
-export { LoginPage } from './login.page'
-export { AppsPage } from './apps.page'
-export { AppDetailPage } from './app-detail.page'
-export { AuditPage } from './audit.page'
-export { DocsPage } from './docs.page'
