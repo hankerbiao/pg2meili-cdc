@@ -1,4 +1,4 @@
-"""Build the installable UniData SDK source ZIP used by the portal."""
+"""Build the installable MeliData SDK source ZIP used by the portal."""
 
 from argparse import ArgumentParser
 from pathlib import Path
@@ -16,8 +16,8 @@ def build_archive(output_dir: Path) -> Path:
     )
     version = str(project["project"]["version"])
     output_dir.mkdir(parents=True, exist_ok=True)
-    output = output_dir / f"unidata-sdk-{version}.zip"
-    package_root = PROJECT_ROOT / "src" / "unidata_sdk"
+    output = output_dir / f"melidata-sdk-{version}.zip"
+    package_root = PROJECT_ROOT / "src" / "melidata_sdk"
 
     with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
         archive.write(PROJECT_ROOT / "pyproject.toml", "pyproject.toml")
@@ -29,7 +29,7 @@ def build_archive(output_dir: Path) -> Path:
                 and source.suffix != ".pyc"
             ):
                 archive.write(source, source.relative_to(PROJECT_ROOT).as_posix())
-    shutil.copyfile(output, output_dir / "unidata-sdk.zip")
+    shutil.copyfile(output, output_dir / "melidata-sdk.zip")
     return output
 
 

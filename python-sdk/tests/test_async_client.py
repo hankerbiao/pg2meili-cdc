@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 
-from unidata_sdk import AsyncUniDataClient, ServiceUnavailableError, ValidationError
+from melidata_sdk import AsyncMeliDataClient, ServiceUnavailableError, ValidationError
 
 
 @pytest.mark.asyncio
@@ -44,7 +44,7 @@ async def test_async_client_matches_document_and_search_contracts() -> None:
         raise AssertionError(f"Unexpected request: {request.method} {request.url}")
 
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    client = AsyncUniDataClient(
+    client = AsyncMeliDataClient(
         "https://control.test",
         "token",
         search_url="https://search.test",
@@ -77,7 +77,7 @@ async def test_async_generic_request_uses_control_contract() -> None:
         )
 
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    client = AsyncUniDataClient(
+    client = AsyncMeliDataClient(
         "https://control.test", "api-key", http_client=http_client
     )
 
@@ -118,7 +118,7 @@ async def test_async_search_does_not_retry_non_retryable_error() -> None:
         )
 
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    client = AsyncUniDataClient(
+    client = AsyncMeliDataClient(
         "https://control.test",
         "token",
         search_url="https://search.test",
@@ -178,7 +178,7 @@ async def test_async_agent_discovery_fails_over_to_a_distinct_agent() -> None:
         )
 
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    client = AsyncUniDataClient(
+    client = AsyncMeliDataClient(
         "https://control.test",
         "token",
         region="sh",
@@ -199,7 +199,7 @@ async def test_async_agent_discovery_fails_over_to_a_distinct_agent() -> None:
 
 @pytest.mark.asyncio
 async def test_owned_async_client_is_closed_by_context_manager() -> None:
-    async with AsyncUniDataClient(
+    async with AsyncMeliDataClient(
         "https://control.test",
         "token",
         search_url="https://search.test",

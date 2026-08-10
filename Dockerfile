@@ -45,7 +45,7 @@ ENV PATH=/opt/venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     OPEN_PLATFORM_DIST_DIR=/opt/unidata/open-platform \
-    PYTHON_SDK_ARCHIVE=/opt/unidata/downloads/unidata-sdk.zip \
+    PYTHON_SDK_ARCHIVE=/opt/unidata/downloads/melidata-sdk.zip \
     LOG_FILE_ENABLED=false
 
 RUN groupadd --system --gid 10001 unidata \

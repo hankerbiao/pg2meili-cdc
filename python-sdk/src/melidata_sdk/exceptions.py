@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 
-class UniDataError(Exception):
+class MeliDataError(Exception):
     """Base class for all SDK errors."""
 
 
-class ValidationError(UniDataError):
+class ValidationError(MeliDataError):
     """Raised for local input errors and HTTP validation responses."""
 
     def __init__(
@@ -29,11 +29,11 @@ class ValidationError(UniDataError):
         self.response_body = response_body
 
 
-class ProtocolError(UniDataError):
+class ProtocolError(MeliDataError):
     """Raised when a service returns an invalid success response."""
 
 
-class TransportError(UniDataError):
+class TransportError(MeliDataError):
     """Raised when an HTTP request cannot reach a service."""
 
     def __init__(self, message: str, *, request_id: str | None = None) -> None:
@@ -45,7 +45,7 @@ class TransportError(UniDataError):
         self.retry_after: str | None = None
 
 
-class ApiError(UniDataError):
+class ApiError(MeliDataError):
     """An error response returned by MeliData or a search Agent."""
 
     def __init__(
@@ -88,5 +88,5 @@ class ServiceUnavailableError(ApiError):
     """A backend service is temporarily unavailable."""
 
 
-class NoSearchAgentError(UniDataError):
+class NoSearchAgentError(MeliDataError):
     """No online search Agent matches the configured region."""

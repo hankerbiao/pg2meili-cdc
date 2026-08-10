@@ -72,7 +72,7 @@ class ClientState:
     def headers(self) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self.api_key}",
-            "User-Agent": f"unidata-sdk/{__version__}",
+            "User-Agent": f"melidata-sdk/{__version__}",
         }
 
     def request_headers(

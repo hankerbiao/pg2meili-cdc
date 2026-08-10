@@ -245,7 +245,7 @@ scope、轮换、撤销和错误码说明见 `/docs` 中对应的 OpenAPI 定义
 - `agent_registration_token`：Go Agent 注册与内部快照接口访问凭证；
 - `open_platform_admin_username` / `open_platform_admin_password_hash` / `open_platform_session_secret`：开放平台管理员与会话配置；
 - `kafka_api_key_topic`：开放平台应用与 API Key 变更事件 topic。
-- `python_sdk_archive`：可下载 Python SDK ZIP；容器默认 `/opt/unidata/downloads/unidata-sdk.zip`；
+- `python_sdk_archive`：可下载 Python SDK ZIP；容器默认 `/opt/unidata/downloads/melidata-sdk.zip`；
 - `log_file_enabled`：容器中建议关闭，仅写 stdout。
 
 敏感配置支持对应的 `*_FILE` 变量，例如 `OPEN_PLATFORM_SESSION_SECRET_FILE=/run/secrets/open_platform_session_secret`。

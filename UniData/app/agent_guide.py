@@ -66,7 +66,7 @@ WORKFLOWS = [
         "id": "write_document",
         "title": "写入文档",
         "steps": [
-            "在服务端读取 UNIDATA_API_KEY 环境变量",
+            "在服务端读取 MELIDATA_API_KEY 环境变量",
             "带 data:write scope 调用单条或批量文档写入端点",
             "文档必须有非空 id，其余 JSON 字段可按业务模型扩展",
         ],
@@ -111,11 +111,11 @@ EXAMPLES = [
         "title": "Python SDK 示例",
         "description": "使用官方 Python SDK 进行文档写入和搜索",
         "code": '''import os
-from unidata_sdk import UniDataClient
+from melidata_sdk import MeliDataClient
 
-with UniDataClient(
+with MeliDataClient(
     "https://meilisearch.1oa.com.cn",
-    os.environ["UNIDATA_API_KEY"],
+    os.environ["MELIDATA_API_KEY"],
     region="shanghai",
 ) as client:
     # 写入文档
@@ -132,7 +132,7 @@ with UniDataClient(
         "language": "typescript",
         "title": "TypeScript fetch 示例",
         "description": "使用原生 fetch 进行区域搜索",
-        "code": '''const API_KEY = process.env.UNIDATA_API_KEY;
+        "code": '''const API_KEY = process.env.MELIDATA_API_KEY;
 const BASE_URL = "https://meilisearch.1oa.com.cn";
 
 // 1. 写入文档

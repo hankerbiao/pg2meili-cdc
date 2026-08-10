@@ -6,14 +6,14 @@ import { SdkDownloadButton } from '../components/SdkDownloadButton'
 const SDK_DOWNLOAD_URL = '/api/v1/sdk/python/download'
 
 const installCode = `# 下载后直接安装源码包
-pip install ./unidata-sdk-0.1.0.zip`
+pip install ./melidata-sdk-0.1.0.zip`
 
 const clientCode = `import os
-from unidata_sdk import UniDataClient
+from melidata_sdk import MeliDataClient
 
-client = UniDataClient(
+client = MeliDataClient(
     "https://meilisearch.1oa.com.cn",
-    os.environ["UNIDATA_API_KEY"],
+    os.environ["MELIDATA_API_KEY"],
     region="shanghai",
 )
 
@@ -64,39 +64,39 @@ const genericCode = `data = client.request(
 print(data)`
 
 const asyncCode = `import os
-from unidata_sdk import AsyncUniDataClient
+from melidata_sdk import AsyncMeliDataClient
 
-async with AsyncUniDataClient(
+async with AsyncMeliDataClient(
     "https://meilisearch.1oa.com.cn",
-    os.environ["UNIDATA_API_KEY"],
+    os.environ["MELIDATA_API_KEY"],
     region="shanghai",
 ) as client:
     await client.upsert_documents("products", documents)
     result = await client.search("products", query="monitor")
     raw = await client.request("GET", "/api/v1/indexes")`
 
-const errorCode = `from unidata_sdk import RateLimitError, UniDataError
+const errorCode = `from melidata_sdk import RateLimitError, MeliDataError
 
 try:
     result = client.search("products", query="keyboard")
 except RateLimitError as error:
     print(error.retry_after, error.request_id)
-except UniDataError as error:
+except MeliDataError as error:
     print(error.code, error.status_code, error.request_id)`
 
 const keysCode = `import os
-from unidata_sdk import UniDataClient
+from melidata_sdk import MeliDataClient
 
 # 后端服务：需要读写数据
-data_client = UniDataClient(
+data_client = MeliDataClient(
     "https://meilisearch.1oa.com.cn",
-    os.environ["UNIDATA_DATA_KEY"],          # scope: data:read, data:write
+    os.environ["MELIDATA_DATA_KEY"],          # scope: data:read, data:write
 )
 
 # 前端 / 只读场景：只需搜索能力（绝不授予写权限）
-search_client = UniDataClient(
+search_client = MeliDataClient(
     "https://meilisearch.1oa.com.cn",
-    os.environ["UNIDATA_SEARCH_KEY"],        # scope: search:read
+    os.environ["MELIDATA_SEARCH_KEY"],        # scope: search:read
     search_url="https://meilisearch.1oa.com.cn", # 固定走搜索 Agent
 )
 
@@ -131,12 +131,12 @@ print(result.meta.request_id)       # 请求追踪 ID
 print(result.raw.get("facetDistribution"))  # 分面计数（raw 兜底）`
 
 const e2eCode = `import os, time, uuid
-from unidata_sdk import UniDataClient
+from melidata_sdk import MeliDataClient
 
-data_client = UniDataClient("https://meilisearch.1oa.com.cn", os.environ["UNIDATA_DATA_KEY"])
-search_client = UniDataClient(
+data_client = MeliDataClient("https://meilisearch.1oa.com.cn", os.environ["MELIDATA_DATA_KEY"])
+search_client = MeliDataClient(
     "https://meilisearch.1oa.com.cn",
-    os.environ["UNIDATA_SEARCH_KEY"],
+    os.environ["MELIDATA_SEARCH_KEY"],
     search_url="https://meilisearch.1oa.com.cn",
 )
 
@@ -180,8 +180,8 @@ export function PythonSdkPage() {
         <p className="lead">官方 SDK 封装数据、索引、Agent 发现与区域搜索，并保留通用请求接口以调用后续新增的控制面 API。</p>
 
         <div className="sdk-download">
-          <div><PackageCheck size={22} /><span><strong>unidata-sdk 0.1.0</strong><small>Python 3.10+ · 源码 ZIP · httpx</small></span></div>
-          <SdkDownloadButton url={SDK_DOWNLOAD_URL} fallbackName="unidata-sdk-0.1.0.zip">下载 Python SDK</SdkDownloadButton>
+          <div><PackageCheck size={22} /><span><strong>melidata-sdk 0.1.0</strong><small>Python 3.10+ · 源码 ZIP · httpx</small></span></div>
+          <SdkDownloadButton url={SDK_DOWNLOAD_URL} fallbackName="melidata-sdk-0.1.0.zip">下载 Python SDK</SdkDownloadButton>
         </div>
 
         <section id="install">
@@ -192,7 +192,7 @@ export function PythonSdkPage() {
 
         <section id="client">
           <span className="step-number">02</span><h2>初始化客户端</h2>
-          <p><code>base_url</code> 指向 MeliData 后端，API Key 建议由 <code>UNIDATA_API_KEY</code> 环境变量注入。设置 <code>region</code> 后，搜索会自动发现并选择同区域在线 Agent。</p>
+          <p><code>base_url</code> 指向 MeliData 后端，API Key 建议由 <code>MELIDATA_API_KEY</code> 环境变量注入。设置 <code>region</code> 后，搜索会自动发现并选择同区域在线 Agent。</p>
           <CodeBlock language="python" code={clientCode} />
         </section>
 
@@ -221,13 +221,13 @@ export function PythonSdkPage() {
 
         <section id="async">
           <span className="step-number">05</span><h2>异步客户端</h2>
-          <p><code>AsyncUniDataClient</code> 提供相同业务接口，所有网络方法使用 <code>await</code>，并支持异步上下文管理器自动关闭连接。</p>
+          <p><code>AsyncMeliDataClient</code> 提供相同业务接口，所有网络方法使用 <code>await</code>，并支持异步上下文管理器自动关闭连接。</p>
           <CodeBlock language="python" code={asyncCode} />
         </section>
 
         <section id="errors">
           <span className="step-number">06</span><h2>错误与重试</h2>
-          <p>所有 SDK 异常继承自 <code>UniDataError</code>。默认对可重试请求额外尝试两次，并遵循服务端 <code>Retry-After</code>；认证、权限、校验和未找到错误不会重试。</p>
+          <p>所有 SDK 异常继承自 <code>MeliDataError</code>。默认对可重试请求额外尝试两次，并遵循服务端 <code>Retry-After</code>；认证、权限、校验和未找到错误不会重试。</p>
           <CodeBlock language="python" code={errorCode} />
         </section>
 

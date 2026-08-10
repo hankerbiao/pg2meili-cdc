@@ -1,16 +1,16 @@
 # MeliData Python SDK
 
-`unidata-sdk` provides synchronous and asynchronous Python clients for the
+`melidata-sdk` provides synchronous and asynchronous Python clients for the
 MeliData document API and its distributed search Agents.
 
-The product is branded MeliData. For compatibility, the distribution name,
-Python package, client classes, and environment variables remain
-`unidata-sdk`, `unidata_sdk`, `UniDataClient`, and `UNIDATA_*`.
+The official distribution, Python package, client classes, and environment
+variables are `melidata-sdk`, `melidata_sdk`, `MeliDataClient`, and
+`MELIDATA_*`.
 
 ## Installation
 
 ```bash
-pip install unidata-sdk
+pip install melidata-sdk
 ```
 
 To install the package from this repository:
@@ -26,12 +26,12 @@ Python 3.10 or newer is required.
 ```python
 import os
 
-from unidata_sdk import UniDataClient
+from melidata_sdk import MeliDataClient
 
 
-with UniDataClient(
+with MeliDataClient(
     "https://meilisearch.1oa.com.cn",
-    os.environ["UNIDATA_API_KEY"],
+    os.environ["MELIDATA_API_KEY"],
     region="shanghai",
 ) as client:
     client.upsert_document(
@@ -64,7 +64,7 @@ Retryable search failures are sent to a different Agent when one is available.
 For a fixed search endpoint, pass it explicitly:
 
 ```python
-client = UniDataClient(
+client = MeliDataClient(
     "https://meilisearch.1oa.com.cn",
     api_key,
     search_url="https://meilisearch.1oa.com.cn",
@@ -73,13 +73,13 @@ client = UniDataClient(
 
 ## Asynchronous client
 
-`AsyncUniDataClient` has the same business methods as `UniDataClient`:
+`AsyncMeliDataClient` has the same business methods as `MeliDataClient`:
 
 ```python
-from unidata_sdk import AsyncUniDataClient
+from melidata_sdk import AsyncMeliDataClient
 
 
-async with AsyncUniDataClient(
+async with AsyncMeliDataClient(
     "https://meilisearch.1oa.com.cn",
     api_key,
     region="shanghai",
@@ -145,24 +145,24 @@ data = client.request(
 
 Paths must begin with exactly one `/` and cannot be absolute URLs. The SDK
 owns the `Authorization` and `User-Agent` headers, so callers cannot override
-them. Use `await client.request(...)` with `AsyncUniDataClient`.
+them. Use `await client.request(...)` with `AsyncMeliDataClient`.
 
 Collection names must match `[A-Za-z0-9][A-Za-z0-9_-]{0,127}`. Documents sent
 through upsert methods must contain a non-empty string `id`.
 
 ## Errors and retries
 
-All SDK exceptions inherit from `UniDataError`:
+All SDK exceptions inherit from `MeliDataError`:
 
 ```python
-from unidata_sdk import RateLimitError, UniDataError
+from melidata_sdk import RateLimitError, MeliDataError
 
 
 try:
     result = client.search("articles", query="power")
 except RateLimitError as error:
     print(error.retry_after, error.request_id)
-except UniDataError as error:
+except MeliDataError as error:
     print(error)
 ```
 

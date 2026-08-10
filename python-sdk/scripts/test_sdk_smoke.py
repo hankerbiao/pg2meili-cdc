@@ -13,14 +13,14 @@ import os
 import time
 import uuid
 
-from unidata_sdk import UniDataClient
+from melidata_sdk import MeliDataClient
 
 # ---- 配置 ----
-BASE_URL = os.getenv("UNIDATA_BASE_URL", "http://127.0.0.1:8080")
-SEARCH_URL = os.getenv("UNIDATA_SEARCH_URL", "http://127.0.0.1:8091")
+BASE_URL = os.getenv("MELIDATA_BASE_URL", "http://127.0.0.1:8080")
+SEARCH_URL = os.getenv("MELIDATA_SEARCH_URL", "http://127.0.0.1:8091")
 
-WRITE_KEY = os.environ["UNIDATA_WRITE_KEY"]
-SEARCH_KEY = os.environ["UNIDATA_SEARCH_KEY"]
+WRITE_KEY = os.environ["MELIDATA_WRITE_KEY"]
+SEARCH_KEY = os.environ["MELIDATA_SEARCH_KEY"]
 
 COLLECTION = "smoke_cases"
 
@@ -40,8 +40,8 @@ def step(name: str) -> None:
 
 
 def main() -> None:
-    data_client = UniDataClient(base_url=BASE_URL, api_key=WRITE_KEY)
-    search_client = UniDataClient(base_url=BASE_URL, api_key=SEARCH_KEY,
+    data_client = MeliDataClient(base_url=BASE_URL, api_key=WRITE_KEY)
+    search_client = MeliDataClient(base_url=BASE_URL, api_key=SEARCH_KEY,
                                    search_url=SEARCH_URL)
 
     # ── 1. 批量写入 mock 数据 ──

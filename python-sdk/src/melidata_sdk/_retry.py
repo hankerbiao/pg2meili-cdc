@@ -4,16 +4,16 @@ import random
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
-from .exceptions import ApiError, TransportError, UniDataError
+from .exceptions import ApiError, TransportError, MeliDataError
 
 
-def is_retryable(error: UniDataError) -> bool:
+def is_retryable(error: MeliDataError) -> bool:
     return isinstance(error, TransportError) or (
         isinstance(error, ApiError) and error.retryable
     )
 
 
-def retry_delay(error: UniDataError, retry_index: int) -> float:
+def retry_delay(error: MeliDataError, retry_index: int) -> float:
     retry_after = getattr(error, "retry_after", None)
     parsed = _parse_retry_after(retry_after)
     if parsed is not None:

@@ -16,7 +16,7 @@ from app.core.config import Settings
 
 
 def test_sdk_archive_path_is_configurable(tmp_path: Path):
-    sdk_archive = tmp_path / "unidata-sdk-0.1.0.zip"
+    sdk_archive = tmp_path / "melidata-sdk-0.1.0.zip"
     sdk_archive.write_bytes(b"zip")
     settings = Settings(python_sdk_archive=str(sdk_archive))
 
@@ -33,14 +33,14 @@ def test_explicit_missing_sdk_archive_fails_validation(tmp_path: Path):
 
 
 def test_container_sdk_download_keeps_versioned_filename(tmp_path: Path):
-    archive = tmp_path / "unidata-sdk.zip"
+    archive = tmp_path / "melidata-sdk.zip"
     with ZipFile(archive, "w", compression=ZIP_DEFLATED) as package:
         package.writestr(
             "pyproject.toml",
-            '[project]\nname = "unidata-sdk"\nversion = "1.2.3"\n',
+            '[project]\nname = "melidata-sdk"\nversion = "1.2.3"\n',
         )
 
-    assert python_sdk_download_filename(archive) == "unidata-sdk-1.2.3.zip"
+    assert python_sdk_download_filename(archive) == "melidata-sdk-1.2.3.zip"
 
 
 def test_secret_file_overrides_direct_setting(tmp_path: Path, monkeypatch):
@@ -55,7 +55,7 @@ def test_secret_file_overrides_direct_setting(tmp_path: Path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_readiness_reports_container_dependencies(tmp_path: Path, monkeypatch):
-    sdk_archive = tmp_path / "unidata-sdk-0.1.0.zip"
+    sdk_archive = tmp_path / "melidata-sdk-0.1.0.zip"
     sdk_archive.write_bytes(b"zip")
     settings = Settings(
         python_sdk_archive=str(sdk_archive),

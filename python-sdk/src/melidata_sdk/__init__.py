@@ -1,6 +1,6 @@
 from ._version import __version__
-from .async_client import AsyncUniDataClient
-from .client import UniDataClient
+from .async_client import AsyncMeliDataClient
+from .client import MeliDataClient
 from .exceptions import (
     ApiError,
     AuthenticationError,
@@ -11,7 +11,7 @@ from .exceptions import (
     RateLimitError,
     ServiceUnavailableError,
     TransportError,
-    UniDataError,
+    MeliDataError,
     ValidationError,
 )
 from .models import (
@@ -27,7 +27,7 @@ from .models import (
 __all__ = [
     "Agent",
     "ApiError",
-    "AsyncUniDataClient",
+    "AsyncMeliDataClient",
     "AuthenticationError",
     "BatchUpsertResult",
     "DocumentWriteResult",
@@ -42,8 +42,8 @@ __all__ = [
     "SearchResult",
     "ServiceUnavailableError",
     "TransportError",
-    "UniDataClient",
-    "UniDataError",
+    "MeliDataClient",
+    "MeliDataError",
     "ValidationError",
     "__version__",
 ]

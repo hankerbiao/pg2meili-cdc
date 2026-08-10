@@ -18,8 +18,8 @@ import requests
 BASE_URL = "http://127.0.0.1:8080"   # UniData control-plane (FastAPI)
 SEARCH_URL = "http://127.0.0.1:8091"  # Meilisearch Sync Service (Go Agent)
 
-WRITE_KEY = os.environ["UNIDATA_WRITE_KEY"]  # data:read, data:write
-SEARCH_KEY = os.environ["UNIDATA_SEARCH_KEY"]  # search:read
+WRITE_KEY = os.environ["MELIDATA_WRITE_KEY"]  # data:read, data:write
+SEARCH_KEY = os.environ["MELIDATA_SEARCH_KEY"]  # search:read
 
 COLLECTION = "smoke_cases"
 DOC = {

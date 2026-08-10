@@ -29,7 +29,7 @@ def python_sdk_available(settings: Settings | None = None) -> bool:
     return (
         (PYTHON_SDK_ROOT / "pyproject.toml").is_file()
         and (PYTHON_SDK_ROOT / "README.md").is_file()
-        and (PYTHON_SDK_ROOT / "src" / "unidata_sdk").is_dir()
+        and (PYTHON_SDK_ROOT / "src" / "melidata_sdk").is_dir()
     )
 
 
@@ -42,7 +42,7 @@ def python_sdk_download_filename(archive: Path) -> str:
     try:
         with ZipFile(archive) as package:
             project = tomllib.loads(package.read("pyproject.toml").decode("utf-8"))
-        return f"unidata-sdk-{project['project']['version']}.zip"
+        return f"melidata-sdk-{project['project']['version']}.zip"
     except (
         BadZipFile,
         KeyError,
@@ -56,7 +56,7 @@ def python_sdk_download_filename(archive: Path) -> str:
 def build_python_sdk_archive() -> tuple[bytes, str]:
     pyproject = PYTHON_SDK_ROOT / "pyproject.toml"
     readme = PYTHON_SDK_ROOT / "README.md"
-    package_root = PYTHON_SDK_ROOT / "src" / "unidata_sdk"
+    package_root = PYTHON_SDK_ROOT / "src" / "melidata_sdk"
     if not pyproject.is_file() or not readme.is_file() or not package_root.is_dir():
         raise RuntimeError("Python SDK source is not available")
 
@@ -73,7 +73,7 @@ def build_python_sdk_archive() -> tuple[bytes, str]:
                 and source.suffix != ".pyc"
             ):
                 archive.write(source, source.relative_to(PYTHON_SDK_ROOT).as_posix())
-    return buffer.getvalue(), f"unidata-sdk-{version}.zip"
+    return buffer.getvalue(), f"melidata-sdk-{version}.zip"
 
 
 @router.get(

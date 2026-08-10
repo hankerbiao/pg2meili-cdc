@@ -6,14 +6,14 @@ from typing import Any
 import httpx
 import pytest
 
-from unidata_sdk import (
+from melidata_sdk import (
     ApiError,
-    AsyncUniDataClient,
+    AsyncMeliDataClient,
     AuthenticationError,
     NoSearchAgentError,
     PermissionDeniedError,
     ProtocolError,
-    UniDataClient,
+    MeliDataClient,
     ValidationError,
 )
 
@@ -122,7 +122,7 @@ def test_document_and_index_methods_use_control_api_contract() -> None:
         raise AssertionError(f"Unexpected request: {request.method} {request.url}")
 
     http_client = httpx.Client(transport=httpx.MockTransport(handler))
-    client = UniDataClient(
+    client = MeliDataClient(
         "https://control.test/", "secret-token", http_client=http_client
     )
 
@@ -147,7 +147,7 @@ def test_document_and_index_methods_use_control_api_contract() -> None:
         for request in requests
     )
     assert all(
-        request.headers["User-Agent"].startswith("unidata-sdk/") for request in requests
+        request.headers["User-Agent"].startswith("melidata-sdk/") for request in requests
     )
     assert not any("/api/v1/index/indexes" in request.url.path for request in requests)
 
@@ -185,7 +185,7 @@ def test_fixed_search_url_uses_versioned_contract_and_preserves_meta() -> None:
         )
 
     http_client = httpx.Client(transport=httpx.MockTransport(handler))
-    client = UniDataClient(
+    client = MeliDataClient(
         "https://control.test",
         "token",
         search_url="https://search.test/",
@@ -220,11 +220,11 @@ def test_generic_request_uses_control_contract_and_custom_request_values() -> No
         assert json.loads(request.content) == {"title": "Updated"}
         assert request.headers["X-Request-ID"] == "req-custom"
         assert request.headers["Authorization"] == "Bearer api-key"
-        assert request.headers["User-Agent"].startswith("unidata-sdk/")
+        assert request.headers["User-Agent"].startswith("melidata-sdk/")
         return response(200, {"data": {"id": "a-1"}, "message": "ok"}, request)
 
     http_client = httpx.Client(transport=httpx.MockTransport(handler))
-    client = UniDataClient("https://control.test", "api-key", http_client=http_client)
+    client = MeliDataClient("https://control.test", "api-key", http_client=http_client)
 
     assert client.request(
         "patch",
@@ -318,7 +318,7 @@ def test_agent_discovery_filters_region_and_fails_over_once() -> None:
         )
 
     http_client = httpx.Client(transport=httpx.MockTransport(handler))
-    client = UniDataClient(
+    client = MeliDataClient(
         "https://control.test",
         "token",
         region="sh",
@@ -357,7 +357,7 @@ def test_control_errors_map_to_sdk_exceptions(
         return response(status, payload, request)
 
     http_client = httpx.Client(transport=httpx.MockTransport(handler))
-    client = UniDataClient(
+    client = MeliDataClient(
         "https://control.test", "token", max_retries=0, http_client=http_client
     )
     with pytest.raises(expected) as exc_info:
@@ -376,7 +376,7 @@ def test_validation_and_empty_strict_region_fail_before_search() -> None:
         return response(200, {"data": [], "message": "ok"}, request)
 
     http_client = httpx.Client(transport=httpx.MockTransport(handler))
-    client = UniDataClient(
+    client = MeliDataClient(
         "https://control.test", "token", region="sh", http_client=http_client
     )
 
@@ -411,7 +411,7 @@ def test_control_retry_honors_retry_after() -> None:
         return response(200, {"data": {"status": "healthy"}, "message": "ok"}, request)
 
     http_client = httpx.Client(transport=httpx.MockTransport(handler))
-    client = UniDataClient("https://control.test", "token", http_client=http_client)
+    client = MeliDataClient("https://control.test", "token", http_client=http_client)
     client._sleep = delays.append
 
     assert client.health()["status"] == "healthy"
@@ -456,7 +456,7 @@ def test_agent_cache_is_reused_across_searches() -> None:
         )
 
     http_client = httpx.Client(transport=httpx.MockTransport(handler))
-    client = UniDataClient("https://control.test", "token", http_client=http_client)
+    client = MeliDataClient("https://control.test", "token", http_client=http_client)
 
     client.search("articles")
     client.search("articles")
@@ -471,7 +471,7 @@ def test_invalid_success_envelope_raises_protocol_error() -> None:
         return response(200, {"status": "healthy"}, request)
 
     http_client = httpx.Client(transport=httpx.MockTransport(handler))
-    client = UniDataClient("https://control.test", "token", http_client=http_client)
+    client = MeliDataClient("https://control.test", "token", http_client=http_client)
 
     with pytest.raises(ProtocolError):
         client.health()
@@ -495,8 +495,8 @@ def test_sync_and_async_clients_expose_the_same_business_methods() -> None:
         "search",
         "request",
     }
-    assert methods <= set(dir(UniDataClient))
-    assert methods <= set(dir(AsyncUniDataClient))
+    assert methods <= set(dir(MeliDataClient))
+    assert methods <= set(dir(AsyncMeliDataClient))
 
 
 def test_non_retryable_api_error_preserves_search_diagnostics() -> None:
@@ -517,7 +517,7 @@ def test_non_retryable_api_error_preserves_search_diagnostics() -> None:
         )
 
     http_client = httpx.Client(transport=httpx.MockTransport(handler))
-    client = UniDataClient(
+    client = MeliDataClient(
         "https://control.test",
         "token",
         search_url="https://search.test",

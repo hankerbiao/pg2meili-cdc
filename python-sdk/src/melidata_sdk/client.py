@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import asyncio
 import ssl
+import time
 import uuid
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -36,7 +36,7 @@ from ._validation import (
 from .exceptions import (
     NoSearchAgentError,
     TransportError,
-    UniDataError,
+    MeliDataError,
     ValidationError,
 )
 from .models import (
@@ -49,8 +49,8 @@ from .models import (
 )
 
 
-class AsyncUniDataClient:
-    """Asynchronous client for MeliData and its distributed search Agents."""
+class MeliDataClient:
+    """Synchronous client for MeliData and its distributed search Agents."""
 
     def __init__(
         self,
@@ -63,7 +63,7 @@ class AsyncUniDataClient:
         max_retries: int = 2,
         agent_cache_ttl: float = 30.0,
         verify: bool | str | ssl.SSLContext = True,
-        http_client: httpx.AsyncClient | None = None,
+        http_client: httpx.Client | None = None,
     ) -> None:
         self._state = ClientState(
             base_url,
@@ -73,22 +73,22 @@ class AsyncUniDataClient:
             max_retries=max_retries,
             agent_cache_ttl=agent_cache_ttl,
         )
-        self._http = http_client or httpx.AsyncClient(timeout=timeout, verify=verify)
+        self._http = http_client or httpx.Client(timeout=timeout, verify=verify)
         self._owns_http_client = http_client is None
         self._timeout = timeout
-        self._sleep = asyncio.sleep
+        self._sleep = time.sleep
 
-    async def __aenter__(self) -> AsyncUniDataClient:
+    def __enter__(self) -> MeliDataClient:
         return self
 
-    async def __aexit__(self, *_args: object) -> None:
-        await self.aclose()
+    def __exit__(self, *_args: object) -> None:
+        self.close()
 
-    async def aclose(self) -> None:
+    def close(self) -> None:
         if self._owns_http_client:
-            await self._http.aclose()
+            self._http.close()
 
-    async def request(
+    def request(
         self,
         method: str,
         path: str,
@@ -100,7 +100,7 @@ class AsyncUniDataClient:
         """Call a MeliData control-plane API and return its response data."""
         if not isinstance(method, str) or not method.strip():
             raise ValidationError("method must be a non-empty string")
-        return await self._control_request(
+        return self._control_request(
             method.strip().upper(),
             validate_request_path(path),
             params=params,
@@ -108,47 +108,45 @@ class AsyncUniDataClient:
             headers=headers,
         )
 
-    async def health(self) -> dict[str, Any]:
-        data = await self._control_request("GET", "/health")
+    def health(self) -> dict[str, Any]:
+        data = self._control_request("GET", "/health")
         return parse_document(data)
 
-    async def upsert_document(
+    def upsert_document(
         self,
         collection: str,
         document: Mapping[str, Any],
     ) -> DocumentWriteResult:
         collection = validate_collection(collection)
-        data = await self._control_request(
+        data = self._control_request(
             "POST",
             f"/api/v1/data/{collection}",
             json=validate_document(document),
         )
         return parse_document_write(data)
 
-    async def upsert_documents(
+    def upsert_documents(
         self,
         collection: str,
         documents: Sequence[Mapping[str, Any]],
     ) -> BatchUpsertResult:
         collection = validate_collection(collection)
-        data = await self._control_request(
+        data = self._control_request(
             "POST",
             f"/api/v1/data/{collection}/batch",
             json={"items": validate_documents(documents)},
         )
         return parse_batch_upsert(data)
 
-    async def get_document(
-        self, collection: str, document_id: str | int
-    ) -> dict[str, Any]:
+    def get_document(self, collection: str, document_id: str | int) -> dict[str, Any]:
         collection = validate_collection(collection)
-        data = await self._control_request(
+        data = self._control_request(
             "GET",
             f"/api/v1/data/{collection}/{encode_document_id(document_id)}",
         )
         return parse_document(data)
 
-    async def list_documents(
+    def list_documents(
         self,
         collection: str,
         *,
@@ -157,40 +155,38 @@ class AsyncUniDataClient:
     ) -> list[dict[str, Any]]:
         collection = validate_collection(collection)
         validate_page(limit=limit, offset=offset, max_limit=100)
-        data = await self._control_request(
+        data = self._control_request(
             "GET",
             f"/api/v1/data/{collection}",
             params={"limit": limit, "offset": offset},
         )
         return parse_documents(data)
 
-    async def delete_document(
-        self,
-        collection: str,
-        document_id: str | int,
+    def delete_document(
+        self, collection: str, document_id: str | int
     ) -> DocumentWriteResult:
         collection = validate_collection(collection)
-        data = await self._control_request(
+        data = self._control_request(
             "DELETE",
             f"/api/v1/data/{collection}/{encode_document_id(document_id)}",
         )
         return parse_document_write(data)
 
-    async def list_indexes(self, *, limit: int = 100, offset: int = 0) -> list[str]:
+    def list_indexes(self, *, limit: int = 100, offset: int = 0) -> list[str]:
         validate_page(limit=limit, offset=offset, max_limit=500)
-        data = await self._control_request(
+        data = self._control_request(
             "GET",
             "/api/v1/indexes",
             params={"limit": limit, "offset": offset},
         )
         return parse_indexes(data)
 
-    async def delete_index(self, collection: str) -> IndexDeleteResult:
+    def delete_index(self, collection: str) -> IndexDeleteResult:
         collection = validate_collection(collection)
-        data = await self._control_request("DELETE", f"/api/v1/indexes/{collection}")
+        data = self._control_request("DELETE", f"/api/v1/indexes/{collection}")
         return parse_index_delete(data)
 
-    async def update_index_settings(
+    def update_index_settings(
         self,
         collection: str,
         *,
@@ -198,7 +194,7 @@ class AsyncUniDataClient:
         sortable_attributes: Sequence[str],
     ) -> IndexSettingsResult:
         collection = validate_collection(collection)
-        data = await self._control_request(
+        data = self._control_request(
             "POST",
             f"/api/v1/indexes/{collection}/settings",
             json={
@@ -214,14 +210,12 @@ class AsyncUniDataClient:
         )
         return parse_index_settings(data)
 
-    async def list_agents(self) -> list[Agent]:
+    def list_agents(self) -> list[Agent]:
         params = {"region": self._state.region} if self._state.region else None
-        data = await self._control_request(
-            "GET", "/api/v1/agents/online", params=params
-        )
+        data = self._control_request("GET", "/api/v1/agents/online", params=params)
         return self._state.agent_pool.update(parse_agents(data))
 
-    async def search(
+    def search(
         self,
         collection: str,
         *,
@@ -252,15 +246,15 @@ class AsyncUniDataClient:
         )
         logical_request_id = request_id or uuid.uuid4().hex
         if self._state.search_url:
-            return await self._search_fixed(
+            return self._search_fixed(
                 self._state.search_url,
                 collection,
                 payload,
                 logical_request_id,
             )
-        return await self._search_discovered(collection, payload, logical_request_id)
+        return self._search_discovered(collection, payload, logical_request_id)
 
-    async def _control_request(
+    def _control_request(
         self,
         method: str,
         path: str,
@@ -271,7 +265,7 @@ class AsyncUniDataClient:
     ) -> Any:
         for attempt in range(self._state.max_retries + 1):
             try:
-                response = await self._http.request(
+                response = self._http.request(
                     method,
                     self._state.control_url(path),
                     headers=self._state.request_headers(headers),
@@ -281,16 +275,16 @@ class AsyncUniDataClient:
                 )
                 return parse_control_response(response)
             except httpx.TransportError as error:
-                sdk_error: UniDataError = TransportError("Unable to connect to MeliData")
+                sdk_error: MeliDataError = TransportError("Unable to connect to MeliData")
                 sdk_error.__cause__ = error
-            except UniDataError as error:
+            except MeliDataError as error:
                 sdk_error = error
             if attempt >= self._state.max_retries or not is_retryable(sdk_error):
                 raise sdk_error
-            await self._sleep(retry_delay(sdk_error, attempt))
+            self._sleep(retry_delay(sdk_error, attempt))
         raise AssertionError("unreachable")
 
-    async def _search_fixed(
+    def _search_fixed(
         self,
         base_url: str,
         collection: str,
@@ -299,29 +293,27 @@ class AsyncUniDataClient:
     ) -> SearchResult:
         for attempt in range(self._state.max_retries + 1):
             try:
-                return await self._search_once(
-                    base_url, collection, payload, request_id
-                )
-            except UniDataError as error:
+                return self._search_once(base_url, collection, payload, request_id)
+            except MeliDataError as error:
                 if attempt >= self._state.max_retries or not is_retryable(error):
                     raise
-                await self._sleep(retry_delay(error, attempt))
+                self._sleep(retry_delay(error, attempt))
         raise AssertionError("unreachable")
 
-    async def _search_discovered(
+    def _search_discovered(
         self,
         collection: str,
         payload: dict[str, Any],
         request_id: str,
     ) -> SearchResult:
-        candidates = await self._search_candidates()
+        candidates = self._search_candidates()
         if not candidates:
             raise NoSearchAgentError(self._no_agent_message())
 
         attempts = 0
         refreshed = False
         attempted_urls: set[str] = set()
-        last_error: UniDataError | None = None
+        last_error: MeliDataError | None = None
         while attempts <= self._state.max_retries:
             while candidates:
                 agent = candidates.pop(0)
@@ -329,15 +321,15 @@ class AsyncUniDataClient:
                     continue
                 attempted_urls.add(agent.base_url)
                 try:
-                    return await self._search_once(
+                    return self._search_once(
                         agent.base_url, collection, payload, request_id
                     )
-                except UniDataError as error:
+                except MeliDataError as error:
                     attempts += 1
                     last_error = error
                     if not is_retryable(error) or attempts > self._state.max_retries:
                         raise
-                    await self._sleep(retry_delay(error, attempts - 1))
+                    self._sleep(retry_delay(error, attempts - 1))
                     break
 
             if candidates:
@@ -347,7 +339,7 @@ class AsyncUniDataClient:
                 self._state.agent_pool.invalidate()
                 candidates = [
                     agent
-                    for agent in await self._search_candidates()
+                    for agent in self._search_candidates()
                     if agent.base_url not in attempted_urls
                 ]
                 if candidates:
@@ -359,12 +351,12 @@ class AsyncUniDataClient:
             raise last_error
         raise NoSearchAgentError(self._no_agent_message())
 
-    async def _search_candidates(self) -> list[Agent]:
+    def _search_candidates(self) -> list[Agent]:
         if not self._state.agent_pool.is_fresh:
-            await self.list_agents()
+            self.list_agents()
         return self._state.agent_pool.candidates()
 
-    async def _search_once(
+    def _search_once(
         self,
         base_url: str,
         collection: str,
@@ -373,7 +365,7 @@ class AsyncUniDataClient:
     ) -> SearchResult:
         headers = {**self._state.headers, "X-Request-ID": request_id}
         try:
-            response = await self._http.post(
+            response = self._http.post(
                 self._state.search_endpoint(base_url, collection),
                 headers=headers,
                 json=payload,

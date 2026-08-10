@@ -12,6 +12,6 @@ describe('PythonSdkPage', () => {
     expect(screen.getByRole('heading', { name: '常用独立接口' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '通用 request 接口' })).toBeInTheDocument()
     expect(screen.getByText('upsert_documents()')).toBeInTheDocument()
-    expect(screen.getByText('AsyncUniDataClient', { selector: 'code' })).toBeInTheDocument()
+    expect(screen.getByText('AsyncMeliDataClient', { selector: 'code' })).toBeInTheDocument()
   })
 })

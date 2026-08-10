@@ -42,7 +42,7 @@ function OperationDetail({ operation }: { operation: PublicOperation }) {
   const code = isPublicDownload
     ? `curl -LO https://meilisearch.1oa.com.cn${url}`
     : `curl -X ${operation.method} https://meilisearch.1oa.com.cn${url} \\
-  -H "Authorization: Bearer $UNIDATA_API_KEY" \\
+  -H "Authorization: Bearer $MELIDATA_API_KEY" \\
   -H "Content-Type: application/json"`
   return <div id="operation" className="operation-detail"><div className="operation-title"><span className={methodClass(operation.method)}>{operation.method}</span><code>{operation.path}</code></div><h2>{operation.summary}</h2><p>{operation.description || '使用开放平台 API Key 调用此端点。'}</p><h3>认证</h3><p>{isPublicDownload ? '无需认证' : <code>Authorization: Bearer &lt;api_key&gt;</code>}</p><h3>请求示例</h3><CodeBlock code={code} /></div>
 }
