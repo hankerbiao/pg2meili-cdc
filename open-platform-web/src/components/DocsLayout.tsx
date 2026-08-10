@@ -7,6 +7,7 @@ const docLinks = [
   { to: '/docs/authentication', label: '认证与权限' },
   { to: '/docs/python-sdk', label: 'Python SDK' },
   { to: '/docs/api-reference', label: 'API Reference' },
+  { to: '/docs/agent-guide', label: 'AI Agent 接入' },
 ]
 
 export function DocsLayout({ children, toc }: { children: ReactNode; toc: Array<{ href: string; label: string }> }) {

@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document, utc_now
-from app.core.tenant import TenantContext, set_tenant_context, tenant_schema_map
+from app.core.tenant import set_tenant_context, tenant_schema_map
 from app.services.tenant_service import ensure_tenant
 
 
@@ -17,12 +17,11 @@ class DocumentRepository:
 
     @staticmethod
     async def _statement(db: AsyncSession, app_id: str, statement):
-        if isinstance(db, AsyncSession):
-            tenant = TenantContext(app_id)
-            await ensure_tenant(db, tenant.app_id)
-            await set_tenant_context(db, tenant)
-            return statement.execution_options(schema_translate_map=tenant_schema_map(tenant))
-        return statement
+        if not isinstance(db, AsyncSession):
+            return statement
+        await ensure_tenant(db, app_id)
+        await set_tenant_context(db, app_id)
+        return statement.execution_options(schema_translate_map=tenant_schema_map(app_id))
 
     @staticmethod
     async def upsert_documents(

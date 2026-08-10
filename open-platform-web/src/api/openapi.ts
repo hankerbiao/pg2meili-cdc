@@ -61,6 +61,19 @@ interface OpenApiDocument {
 const allowedTags = new Set(['generic-data', 'indexes', 'agents', 'sdk'])
 const methods = new Set(['get', 'post', 'put', 'patch', 'delete'])
 
+// 需要排除的路径前缀（与 agent_guide.py 保持同步）
+const excludedPathPrefixes = [
+  '/api/v1/open-platform/',
+  '/api/v1/auth/',
+  '/api/v1/internal/',
+]
+
+// 需要排除的路径（精确匹配）
+const excludedPathExact = new Set([
+  '/api/v1/agents/register',
+  '/api/v1/agents/cleanup-confirmations',
+])
+
 function resolveSchema(ref: string | undefined, doc: OpenApiDocument): OpenApiSchema | undefined {
   if (!ref || !ref.startsWith('#/')) return undefined
   const parts = ref.slice(2).split('/')
@@ -105,6 +118,11 @@ function sampleFromSchema(schema: OpenApiSchema | undefined, doc: OpenApiDocumen
 export function extractPublicOperations(document: OpenApiDocument): PublicOperation[] {
   const operations: PublicOperation[] = []
   for (const [path, pathItem] of Object.entries(document.paths ?? {})) {
+    // 跳过排除的路径前缀
+    if (excludedPathPrefixes.some(prefix => path.startsWith(prefix))) continue
+    // 跳过排除的精确路径
+    if (excludedPathExact.has(path)) continue
+
     for (const [method, operation] of Object.entries(pathItem)) {
       if (!methods.has(method) || !operation || typeof operation !== 'object') continue
       const tag = operation.tags?.find((item) => allowedTags.has(item))

@@ -23,12 +23,14 @@ import (
 
 const (
 	v1SearchPathPrefix     = "/api/v1/collections/"
+	maxSearchBodyBytes     = 1 << 20
 	maxSearchResponseBytes = 16 << 20
 )
 
 var (
 	searchIdentifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
 	requestIDPattern        = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
+	searchHTTPClient        = &http.Client{Timeout: 10 * time.Second}
 )
 
 type v1SearchError struct {

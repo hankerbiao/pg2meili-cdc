@@ -35,14 +35,14 @@ async def upsert_document(
     current_app: AppIdentity = Depends(get_current_app),
 ) -> ApiResponse[DocumentResponse]:
     require_scopes(current_app, ["data:write"])
-    id_value = await document_service.upsert_document(
+    ids = await document_service.upsert_documents_bulk(
         db,
         app_id=current_app.app_id,
         collection=collection,
-        payload=body.model_dump(),
+        items=[body.model_dump()],
         app_name=current_app.app_name,
     )
-    return ok(DocumentResponse(id=id_value, collection=collection))
+    return ok(DocumentResponse(id=ids[0], collection=collection))
 
 
 @router.post(

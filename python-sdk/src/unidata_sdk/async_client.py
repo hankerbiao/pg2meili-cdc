@@ -81,7 +81,7 @@ class AsyncUniDataClient:
     async def __aenter__(self) -> AsyncUniDataClient:
         return self
 
-    async def __aexit__(self, *args: object) -> None:
+    async def __aexit__(self, *_args: object) -> None:
         await self.aclose()
 
     async def aclose(self) -> None:

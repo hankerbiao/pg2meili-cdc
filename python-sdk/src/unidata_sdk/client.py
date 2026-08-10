@@ -81,7 +81,7 @@ class UniDataClient:
     def __enter__(self) -> UniDataClient:
         return self
 
-    def __exit__(self, *args: object) -> None:
+    def __exit__(self, *_args: object) -> None:
         self.close()
 
     def close(self) -> None:

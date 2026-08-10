@@ -34,6 +34,8 @@ from app.web.static import (
 )
 from app.services.agent_monitor import scan_agents_loop
 from app.services.open_platform_service import publish_outbox_loop
+from app.agent_guide import build_agent_guide, render_llms_text
+from fastapi.responses import PlainTextResponse
 
 
 def parse_cors_origins(value: str) -> list[str]:
@@ -151,6 +153,24 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     mount_static(app, settings)
     register_pages(app, settings)
+
+    # AI Agent 集成指南公开端点（无需认证）
+    @app.get("/agent-guide.json", tags=["agent-guide"])
+    async def agent_guide_json():
+        return JSONResponse(
+            headers={"Cache-Control": "public, max-age=300"},
+            content=build_agent_guide(app.openapi(), app.version),
+        )
+
+    @app.get("/llms.txt", tags=["agent-guide"])
+    async def llms_txt():
+        return PlainTextResponse(
+            content=render_llms_text(),
+            headers={
+                "Content-Type": "text/plain; charset=utf-8",
+                "Cache-Control": "public, max-age=300",
+            },
+        )
 
     # 简单的健康检查端点，方便 K8s/监控系统探测服务状态
     @app.get("/health", tags=["health"])

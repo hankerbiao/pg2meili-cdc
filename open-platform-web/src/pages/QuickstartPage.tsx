@@ -99,6 +99,7 @@ export function QuickstartPage() {
             <Link to="/docs/python-sdk"><span>安装并使用 Python SDK</span><ArrowRight size={18} /></Link>
             <Link to="/docs/authentication"><span>认证、scope 与错误码</span><ArrowRight size={18} /></Link>
             <Link to="/docs/api-reference"><span>浏览完整 API Reference</span><ArrowRight size={18} /></Link>
+            <Link to="/docs/agent-guide"><span>AI Agent 集成指南</span><ArrowRight size={18} /></Link>
           </div>
         </section>
       </article>

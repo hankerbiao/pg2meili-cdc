@@ -219,7 +219,6 @@ async def run_cleanup_task(db: AsyncSession, task: AppCleanupTask) -> AppCleanup
                 try:
                     await index_service.delete_index_async(
                         app_id=task.app_id,
-                        app_name=task.app_name,
                         collection=collection,
                         cleanup_task_id=task.id,
                         target_regions=target_regions,

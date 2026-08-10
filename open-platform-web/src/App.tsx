@@ -7,6 +7,7 @@ import { SiteLayout } from './components/SiteLayout'
 import { AgentsPage } from './pages/AgentsPage'
 import { ApiPlaygroundPage } from './pages/ApiPlaygroundPage'
 import { ApiReferencePage } from './pages/ApiReferencePage'
+import { AgentGuidePage } from './pages/AgentGuidePage'
 import { AppDetailPage } from './pages/AppDetailPage'
 import { AppsPage } from './pages/AppsPage'
 import { AuditPage } from './pages/AuditPage'
@@ -52,6 +53,7 @@ export function App() {
         <Route path="docs/authentication" element={<AuthenticationPage />} />
         <Route path="docs/python-sdk" element={<PythonSdkPage />} />
         <Route path="docs/api-reference" element={<ApiReferencePage />} />
+        <Route path="docs/agent-guide" element={<AgentGuidePage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="oa/callback" element={<OaCallbackPage />} />
         <Route path="oa" element={<OaAuthProvider><ProtectedOaRoute /></OaAuthProvider>}>

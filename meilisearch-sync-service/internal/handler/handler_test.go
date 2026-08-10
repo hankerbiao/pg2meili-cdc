@@ -35,33 +35,6 @@ func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) 
 	return f(request)
 }
 
-func TestSearchHandlerRequiresPost(t *testing.T) {
-	handler := NewSearchHandler(config.AppConfig{}, nil)
-	request := httptest.NewRequest(http.MethodGet, "/search", nil)
-	response := httptest.NewRecorder()
-
-	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("status = %d, want %d", response.Code, http.StatusMethodNotAllowed)
-	}
-}
-
-func TestSearchHandlerLimitsBodySize(t *testing.T) {
-	handler := NewSearchHandler(config.AppConfig{}, handlerCredentialStore{})
-	request := httptest.NewRequest(
-		http.MethodPost,
-		"/search?collection=items",
-		strings.NewReader(strings.Repeat("x", maxSearchBodyBytes+1)),
-	)
-	request.Header.Set("Authorization", "Bearer "+testAPIKey())
-	response := httptest.NewRecorder()
-
-	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusRequestEntityTooLarge {
-		t.Fatalf("status = %d, want %d", response.Code, http.StatusRequestEntityTooLarge)
-	}
-}
-
 func TestV1SearchHandlerReturnsStableEnvelope(t *testing.T) {
 	originalClient := searchHTTPClient
 	searchHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {

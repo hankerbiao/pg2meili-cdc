@@ -12,23 +12,6 @@ class DocumentService:
     """通用文档的业务逻辑类。"""
 
     @staticmethod
-    async def upsert_document(
-        db: AsyncSession,
-        app_id: str,
-        collection: str,
-        payload: dict[str, Any],
-        app_name: str,
-    ) -> str:
-        ids = await DocumentService.upsert_documents_bulk(
-            db=db,
-            app_id=app_id,
-            collection=collection,
-            items=[payload],
-            app_name=app_name,
-        )
-        return ids[0]
-
-    @staticmethod
     async def upsert_documents_bulk(
         db: AsyncSession,
         app_id: str,

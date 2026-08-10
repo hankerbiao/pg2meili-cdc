@@ -33,26 +33,6 @@ func (p *fakeProducer) ProduceSync(_ context.Context, records ...*kgo.Record) kg
 	return kgo.ProduceResults{{Record: records[0], Err: p.err}}
 }
 
-func TestProcessDebeziumMessageRejectsInvalidIDs(t *testing.T) {
-	tests := []string{
-		`{"payload":{"before":{"app_name":"app","collection":"items"},"op":"d"}}`,
-		`{"payload":{"before":{"id":null,"app_name":"app","collection":"items"},"op":"d"}}`,
-		`{"payload":{"after":{"id":null,"app_name":"app","collection":"items"},"op":"u"}}`,
-	}
-	for _, input := range tests {
-		if _, _, _, _, _, _, err := processDebeziumMessage([]byte(input)); err == nil {
-			t.Errorf("processDebeziumMessage(%s) accepted invalid id", input)
-		}
-	}
-}
-
-func TestProcessDebeziumMessageRejectsInvalidNestedPayload(t *testing.T) {
-	input := `{"payload":{"after":{"id":1,"payload":42,"app_name":"app","collection":"items"},"op":"u"}}`
-	if _, _, _, _, _, _, err := processDebeziumMessage([]byte(input)); err == nil {
-		t.Fatal("expected invalid nested payload to be rejected")
-	}
-}
-
 func TestResolveIndexRequiresStringRoutingFields(t *testing.T) {
 	if got := ResolveIndex(map[string]interface{}{"app_id": nil, "collection": "items"}); got != "" {
 		t.Fatalf("ResolveIndex() = %q, want empty", got)

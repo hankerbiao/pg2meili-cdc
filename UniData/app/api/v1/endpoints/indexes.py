@@ -57,7 +57,6 @@ async def delete_app_index(
     )
     await index_service.delete_index_async(
         app_id=current_app.app_id,
-        app_name=current_app.app_name,
         collection=collection,
     )
     return ok(IndexDeleteResponse(
@@ -80,7 +79,6 @@ async def update_index_settings(
     require_scopes(current_app, ["data:write"])
     index_uid = await index_service.update_index_settings_async(
         app_id=current_app.app_id,
-        app_name=current_app.app_name,
         collection=collection,
         filterable=body.filterableAttributes,
         sortable=body.sortableAttributes,

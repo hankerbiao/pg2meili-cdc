@@ -189,9 +189,8 @@ func uniqueTopics(topics Topics) []string {
 
 func newHTTPServer(cfg config.AppConfig, keyRegistry *apikey.Registry) *http.Server {
 	// newHTTPServer 创建对外的 HTTP Server。
-	// /search 保持兼容；/api/v1/collections/{collection}/search 面向新接入方提供稳定契约。
+	// 对外只保留版本化搜索代理契约。
 	mux := http.NewServeMux()
-	mux.Handle("/search", handler.NewSearchHandler(cfg, keyRegistry))
 	mux.Handle("/api/v1/collections/", handler.NewV1SearchHandler(cfg, keyRegistry))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

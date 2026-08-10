@@ -81,7 +81,6 @@ class CollectionService:
         try:
             await index_service.update_index_settings_async(
                 app_id=app_id,
-                app_name=app_name,
                 collection=collection,
                 filterable=settings.filterable_attributes,
                 sortable=settings.sortable_attributes,

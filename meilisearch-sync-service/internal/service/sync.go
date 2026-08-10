@@ -235,10 +235,9 @@ func sendToDLQ(ctx context.Context, client recordProducer, cfg config.AppConfig,
 	return nil
 }
 
-// processDebeziumMessage 解析 Debezium 消息，抽取操作类型、文档内容、主键 id，
-// 以及可选的文档 revision 与生命周期 lifecycle_epoch（用于消费端幂等/epoch 门禁）。
+// processDebeziumMessage 解包 search_outbox 的 Debezium 事件。
+// 业务表不再直接进入 Kafka；search_outbox 的 operation 字段是唯一协议来源。
 func processDebeziumMessage(value []byte) (string, string, map[string]interface{}, string, int64, string, error) {
-	// Debezium 可能发送空消息或 "null"，表示该偏移无有效数据
 	trimmed := bytes.TrimSpace(value)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return "", "", nil, "", 0, "", nil
@@ -249,44 +248,10 @@ func processDebeziumMessage(value []byte) (string, string, map[string]interface{
 		return "", "", nil, "", 0, "", fmt.Errorf("解码 Debezium 消息失败: %w", err)
 	}
 
-	payload := msg.Payload
-	revision, epoch := extractRevisionEpoch(payload.After)
-
-	// The physical-tenancy contract is an append-only search_outbox row. Its
-	// operation field, rather than the source table operation, is authoritative.
-	if payload.After != nil {
-		if _, ok := payload.After["operation"]; ok {
-			return processSearchOutbox(payload.After)
-		}
+	if msg.Payload.After == nil {
+		return "", "", nil, "", 0, "", fmt.Errorf("search_outbox 事件缺少 after")
 	}
-
-	// 根据 Debezium 的 op 字段进行分支：
-	// c: create, r: read(快照), u: update, d: delete
-	switch payload.Op {
-	case "c", "r", "u":
-		doc, id, err := extractDocument(payload)
-		if err != nil {
-			return "", "", nil, "", 0, "", fmt.Errorf("提取文档失败: %w", err)
-		}
-		if id == "" {
-			return "", "", nil, "", 0, "", fmt.Errorf("插入/更新文档时 id 为空: %v", doc)
-		}
-		return payload.Op, id, doc, "", revision, epoch, nil
-	case "d":
-		// 删除操作从 before 中取 id 作为主键
-		if payload.Before == nil {
-			return "", "", nil, "", 0, "", fmt.Errorf("删除操作缺少 before 字段")
-		}
-		id, err := documentID(payload.Before)
-		if err != nil {
-			return "", "", nil, "", 0, "", fmt.Errorf("删除操作主键无效: %w", err)
-		}
-		before := payload.Before
-		before["id"] = id
-		return payload.Op, "", before, id, revision, epoch, nil
-	default:
-		return "", "", nil, "", 0, "", fmt.Errorf("未知的操作类型 %q", payload.Op)
-	}
+	return processSearchOutbox(msg.Payload.After)
 }
 
 func processSearchOutbox(after map[string]interface{}) (string, string, map[string]interface{}, string, int64, string, error) {
@@ -369,89 +334,6 @@ func ResolveIndex(doc map[string]interface{}) string {
 	}
 
 	return model.IndexUID(appID, collection)
-}
-
-// extractDocument 从 DebeziumPayload 中抽取实际业务文档和主键 id
-func extractDocument(p model.DebeziumPayload) (map[string]interface{}, string, error) {
-	if p.After == nil {
-		return nil, "", fmt.Errorf("After 字段为空")
-	}
-
-	base := p.After
-
-	var doc map[string]interface{}
-
-	// 支持 payload 嵌套字段：payload 可以是字符串（再包一层 JSON）或对象
-	if raw, ok := base["payload"]; ok {
-		switch v := raw.(type) {
-		case string:
-			if err := json.Unmarshal([]byte(v), &doc); err != nil {
-				return nil, "", fmt.Errorf("解析内层 payload 字符串失败: %w", err)
-			}
-		case map[string]interface{}:
-			doc = v
-		default:
-			return nil, "", fmt.Errorf("内层 payload 必须是 JSON 字符串或对象")
-		}
-	} else {
-		// 兼容 doc 字段或直接使用 After 作为文档
-		if inner, ok := base["doc"].(map[string]interface{}); ok {
-			doc = inner
-		} else {
-			doc = base
-		}
-	}
-
-	if doc == nil {
-		return nil, "", fmt.Errorf("文档 payload 不能为空")
-	}
-	id, err := documentID(doc)
-	if err != nil {
-		id, err = documentID(base)
-		if err != nil {
-			return nil, "", err
-		}
-	}
-
-	// 确保最终文档中一定带有 id 字段
-	if id != "" {
-		doc["id"] = id
-	}
-
-	// 保留路由与删除标记字段，供上层逻辑判断和路由
-	if v, ok := base["is_delete"]; ok {
-		doc["is_delete"] = v
-	}
-	if v, ok := base["app_id"]; ok {
-		doc["app_id"] = v
-	}
-	if v, ok := base["collection"]; ok {
-		doc["collection"] = v
-	}
-
-	return doc, id, nil
-}
-
-func documentID(doc map[string]interface{}) (string, error) {
-	value, ok := doc["id"]
-	if !ok || value == nil {
-		return "", fmt.Errorf("缺少 id")
-	}
-	var id string
-	switch value := value.(type) {
-	case string:
-		id = value
-	case json.Number:
-		id = value.String()
-	case float64, float32, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-		id = fmt.Sprint(value)
-	default:
-		return "", fmt.Errorf("id 类型无效: %T", value)
-	}
-	if strings.TrimSpace(id) == "" {
-		return "", fmt.Errorf("id 不能为空")
-	}
-	return id, nil
 }
 
 func scalarString(value interface{}) (string, error) {

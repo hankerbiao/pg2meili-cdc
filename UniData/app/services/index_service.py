@@ -14,7 +14,6 @@ class IndexService:
     @staticmethod
     def _send_command(
         app_id: str,
-        app_name: str,
         collection: str,
         action: str,
         payload: Dict[str, Any],
@@ -50,7 +49,6 @@ class IndexService:
     @staticmethod
     def update_index_settings(
         app_id: str,
-        app_name: str,
         collection: str,
         filterable: List[str],
         sortable: List[str],
@@ -80,7 +78,6 @@ class IndexService:
             payload["facetingMaxValuesPerFacet"] = faceting_max_values_per_facet
         return IndexService._send_command(
             app_id=app_id,
-            app_name=app_name,
             collection=collection,
             action="update_settings",
             payload=payload,
@@ -89,14 +86,12 @@ class IndexService:
     @staticmethod
     def delete_index(
         app_id: str,
-        app_name: str,
         collection: str,
         cleanup_task_id: str | None = None,
         target_regions: list[str] | None = None,
     ) -> str:
         return IndexService._send_command(
             app_id=app_id,
-            app_name=app_name,
             collection=collection,
             action="delete_index",
             payload={},

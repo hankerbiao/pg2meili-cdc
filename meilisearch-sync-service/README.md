@@ -84,18 +84,18 @@ go run main.go
 
 服务提供了一个 HTTP 代理接口，用于安全地访问 Meilisearch。该接口根据开放平台 API Key 对应的应用标识和请求中的集合名称路由到正确索引。
 
-新后端服务推荐使用：
+搜索接口：
 
 ```http
 POST /api/v1/collections/{collection}/search
 ```
 
 该接口返回统一的 `{data, meta, error}` JSON 响应，并通过 `X-Request-ID`
-关联调用链。原有 `POST /search?collection={collection}` 保持兼容。
+关联调用链。
 
 ### 搜索代理接口
 
-**Endpoint:** `POST /search`
+**Endpoint:** `POST /api/v1/collections/{collection}/search`
 
 **端口:** 默认为 `8091` (可通过 `HTTP_ADDR` 环境变量配置)
 
@@ -106,7 +106,7 @@ POST /api/v1/collections/{collection}/search
 | `Authorization` | **必填**。格式为 `Bearer <API Key>`，且 Key 需要 `search:read`。 | `Bearer ud_live_ak_...` |
 | `Content-Type` | **必填**。 | `application/json` |
 
-**查询参数 (Query Parameters):**
+**路径参数 (Path Parameters):**
 
 | 参数名 | 说明 | 示例 |
 |--------|------|------|

@@ -62,17 +62,6 @@ func ConfirmCleanupDeletion(ctx context.Context, cfg config.AppConfig, cmd model
 	return nil
 }
 
-// RegisterAgent 执行一次代理注册请求，保留给一次性调用方使用。
-func RegisterAgent(cfg config.AppConfig) {
-	if strings.TrimSpace(cfg.UniDataURL) == "" {
-		log.Printf("未配置 UNIDATA_URL，跳过代理注册")
-		return
-	}
-	if err := registerAgent(context.Background(), cfg); err != nil {
-		log.Printf("代理注册失败: %v", err)
-	}
-}
-
 // RegisterAgentLoop 在服务运行期间重试注册，直到成功或收到退出信号。
 func RegisterAgentLoop(ctx context.Context, cfg config.AppConfig) {
 	if strings.TrimSpace(cfg.UniDataURL) == "" {
