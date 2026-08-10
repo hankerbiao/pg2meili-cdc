@@ -2,27 +2,27 @@
 # Keep data-plane services private; nginx is the sole public entry point.
 services:
   postgres:
-    ports: !reset
+    ports: !override
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
 
   zookeeper:
-    ports: !reset
+    ports: !override
       - "127.0.0.1:${ZOOKEEPER_PORT:-2181}:2181"
 
   kafka:
-    ports: !reset
+    ports: !override
       - "127.0.0.1:${KAFKA_PORT:-9092}:9092"
 
   connect:
-    ports: !reset
+    ports: !override
       - "127.0.0.1:${CONNECT_PORT:-8083}:8083"
 
   kafka-ui:
-    ports: !reset
+    ports: !override
       - "127.0.0.1:${KAFKA_UI_PORT:-8085}:8080"
 
   meilisearch:
-    ports: !reset
+    ports: !override
       - "127.0.0.1:${MEILI_PORT:-7700}:7700"
 
   redis:
@@ -31,5 +31,5 @@ services:
     ports: !reset []
 
   unidata:
-    ports: !reset
+    ports: !override
       - "127.0.0.1:${UNIDATA_PORT:-8080}:8080"
