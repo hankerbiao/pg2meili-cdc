@@ -43,7 +43,7 @@ cp .env.example .env
 | `MEILI_HOST` | Meilisearch 服务地址 | `http://10.17.154.252:7700` |
 | `MEILI_API_KEY` | Meilisearch API 密钥 | 空 |
 | `AGENT_PUBLIC_URL` | 外部服务访问 Agent 的稳定地址 | 自动使用 Agent IP 和端口 |
-| `AGENT_REGISTRATION_TOKEN` | 向 UniData 注册时使用的共享凭证 | 无 |
+| `AGENT_REGISTRATION_TOKEN` | 向 MeliData 注册时使用的共享凭证 | 无 |
 | `REDIS_ADDR` | 区域 Redis 地址（API Key 注册表） | `127.0.0.1:6379` |
 | `REDIS_PASSWORD` | Redis 密码 | 空 |
 | `REDIS_DB` | Redis DB 编号 | `0` |
@@ -178,7 +178,7 @@ nohup ./meilisearch-sync-service > app.log 2>&1 &
 ```
 
 - `app_name` 来自开放平台 API Key 关联的应用身份与写入 payload；
-- `collection` 来自上游写入 UniData 时指定的集合名称。
+- `collection` 来自上游写入 MeliData 时指定的集合名称。
 
 ## 工作流程
 

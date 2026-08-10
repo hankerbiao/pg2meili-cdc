@@ -106,7 +106,7 @@ export function AgentGuidePage() {
         <div className="eyebrow">AGENT GUIDE</div>
         <h1>AI Agent 集成指南</h1>
         <p className="lead">
-          本指南为 AI Agent 提供 UniData 服务的只读参考信息，用于为终端用户生成正确的集成代码。
+          本指南为 AI Agent 提供 MeliData 服务的只读参考信息，用于为终端用户生成正确的集成代码。
           本指南不是可执行工具接口，不会创建应用、申请密钥或调用任何管理接口。
         </p>
 
@@ -115,6 +115,7 @@ export function AgentGuidePage() {
           <div>
             <strong>用途说明</strong>
             <p>AI Agent 应仅使用本指南识别的公开业务路径生成集成代码。实际业务调用由用户应用在获得 API Key 后完成。</p>
+            <p>将浏览器当前页面的 URL 提供给 AI Agent，使其能够参考这里的公开开发接口、鉴权要求与代码示例完成集成。</p>
           </div>
         </div>
 
@@ -126,7 +127,7 @@ export function AgentGuidePage() {
 
         <section id="overview">
           <h2>系统架构</h2>
-          <p>UniData 是一个多区域文档存储与搜索集成服务，支持&quot;单点写入 + 多区域搜索&quot;架构。</p>
+          <p>MeliData 是一个多区域文档存储与搜索集成服务，支持&quot;单点写入 + 多区域搜索&quot;架构。</p>
 
           <div className="arch-grid">
             <div className="arch-card">

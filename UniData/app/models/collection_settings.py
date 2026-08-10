@@ -1,6 +1,6 @@
 """集合设置模型（期望态）。
 
-控制台展示与配置的集合设置（可过滤/可排序字段等）以「期望态」持久化在 UniData，
+控制台展示与配置的集合设置（可过滤/可排序字段等）以「期望态」持久化在 MeliData，
 实际下发到 Meilisearch 由 Kafka 命令驱动（见 app.services.index_service）。
 """
 

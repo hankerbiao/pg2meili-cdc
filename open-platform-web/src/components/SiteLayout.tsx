@@ -16,9 +16,9 @@ export function SiteLayout({ children }: { children: ReactNode }) {
   return (
     <div className="site-shell">
       <header className="top-nav">
-        <NavLink to="/docs/quickstart" className="brand" aria-label="UniData 开放平台首页">
+        <NavLink to="/docs/quickstart" className="brand" aria-label="MeliData 开放平台首页">
           <span className="brand-mark"><Braces size={18} /></span>
-          <span>UniData</span><span className="brand-accent">Open Platform</span>
+          <span>MeliData</span><span className="brand-accent">Open Platform</span>
         </NavLink>
         <nav className={mobileOpen ? 'main-nav open' : 'main-nav'} aria-label="主导航">
           <NavLink to="/docs/quickstart" onClick={() => setMobileOpen(false)}><BookOpen size={16} />快速开始</NavLink>

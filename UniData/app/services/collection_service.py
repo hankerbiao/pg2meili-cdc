@@ -77,7 +77,7 @@ class CollectionService:
         settings.version += 1
         await db.flush()
         # 下发到 Meilisearch（实际态由 Kafka 命令驱动）。Kafka 不可用时仅记录告警，
-        # 不阻断「期望态」落库——控制台配置以 UniData 为准，后续可经 Kafka 补发。
+        # 不阻断「期望态」落库——控制台配置以 MeliData 为准，后续可经 Kafka 补发。
         try:
             await index_service.update_index_settings_async(
                 app_id=app_id,

@@ -1,6 +1,6 @@
 """索引管理相关 API 端点模块。
 
-负责当前应用在 UniData 中已使用集合（collection）的索引列表查询与索引删除。
+负责当前应用在 MeliData 中已使用集合（collection）的索引列表查询与索引删除。
 """
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +20,7 @@ router = APIRouter()
     "",
     status_code=status.HTTP_200_OK,
     summary="获取当前应用下的索引列表",
-    description="返回当前应用在 UniData 中已使用的 collection 名称列表。",
+    description="返回当前应用在 MeliData 中已使用的 collection 名称列表。",
 )
 async def list_app_indexes(
     limit: int = Query(100, ge=1, le=500),

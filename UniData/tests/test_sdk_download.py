@@ -32,6 +32,15 @@ def test_python_sdk_download_is_public_in_openapi():
 
     operation = app.openapi()["paths"]["/api/v1/sdk/python/download"]["get"]
     assert operation["tags"] == ["sdk"]
+    assert operation["summary"] == "下载 MeliData Python SDK"
+
+
+def test_openapi_uses_melidata_brand_without_changing_api_paths():
+    from app.main import app
+
+    openapi = app.openapi()
+    assert openapi["info"]["title"] == "MeliData 生产者服务"
+    assert "/api/v1/data/{collection}" in openapi["paths"]
 
 
 def test_python_sdk_download_filename_reads_version_from_stable_archive(tmp_path):

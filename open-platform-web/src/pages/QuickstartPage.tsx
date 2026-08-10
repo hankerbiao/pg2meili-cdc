@@ -5,12 +5,12 @@ import { CodeExamples } from '../components/CodeExamples'
 import { DocsLayout } from '../components/DocsLayout'
 import { SdkDownloadButton } from '../components/SdkDownloadButton'
 
-const curlWrite = `curl -X POST http://10.17.158.114/api/v1/data/products \\
+const curlWrite = `curl -X POST https://meilisearch.1oa.com.cn/api/v1/data/products \\
   -H "Authorization: Bearer $UNIDATA_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"id":"sku-001","name":"Mechanical Keyboard","price":699}'`
 
-const curlSearch = `curl -X POST http://10.17.158.114/api/v1/collections/products/search \\
+const curlSearch = `curl -X POST https://meilisearch.1oa.com.cn/api/v1/collections/products/search \\
   -H "Authorization: Bearer $UNIDATA_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"q":"keyboard","limit":10,"showRankingScore":true}'`
@@ -20,10 +20,10 @@ const writeExamples = {
   python: `import os
 from unidata_sdk import UniDataClient
 
-client = UniDataClient("http://10.17.158.114", os.environ["UNIDATA_API_KEY"])
+client = UniDataClient("https://meilisearch.1oa.com.cn", os.environ["UNIDATA_API_KEY"])
 client.upsert_document("products", {"id": "sku-001", "name": "Mechanical Keyboard", "price": 699})`,
   javascript: `const response = await fetch(
-  "http://10.17.158.114/api/v1/data/products",
+  "https://meilisearch.1oa.com.cn/api/v1/data/products",
   {
     method: "POST",
     headers: {
@@ -41,10 +41,10 @@ const searchExamples = {
   python: `import os
 from unidata_sdk import UniDataClient
 
-client = UniDataClient("http://10.17.158.114", os.environ["UNIDATA_API_KEY"], search_url="http://10.17.158.114")
+client = UniDataClient("https://meilisearch.1oa.com.cn", os.environ["UNIDATA_API_KEY"], search_url="https://meilisearch.1oa.com.cn")
 result = client.search("products", query="keyboard", limit=10, show_ranking_score=True)`,
   javascript: `const response = await fetch(
-  "http://10.17.158.114/api/v1/collections/products/search",
+  "https://meilisearch.1oa.com.cn/api/v1/collections/products/search",
   {
     method: "POST",
     headers: {
@@ -63,7 +63,7 @@ export function QuickstartPage() {
       <article className="doc-article">
         <div className="eyebrow">QUICKSTART</div>
         <h1>用一把 Key，连接数据与搜索</h1>
-        <p className="lead">UniData 使用开放平台 API Key 统一保护数据写入、读取与区域搜索。完整密钥只在创建或轮换时显示一次。</p>
+        <p className="lead">MeliData 使用开放平台 API Key 统一保护数据写入、读取与区域搜索。完整密钥只在创建或轮换时显示一次。</p>
         <div className="sdk-download compact-download">
           <div><PackageCheck size={22} /><span><strong>官方 Python SDK</strong><small>封装数据、索引与区域搜索接口</small></span></div>
           <SdkDownloadButton url="/api/v1/sdk/python/download" fallbackName="unidata-sdk-0.1.0.zip">下载 SDK</SdkDownloadButton>

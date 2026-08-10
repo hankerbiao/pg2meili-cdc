@@ -1,14 +1,14 @@
-# UniData 域名绑定（HTTP 反向代理）
+# MeliData 域名绑定（HTTP 反向代理）
 
-> 目标：把域名（占位 `your-domain.com`）经 nginx 80 端口统一反代到 UniData 服务。开放平台前端已构建进 UniData 镜像，**不得再单独部署或由 nginx 读取另一份静态产物**。如启用 HTTPS，443 站点应复用相同的 UniData upstream。
+> 目标：把域名（占位 `your-domain.com`）经 nginx 80 端口统一反代到 MeliData 服务。开放平台前端已构建进 MeliData 镜像，**不得再单独部署或由 nginx 读取另一份静态产物**。如启用 HTTPS，443 站点应复用相同的 MeliData upstream。
 > 约束：**不启用 HTTPS**，全程 HTTP。本文档为操作步骤，若与仓库实际状态冲突，以仓库为准并报告差异。
 
 ## 1. 关键事实（执行前必读）
 
 | 事实 | 值 | 来源 |
 |---|---|---|
-| UniData 容器内端口 | `8080` | `docker-compose.yml` `ports: "${UNIDATA_PORT:-8080}:8080"` |
-| UniData 宿主端口 | `8080` | `.env.docker` → `UNIDATA_PORT=8080` |
+| MeliData 容器内端口 | `8080` | `docker-compose.yml` `ports: "${UNIDATA_PORT:-8080}:8080"` |
+| MeliData 宿主端口 | `8080` | `.env.docker` → `UNIDATA_PORT=8080` |
 | 健康检查 | `GET /ready` | `docker-compose.yml` unidata healthcheck |
 | Cookie Secure | `OPEN_PLATFORM_COOKIE_SECURE=false` | `.env.docker`；**HTTP 下必须保持 false**，改 true 会导致浏览器不发送 Cookie、登录失效 |
 
@@ -41,7 +41,7 @@ ls -d /etc/nginx/sites-available 2>/dev/null && echo "SITES_AVAILABLE"
 # 2.3 8080 在监听（容器映射）
 ss -tlnp | grep 8080 || lsof -i :8080
 
-# 2.4 UniData 健康检查
+# 2.4 MeliData 健康检查
 curl -i http://127.0.0.1:8080/ready   # 预期 200 OK
 
 # 2.5 80 端口是否已被占用（避免 server_name 冲突）
@@ -70,7 +70,7 @@ server {
     server_name your-domain.com;
     client_max_body_size 100m;
 
-    # API、门户、SPA 路由、SDK 下载和健康检查均由 UniData 提供。
+    # API、门户、SPA 路由、SDK 下载和健康检查均由 MeliData 提供。
     location / {
         proxy_pass http://unidata_backend;
         proxy_http_version 1.1;
@@ -88,8 +88,8 @@ server {
 }
 ```
 
-Nginx 只保留到 `127.0.0.1:8080` 的一个 upstream。`/` 会由 UniData 重定向到
-`/open-platform`，而 `/open-platform/*` 的 SPA fallback 同样由 UniData 提供。
+Nginx 只保留到 `127.0.0.1:8080` 的一个 upstream。`/` 会由 MeliData 重定向到
+`/open-platform`，而 `/open-platform/*` 的 SPA fallback 同样由 MeliData 提供。
 
 ### Step 2：校验并重载
 

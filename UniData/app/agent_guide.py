@@ -114,7 +114,7 @@ EXAMPLES = [
 from unidata_sdk import UniDataClient
 
 with UniDataClient(
-    "https://unidata.example.com",
+    "https://meilisearch.1oa.com.cn",
     os.environ["UNIDATA_API_KEY"],
     region="shanghai",
 ) as client:
@@ -133,7 +133,7 @@ with UniDataClient(
         "title": "TypeScript fetch 示例",
         "description": "使用原生 fetch 进行区域搜索",
         "code": '''const API_KEY = process.env.UNIDATA_API_KEY;
-const BASE_URL = "https://unidata.example.com";
+const BASE_URL = "https://meilisearch.1oa.com.cn";
 
 // 1. 写入文档
 async function writeDocument(collection: string, doc: object) {
@@ -316,7 +316,7 @@ def build_agent_guide(
     return {
         "schema_version": GUIDE_SCHEMA_VERSION,
         "service": {
-            "name": "UniData",
+            "name": "MeliData",
             "version": service_version,
             "purpose": "Multi-region document storage and search integration service",
         },
@@ -343,7 +343,7 @@ def build_agent_guide(
                 },
                 {
                     "order": 2,
-                    "component": "UniData FastAPI",
+                    "component": "MeliData FastAPI",
                     "purpose": "接收请求，写入 PostgreSQL",
                     "endpoint": "POST /api/v1/data/{collection}",
                 },
@@ -367,7 +367,7 @@ def build_agent_guide(
                 },
                 {
                     "order": 2,
-                    "component": "UniData FastAPI",
+                    "component": "MeliData FastAPI",
                     "purpose": "返回在线节点列表（含 base_url）",
                 },
                 {
@@ -407,9 +407,9 @@ def render_llms_text() -> str:
     Returns:
         符合 /llms.txt 端点规范的纯文本 Markdown 格式内容
     """
-    return """# UniData
+    return """# MeliData
 
-UniData is a multi-region document storage and search integration service.
+MeliData is a multi-region document storage and search integration service.
 This document is reference-only for AI agents generating user integration code; it is not a tool interface.
 
 ## Start here

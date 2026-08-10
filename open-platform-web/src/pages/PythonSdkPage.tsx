@@ -12,7 +12,7 @@ const clientCode = `import os
 from unidata_sdk import UniDataClient
 
 client = UniDataClient(
-    "https://unidata.example.com",
+    "https://meilisearch.1oa.com.cn",
     os.environ["UNIDATA_API_KEY"],
     region="shanghai",
 )
@@ -67,7 +67,7 @@ const asyncCode = `import os
 from unidata_sdk import AsyncUniDataClient
 
 async with AsyncUniDataClient(
-    "https://unidata.example.com",
+    "https://meilisearch.1oa.com.cn",
     os.environ["UNIDATA_API_KEY"],
     region="shanghai",
 ) as client:
@@ -89,15 +89,15 @@ from unidata_sdk import UniDataClient
 
 # 后端服务：需要读写数据
 data_client = UniDataClient(
-    "https://unidata.example.com",
+    "https://meilisearch.1oa.com.cn",
     os.environ["UNIDATA_DATA_KEY"],          # scope: data:read, data:write
 )
 
 # 前端 / 只读场景：只需搜索能力（绝不授予写权限）
 search_client = UniDataClient(
-    "https://unidata.example.com",
+    "https://meilisearch.1oa.com.cn",
     os.environ["UNIDATA_SEARCH_KEY"],        # scope: search:read
-    search_url="https://search.example.com", # 固定走搜索 Agent
+    search_url="https://meilisearch.1oa.com.cn", # 固定走搜索 Agent
 )
 
 # 不同 Key 调用不同 scope 的方法
@@ -133,11 +133,11 @@ print(result.raw.get("facetDistribution"))  # 分面计数（raw 兜底）`
 const e2eCode = `import os, time, uuid
 from unidata_sdk import UniDataClient
 
-data_client = UniDataClient("https://unidata.example.com", os.environ["UNIDATA_DATA_KEY"])
+data_client = UniDataClient("https://meilisearch.1oa.com.cn", os.environ["UNIDATA_DATA_KEY"])
 search_client = UniDataClient(
-    "https://unidata.example.com",
+    "https://meilisearch.1oa.com.cn",
     os.environ["UNIDATA_SEARCH_KEY"],
-    search_url="https://search.example.com",
+    search_url="https://meilisearch.1oa.com.cn",
 )
 
 doc_id = f"doc-{uuid.uuid4().hex[:8]}"
@@ -176,7 +176,7 @@ export function PythonSdkPage() {
     ]}>
       <article className="doc-article">
         <div className="eyebrow">PYTHON SDK</div>
-        <h1>用 Python 接入 UniData</h1>
+        <h1>用 Python 接入 MeliData</h1>
         <p className="lead">官方 SDK 封装数据、索引、Agent 发现与区域搜索，并保留通用请求接口以调用后续新增的控制面 API。</p>
 
         <div className="sdk-download">
@@ -192,7 +192,7 @@ export function PythonSdkPage() {
 
         <section id="client">
           <span className="step-number">02</span><h2>初始化客户端</h2>
-          <p><code>base_url</code> 指向 UniData 后端，API Key 建议由 <code>UNIDATA_API_KEY</code> 环境变量注入。设置 <code>region</code> 后，搜索会自动发现并选择同区域在线 Agent。</p>
+          <p><code>base_url</code> 指向 MeliData 后端，API Key 建议由 <code>UNIDATA_API_KEY</code> 环境变量注入。设置 <code>region</code> 后，搜索会自动发现并选择同区域在线 Agent。</p>
           <CodeBlock language="python" code={clientCode} />
         </section>
 

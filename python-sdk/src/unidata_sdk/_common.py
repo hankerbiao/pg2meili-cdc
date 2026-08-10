@@ -91,7 +91,7 @@ class ClientState:
                     "headers must contain non-empty string names and string values"
                 )
             if name.lower() in {"authorization", "user-agent"}:
-                raise ValidationError(f"{name} header is managed by the UniData SDK")
+                raise ValidationError(f"{name} header is managed by the MeliData SDK")
             headers[name] = value
         return headers
 
@@ -188,7 +188,7 @@ def parse_batch_upsert(data: Any) -> BatchUpsertResult:
     item = _mapping(data, "batch upsert")
     ids = item.get("ids")
     if not isinstance(ids, list) or any(not isinstance(value, str) for value in ids):
-        raise ProtocolError("UniData returned invalid batch upsert ids")
+        raise ProtocolError("MeliData returned invalid batch upsert ids")
     return BatchUpsertResult(
         status=_string(item, "status"),
         collection=_string(item, "collection"),
@@ -217,7 +217,7 @@ def parse_index_settings(data: Any) -> IndexSettingsResult:
 
 def parse_agents(data: Any) -> list[Agent]:
     if not isinstance(data, list):
-        raise ProtocolError("UniData returned an invalid Agent list")
+        raise ProtocolError("MeliData returned an invalid Agent list")
     agents: list[Agent] = []
     for raw in data:
         item = _mapping(raw, "Agent")
@@ -230,7 +230,7 @@ def parse_agents(data: Any) -> list[Agent]:
             )
         except ValidationError as error:
             raise ProtocolError(
-                "UniData returned an Agent with an invalid base_url"
+                "MeliData returned an Agent with an invalid base_url"
             ) from error
         weight = item.get("weight", 100)
         if isinstance(weight, bool) or not isinstance(weight, int):
@@ -256,7 +256,7 @@ def parse_documents(data: Any) -> list[dict[str, Any]]:
     if not isinstance(data, list) or any(
         not isinstance(item, Mapping) for item in data
     ):
-        raise ProtocolError("UniData returned an invalid document list")
+        raise ProtocolError("MeliData returned an invalid document list")
     return [dict(item) for item in data]
 
 
@@ -266,7 +266,7 @@ def parse_document(data: Any) -> dict[str, Any]:
 
 def parse_indexes(data: Any) -> list[str]:
     if not isinstance(data, list) or any(not isinstance(item, str) for item in data):
-        raise ProtocolError("UniData returned an invalid index list")
+        raise ProtocolError("MeliData returned an invalid index list")
     return list(data)
 
 

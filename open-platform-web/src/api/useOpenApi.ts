@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { extractPublicOperations } from './openapi'
 
-/** 加载并解析 UniData OpenAPI 文档（调试台与参考页共用，统一缓存与错误处理）。 */
+/** 加载并解析 MeliData OpenAPI 文档（调试台与参考页共用，统一缓存与错误处理）。 */
 export function useOpenApiOperations() {
   return useQuery({
     queryKey: ['openapi-document'],

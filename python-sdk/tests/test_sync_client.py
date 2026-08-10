@@ -241,7 +241,7 @@ def test_generic_request_uses_control_contract_and_custom_request_values() -> No
     ):
         with pytest.raises(ValidationError):
             client.request("GET", path)
-    with pytest.raises(ValidationError, match="managed by the UniData SDK"):
+    with pytest.raises(ValidationError, match="managed by the MeliData SDK"):
         client.request("GET", "/health", headers={"authorization": "Bearer other"})
 
     client.close()

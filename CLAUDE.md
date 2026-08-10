@@ -7,20 +7,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Distributed CDC-based search synchronization system enabling "single-source write + multi-region search" architecture.
 
 ```
-业务数据 → UniData (FastAPI) → PostgreSQL → Debezium (CDC) → Kafka → Go Sync Service → Meilisearch
+业务数据 → MeliData (FastAPI) → PostgreSQL → Debezium (CDC) → Kafka → Go Sync Service → Meilisearch
 ```
 
 ## Service Components
 
 | Directory | Language | Purpose |
 |-----------|----------|---------|
-| `UniData/` | Python/FastAPI | Producer service - writes data to PostgreSQL |
+| `UniData/` | Python/FastAPI | MeliData producer service - writes data to PostgreSQL |
 | `meilisearch-sync-service/` | Go | Kafka consumer - syncs changes to Meilisearch |
 | `python-sdk/` | Python | Client SDK for document operations |
 
 ## Commands
 
-### UniData (Python/FastAPI)
+### MeliData (Python/FastAPI)
 
 ```bash
 cd UniData
@@ -83,7 +83,7 @@ pytest tests/ -v
 
 ### CDC Pipeline
 
-1. UniData writes to `uni_documents` table in PostgreSQL
+1. MeliData writes to `uni_documents` table in PostgreSQL
 2. Debezium captures WAL changes via replication slot
 3. CDC events flow to Kafka topic (`public.uni_documents`)
 4. Go sync service consumes events and updates Meilisearch
@@ -104,13 +104,13 @@ The Python SDK archive is served from the `PYTHON_SDK_ARCHIVE` path.
 ## Key Configuration Files
 
 - `.env.docker` - Docker Compose environment (copy from `.env.docker.example`)
-- `UniData/.env` - UniData local development (copy from `.env.example`)
+- `UniData/.env` - MeliData local development (copy from `.env.example`)
 - `meilisearch-sync-service/.env` - Go service config (copy from `.env.example`)
 - `docker-compose.yml` - Full stack orchestration with PostgreSQL, Kafka, Meilisearch
 
 ## Health Endpoints (running service)
 
-- UniData: `http://localhost:8080/health`
+- MeliData: `http://localhost:8080/health`
 - API Docs: `http://localhost:8080/docs`
 - Kafka Connect: `http://localhost:8083/connectors/pg-cdc-connector/status`
 - Kafka UI: `http://localhost:8085` (debug profile only)

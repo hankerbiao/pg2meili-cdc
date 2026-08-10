@@ -1,10 +1,10 @@
-# UniData Producer Service
+# MeliData Producer Service
 
 基于 FastAPI 的异地分布式搜索“生产端”服务。  
 它负责把来自业务侧的结构化/半结构化数据写入 PostgreSQL，  
 后续通过 Debezium + Kafka 的 CDC 链路，将这些变更实时推送到各地的 Meilisearch 节点，实现“写入集中、搜索就近”的架构。
 
-> 可以简单理解为：UniData 把“需要被搜索的数据”标准化写入数据库，  
+> 可以简单理解为：MeliData 把“需要被搜索的数据”标准化写入数据库，
 > 后面的 Debezium 与 Go 消费者负责把这些数据安全地送到各区域的搜索引擎。
 
 目前数据统一通过通用文档接口 `/api/v1/data/{collection}` 写入，  
@@ -28,7 +28,7 @@
 - 每个区域的 Go 消费者进程负责订阅事件并更新本地 Meilisearch 索引；
 - 客户端搜索请求只打到“最近”的 Meilisearch 节点，实现高可用、低延迟。
 
-UniData 处于这条链路的“入口”位置，主要职责是：
+MeliData 处于这条链路的“入口”位置，主要职责是：
 
 - 提供统一的 HTTP API，让上层业务以标准 JSON 格式写入数据；
 - 对输入数据做基础校验与补全（例如确保 `id` 存在、`is_delete` 字段正确）；
@@ -45,9 +45,9 @@ UniData 处于这条链路的“入口”位置，主要职责是：
 ### 2.1 核心参与方
 
 - **写入方（Producer 客户端）**  
-  任何需要把数据送入搜索系统的业务服务（比如内容管理、商品中心、测试用例管理系统等），通过 HTTP 调用 UniData。
+  任何需要把数据送入搜索系统的业务服务（比如内容管理、商品中心、测试用例管理系统等），通过 HTTP 调用 MeliData。
 
-- **UniData Producer Service（本项目）**  
+- **MeliData Producer Service（本项目）**
   使用 FastAPI 实现，负责：
   - 接收 HTTP 请求；
   - 校验并组装 JSON payload；
@@ -68,8 +68,8 @@ UniData 处于这条链路的“入口”位置，主要职责是：
 ### 2.2 写入与同步数据流（从业务到搜索）
 
 1. 上游业务构造包含 `id` 字段的 JSON 对象（可以携带任意业务字段）；
-2. 调用 UniData 的 `/api/v1/data/{collection}` 接口写入数据；
-3. UniData：
+2. 调用 MeliData 的 `/api/v1/data/{collection}` 接口写入数据；
+3. MeliData：
    - 校验 JSON 格式；
    - 解析/填充业务字段（如 `is_delete`）；
    - 将完整 JSON 序列化后写入 PostgreSQL；
@@ -295,7 +295,7 @@ docker compose --env-file .env.docker watch unidata
 管理员 Argon2 摘要写入 `.env.docker` 时必须使用单引号，例如
 `OPEN_PLATFORM_ADMIN_PASSWORD_HASH='$argon2id$...'`，避免摘要中的 `$` 被 Compose 解释为变量。
 
-Compose 会先等待 PostgreSQL，运行 `migrations/` 中带版本记录的数据库迁移，再初始化 Kafka topics，最后启动单 worker UniData。Python `app/`、`scripts/` 和 `migrations/` 使用 `sync+restart`；SDK、依赖锁文件和 Dockerfile 变化使用 `rebuild`。
+Compose 会先等待 PostgreSQL，运行 `migrations/` 中带版本记录的数据库迁移，再初始化 Kafka topics，最后启动单 worker MeliData。Python `app/`、`scripts/` 和 `migrations/` 使用 `sync+restart`；SDK、依赖锁文件和 Dockerfile 变化使用 `rebuild`。
 
 文档租户迁移会为历史记录回填 `app_id`；无法识别的空应用名归入自动创建的 `legacy` 应用。迁移会把文档主键切换为内部 `row_id`，并设置 `REPLICA IDENTITY FULL` 以保留 Debezium 删除事件所需的路由字段。生产执行前必须备份数据库并确认 Debezium Connector 正常；新版本开始写入跨租户重复业务 ID 后，不能直接回退到旧的全局 ID 主键模型。
 
@@ -326,7 +326,7 @@ CDC 与搜索同步的部分在仓库其他目录中实现：
 - Go 消费者与 Meilisearch 同步程序：  
   - [meilisearch-sync-service](../meilisearch-sync-service/main.go)
 
-架构上，UniData 与这些组件配合，实现：
+架构上，MeliData 与这些组件配合，实现：
 
 - 从 PostgreSQL 到 Kafka 的结构化变更流；
 - 从 Kafka 到各地 Meilisearch 的增量更新；

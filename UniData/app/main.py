@@ -1,5 +1,5 @@
 """
-UniData 生产者服务入口。
+MeliData 生产者服务入口。
 
 本模块的职责仅有两个：
 1. 提供 create_app 工厂函数，组装 FastAPI 应用实例；
@@ -118,7 +118,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     # 创建 FastAPI 应用实例，挂载生命周期管理器
     app = FastAPI(
-        title="UniData 生产者服务",
+        title="MeliData 生产者服务",
         description="分布式搜索生产者 API 服务",
         version="0.1.0",
         lifespan=lifespan,

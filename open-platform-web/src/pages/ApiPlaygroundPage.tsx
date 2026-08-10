@@ -151,7 +151,7 @@ export function ApiPlaygroundPage() {
       <header className="playground-header">
         <div className="eyebrow">API PLAYGROUND</div>
         <h1>API 调试台</h1>
-        <p className="lead">直接调用 UniData 业务 API（数据与索引接口）。粘贴你的 API Key，填写参数后发送，实时查看响应。</p>
+        <p className="lead">直接调用 MeliData 业务 API（数据与索引接口）。粘贴你的 API Key，填写参数后发送，实时查看响应。</p>
       </header>
 
       <div className="playground-warning" role="note">

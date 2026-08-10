@@ -90,7 +90,7 @@ class TestAgentGuideEndpoints:
         response = await clean_client.get("/agent-guide.json")
         data = response.json()
         service = data.get("service", {})
-        assert service.get("name") == "UniData"
+        assert service.get("name") == "MeliData"
         assert "version" in service
         assert "purpose" in service
 
@@ -275,7 +275,7 @@ class TestAgentGuideEndpoints:
         text1 = render_llms_text()
         text2 = render_llms_text()
         assert text1 == text2
-        assert "# UniData" in text1
+        assert "# MeliData" in text1
         assert "## Start here" in text1
 
 

@@ -89,7 +89,7 @@ async def test_async_generic_request_uses_control_contract() -> None:
     ) == {"id": "async-1"}
     with pytest.raises(ValidationError):
         await client.request("GET", "//other.test/path")
-    with pytest.raises(ValidationError, match="managed by the UniData SDK"):
+    with pytest.raises(ValidationError, match="managed by the MeliData SDK"):
         await client.request("GET", "/health", headers={"User-Agent": "other"})
 
     await client.aclose()

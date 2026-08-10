@@ -35,7 +35,7 @@ def parse_control_response(response: httpx.Response) -> Any:
         )
 
     if not isinstance(payload, Mapping) or "data" not in payload:
-        raise ProtocolError("UniData returned an invalid success response")
+        raise ProtocolError("MeliData returned an invalid success response")
     return payload["data"]
 
 

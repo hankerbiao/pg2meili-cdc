@@ -5,7 +5,7 @@
 ## 架构概览
 
 ```
-业务数据 → UniData (FastAPI) → PostgreSQL (documents 表 / 动态集合)
+业务数据 → MeliData (FastAPI) → PostgreSQL (documents 表 / 动态集合)
                                     ↓
                               Debezium (CDC)
                                     ↓
@@ -29,7 +29,7 @@
 
 ```
 异地分布式部署/
-├── UniData/                          # FastAPI 生产者服务 (Python)
+├── UniData/                          # MeliData FastAPI 生产者服务 (Python)
 │   ├── app/
 │   │   ├── main.py                   # 应用入口
 │   │   ├── core/                     # 核心配置和数据库
@@ -57,14 +57,14 @@
 ├── open-platform-web/                 # 开放平台门户前端 (React + TypeScript)
 ├── python-sdk/                       # 独立 Python 客户端 SDK
 ├── docker/                           # 容器初始化脚本
-├── Dockerfile                        # UniData API 镜像
+├── Dockerfile                        # MeliData API 镜像
 ├── docker-compose.yml                # 核心中间件部署配置
 └── README.md
 ```
 
 ## API 与开放平台
 
-UniData Docker 镜像在构建时会编译 `open-platform-web`，并将产物随镜像发布。UniData
+MeliData Docker 镜像在构建时会编译 `open-platform-web`，并将产物随镜像发布。MeliData
 运行后同时提供 API、FastAPI OpenAPI 文档、Python SDK 下载和 `/open-platform/` 门户；
 根路径 `/` 会跳转至开放平台。前端源码仍可在 `open-platform-web/` 独立运行开发服务器，
 但生产环境不应再部署第二份静态产物。
@@ -80,7 +80,7 @@ UniData Docker 镜像在构建时会编译 `open-platform-web`，并将产物随
 - Apache Kafka
 - Debezium Connector
 
-### Docker 启动 UniData（推荐）
+### Docker 启动 MeliData（推荐）
 
 Go Agent 保持在各区域独立部署，不包含在中心 Docker Compose 中。
 
@@ -141,7 +141,7 @@ docker compose --env-file .env.docker watch unidata
 
 Python 依赖、SDK 或 Dockerfile 变化会触发镜像重建。生产环境必须通过 HTTPS 反向代理访问，并将 `OPEN_PLATFORM_COOKIE_SECURE` 设置为 `true`。
 
-### 1. 安装 Python 依赖 (UniData)
+### 1. 安装 Python 依赖 (MeliData)
 
 ```bash
 cd UniData
@@ -164,7 +164,7 @@ go mod tidy
 ### 3. 配置环境变量
 
 ```bash
-# UniData 服务
+# MeliData 服务
 cp UniData/.env.example UniData/.env
 
 # Go 同步服务
@@ -267,7 +267,7 @@ group 以实现故障转移，不同区域使用不同 group，以保证每个�
 
 ## 技术栈
 
-### Python 服务 (UniData)
+### Python 服务 (MeliData)
 - **FastAPI**: Web 框架
 - **SQLAlchemy + asyncpg**: 异步数据库 ORM
 - **Pydantic**: 数据验证

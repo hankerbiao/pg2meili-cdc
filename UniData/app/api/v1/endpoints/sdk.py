@@ -1,4 +1,4 @@
-"""Public downloads for official UniData SDKs."""
+"""Public downloads for official MeliData SDKs."""
 
 from io import BytesIO
 from pathlib import Path
@@ -79,7 +79,7 @@ def build_python_sdk_archive() -> tuple[bytes, str]:
 @router.get(
     "/python/download",
     response_class=Response,
-    summary="下载 UniData Python SDK",
+    summary="下载 MeliData Python SDK",
     description="下载可通过 pip 安装的官方 Python SDK 源码包。",
 )
 async def download_python_sdk() -> Response:

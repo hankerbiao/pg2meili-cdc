@@ -1,7 +1,11 @@
-# UniData Python SDK
+# MeliData Python SDK
 
 `unidata-sdk` provides synchronous and asynchronous Python clients for the
-UniData document API and its distributed search Agents.
+MeliData document API and its distributed search Agents.
+
+The product is branded MeliData. For compatibility, the distribution name,
+Python package, client classes, and environment variables remain
+`unidata-sdk`, `unidata_sdk`, `UniDataClient`, and `UNIDATA_*`.
 
 ## Installation
 
@@ -26,7 +30,7 @@ from unidata_sdk import UniDataClient
 
 
 with UniDataClient(
-    "https://unidata.example.com",
+    "https://meilisearch.1oa.com.cn",
     os.environ["UNIDATA_API_KEY"],
     region="shanghai",
 ) as client:
@@ -61,9 +65,9 @@ For a fixed search endpoint, pass it explicitly:
 
 ```python
 client = UniDataClient(
-    "https://unidata.example.com",
+    "https://meilisearch.1oa.com.cn",
     api_key,
-    search_url="https://search-shanghai.example.com",
+    search_url="https://meilisearch.1oa.com.cn",
 )
 ```
 
@@ -76,7 +80,7 @@ from unidata_sdk import AsyncUniDataClient
 
 
 async with AsyncUniDataClient(
-    "https://unidata.example.com",
+    "https://meilisearch.1oa.com.cn",
     api_key,
     region="shanghai",
 ) as client:
@@ -124,7 +128,7 @@ application-specific fields are preserved.
 
 ## Generic requests
 
-Use `request()` when a new UniData control-plane endpoint is available before
+Use `request()` when a new MeliData control-plane endpoint is available before
 the SDK adds a dedicated method. It uses the same Bearer authentication,
 timeouts, retries, error mapping, and response-envelope parsing as the built-in
 methods, and returns the response's `data` value:

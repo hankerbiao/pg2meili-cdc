@@ -8,7 +8,7 @@ export function OaHomePage() {
   return (
     <main className="oa-home">
       <section className="oa-card">
-        <span className="product-kicker">UNIDATA · OA 账号</span>
+        <span className="product-kicker">MELIDATA · OA 账号</span>
         <h1>欢迎，{oaUser?.name || oaUser?.itcode}</h1>
         <dl className="oa-meta">
           <div>

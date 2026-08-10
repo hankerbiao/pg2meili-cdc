@@ -50,7 +50,7 @@ from .models import (
 
 
 class AsyncUniDataClient:
-    """Asynchronous client for UniData and its distributed search Agents."""
+    """Asynchronous client for MeliData and its distributed search Agents."""
 
     def __init__(
         self,
@@ -97,7 +97,7 @@ class AsyncUniDataClient:
         json: Any = None,
         headers: Mapping[str, str] | None = None,
     ) -> Any:
-        """Call a UniData control-plane API and return its response data."""
+        """Call a MeliData control-plane API and return its response data."""
         if not isinstance(method, str) or not method.strip():
             raise ValidationError("method must be a non-empty string")
         return await self._control_request(
@@ -281,7 +281,7 @@ class AsyncUniDataClient:
                 )
                 return parse_control_response(response)
             except httpx.TransportError as error:
-                sdk_error: UniDataError = TransportError("Unable to connect to UniData")
+                sdk_error: UniDataError = TransportError("Unable to connect to MeliData")
                 sdk_error.__cause__ = error
             except UniDataError as error:
                 sdk_error = error

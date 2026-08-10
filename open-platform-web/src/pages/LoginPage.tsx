@@ -37,7 +37,7 @@ export function LoginPage() {
   return (
     <main className="login-page">
       <section className="login-context">
-        <span className="product-kicker"><Braces size={18} />UNIDATA CONTROL PLANE</span>
+        <span className="product-kicker"><Braces size={18} />MELIDATA CONTROL PLANE</span>
         <h1>管理应用身份与访问密钥</h1>
         <p>集中创建应用、轮换 API Key，并通过审计记录追踪每一次管理操作。</p>
         <div className="login-terminal"><span>$</span><code>Authorization: Bearer ud_live_ak_...</code></div>
@@ -45,7 +45,7 @@ export function LoginPage() {
       <section className="login-panel">
         <div className="login-icon"><LockKeyhole size={22} /></div>
         <h2>管理员登录</h2>
-        <p>使用 UniData 本地管理员凭证继续。</p>
+        <p>使用 MeliData 本地管理员凭证继续。</p>
         <form onSubmit={submit}>
           <label>账号<input name="username" required autoComplete="username" placeholder="admin" /></label>
           <label>密码<input name="password" type="password" required autoComplete="current-password" /></label>

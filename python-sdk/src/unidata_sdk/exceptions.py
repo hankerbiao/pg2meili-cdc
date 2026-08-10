@@ -46,7 +46,7 @@ class TransportError(UniDataError):
 
 
 class ApiError(UniDataError):
-    """An error response returned by UniData or a search Agent."""
+    """An error response returned by MeliData or a search Agent."""
 
     def __init__(
         self,
