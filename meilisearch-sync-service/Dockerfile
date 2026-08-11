@@ -1,4 +1,20 @@
 FROM golang:1.25-alpine AS build
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG ALL_PROXY
+ARG NO_PROXY
+ARG http_proxy
+ARG https_proxy
+ARG all_proxy
+ARG no_proxy
+ENV HTTP_PROXY=$HTTP_PROXY \
+    HTTPS_PROXY=$HTTPS_PROXY \
+    ALL_PROXY=$ALL_PROXY \
+    NO_PROXY=$NO_PROXY \
+    http_proxy=$http_proxy \
+    https_proxy=$https_proxy \
+    all_proxy=$all_proxy \
+    no_proxy=$no_proxy
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
