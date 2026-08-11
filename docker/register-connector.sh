@@ -46,7 +46,7 @@ JSON=$(cat <<EOF
     "table.include.list": "${TABLE_INCLUDE_LIST}",
     "plugin.name": "pgoutput",
     "snapshot.mode": "always",
-    "publication.autocreate.mode": "filtered",
+    "publication.autocreate.mode": "disabled",
     "publication.name": "${PUBLICATION_NAME}",
     "slot.name": "${SLOT_NAME}",
     "topic.prefix": "${SERVER_NAME}",

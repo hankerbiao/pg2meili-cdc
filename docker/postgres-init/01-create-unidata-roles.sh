@@ -50,4 +50,13 @@ SELECT format(
   'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT SELECT ON TABLES TO %I',
   :'app_role', :'cdc_role'
 ) \gexec
+
+SELECT CASE
+  WHEN EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'unidata_search_outbox_pub')
+    THEN 'ALTER PUBLICATION unidata_search_outbox_pub SET TABLE public.search_outbox'
+  WHEN to_regclass('public.search_outbox') IS NOT NULL
+    THEN 'CREATE PUBLICATION unidata_search_outbox_pub FOR TABLE public.search_outbox'
+END
+WHERE to_regclass('public.search_outbox') IS NOT NULL
+\gexec
 SQL

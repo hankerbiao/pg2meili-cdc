@@ -18,14 +18,9 @@ services:
     restart: unless-stopped
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
-      UNIDATA_PG_USER: ${UNIDATA_PG_USER:-unidata_app}
-      UNIDATA_PG_PASSWORD: ${UNIDATA_PG_PASSWORD:-change-me}
-      CDC_PG_USER: ${CDC_PG_USER:-unidata_cdc}
-      CDC_PG_PASSWORD: ${CDC_PG_PASSWORD:-change-me}
+    env_file:
+      - path: ./.env.docker
+        required: false
     command:
       - postgres
       - -c
@@ -124,15 +119,13 @@ services:
   connect-init:
     image: curlimages/curl:8.10.0
     restart: "no"
+    env_file:
+      - path: ./.env.docker
+        required: false
     environment:
       CONNECT_URL: http://connect:8083
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
-      CDC_PG_USER: ${CDC_PG_USER:-unidata_cdc}
-      CDC_PG_PASSWORD: ${CDC_PG_PASSWORD:-change-me}
       CDC_TABLE_INCLUDE_LIST: ${CDC_TABLE_INCLUDE_LIST:-public.search_outbox}
       CDC_SERVER_NAME: ${CDC_SERVER_NAME:-pg}
       CDC_SLOT_NAME: ${CDC_SLOT_NAME:-unidata_search_outbox_slot}
@@ -146,7 +139,7 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
-      postgres-role-init:
+      postgres-cdc-init:
         condition: service_completed_successfully
 
   meilisearch:
@@ -154,6 +147,9 @@ services:
     restart: unless-stopped
     ports:
       - "${MEILI_PORT:-7700}:7700"
+    env_file:
+      - path: ./.env.docker
+        required: false
     volumes:
       - meili_data:/meili_data
     healthcheck:
@@ -162,8 +158,42 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+
+  meilisearch-sync:
+    build:
+      context: ./meilisearch-sync-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - path: ./.env.docker
+        required: false
     environment:
-      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-change-me-meilisearch-key}
+      KAFKA_BROKERS: kafka:9093
+      KAFKA_TOPIC: ${CDC_TOPIC:-pg.public.search_outbox}
+      KAFKA_GROUP_PREFIX: meilisearch-sync-service
+      REGION_ID: local
+      MEILI_HOST: http://meilisearch:7700
+      HTTP_ADDR: :8091
+      UNIDATA_URL: http://unidata:8080
+      REDIS_ADDR: redis:6379
+      AGENT_IP: ${AGENT_IP:-10.2.48.5}
+      AGENT_PORT: 8091
+      AGENT_PUBLIC_URL: http://${AGENT_IP:-10.2.48.5}:8091
+    ports:
+      - "${MEILI_SYNC_PORT:-8091}:8091"
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - export MEILI_API_KEY="$${MEILI_API_KEY:-$$MEILI_MASTER_KEY}"; exec /app/meilisearch-sync-service
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      meilisearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      unidata:
+        condition: service_healthy
 
   redis:
     image: redis:7-alpine
@@ -184,16 +214,12 @@ services:
   postgres-role-init:
     image: postgres:16
     restart: "no"
+    env_file:
+      - path: ./.env.docker
+        required: false
     environment:
       PGHOST: postgres
       PGPORT: 5432
-      PGPASSWORD: ${POSTGRES_PASSWORD:-change-me}
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      UNIDATA_PG_USER: ${UNIDATA_PG_USER:-unidata_app}
-      UNIDATA_PG_PASSWORD: ${UNIDATA_PG_PASSWORD:-change-me}
-      CDC_PG_USER: ${CDC_PG_USER:-unidata_cdc}
-      CDC_PG_PASSWORD: ${CDC_PG_PASSWORD:-change-me}
     volumes:
       - ./docker/postgres-init/01-create-unidata-roles.sh:/docker-entrypoint-initdb.d/01-create-unidata-roles.sh:ro
       - ./docker/reconcile-postgres-roles.sh:/opt/unidata/reconcile-postgres-roles.sh:ro
@@ -218,6 +244,29 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      postgres-role-init:
+        condition: service_completed_successfully
+
+  # The outbox table is created by the UniData migrations. Create the filtered
+  # publication only after that work is complete, before Debezium is registered.
+  postgres-cdc-init:
+    image: postgres:16
+    restart: "no"
+    env_file:
+      - path: ./.env.docker
+        required: false
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+    volumes:
+      - ./docker/postgres-init/01-create-unidata-roles.sh:/docker-entrypoint-initdb.d/01-create-unidata-roles.sh:ro
+      - ./docker/reconcile-postgres-roles.sh:/opt/unidata/reconcile-postgres-roles.sh:ro
+    entrypoint: ["/bin/bash", "/opt/unidata/reconcile-postgres-roles.sh"]
+    depends_on:
+      postgres-role-init:
+        condition: service_completed_successfully
+      unidata-migrate:
+        condition: service_completed_successfully
 
   unidata:
     build:
