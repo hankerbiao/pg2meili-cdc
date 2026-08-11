@@ -9,6 +9,7 @@ const quickstartLinks = [
 ]
 
 const docLinks = [
+  { to: '/docs/runtime-architecture', label: '区域搜索与同步' },
   { to: '/docs/agent-guide', label: 'AI Agent 接入' },
 ]
 

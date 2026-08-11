@@ -18,6 +18,7 @@ import { OaCallbackPage } from './pages/OaCallbackPage'
 import { OaHomePage } from './pages/OaHomePage'
 import { PythonSdkPage } from './pages/PythonSdkPage'
 import { QuickstartPage } from './pages/QuickstartPage'
+import { RuntimeArchitecturePage } from './pages/RuntimeArchitecturePage'
 
 function ProtectedRoute() {
   const { user, loading } = useAuth()
@@ -54,6 +55,7 @@ export function App() {
         <Route path="docs/python-sdk" element={<PythonSdkPage />} />
         <Route path="docs/api-reference" element={<ApiReferencePage />} />
         <Route path="docs/agent-guide" element={<AgentGuidePage />} />
+        <Route path="docs/runtime-architecture" element={<RuntimeArchitecturePage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="oa/callback" element={<OaCallbackPage />} />
         <Route path="oa" element={<OaAuthProvider><ProtectedOaRoute /></OaAuthProvider>}>

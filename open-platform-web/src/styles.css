@@ -137,6 +137,21 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .security-grid > div { padding: 20px; border: 1px solid var(--hairline); border-radius: 8px; display: grid; grid-template-columns: 24px 1fr; gap: 8px 10px; }
 .security-grid svg { color: var(--primary-deep); }
 .security-grid span { grid-column: 2; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.runtime-topology { margin: 24px 0 0; padding: 0; border: 1px solid var(--hairline); border-radius: 8px; list-style: none; overflow: hidden; }
+.runtime-topology li { min-width: 0; padding: 15px 18px; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; align-items: start; }
+.runtime-topology li + li { border-top: 1px solid var(--hairline); }
+.runtime-topology li > span { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 5px; background: #e8f7ef; color: var(--primary-deep); font: 600 10px ui-monospace, monospace; }
+.runtime-topology div { min-width: 0; display: grid; gap: 4px; }
+.runtime-topology strong { font-size: 14px; font-weight: 500; }
+.runtime-topology small, .runtime-steps span, .sync-state-grid span, .troubleshooting-list span { color: var(--muted); font-size: 13px; line-height: 1.55; }
+.runtime-steps, .sync-state-grid { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.runtime-steps > div, .sync-state-grid > div { min-width: 0; padding: 18px; border: 1px solid var(--hairline); border-radius: 8px; display: grid; gap: 8px; }
+.runtime-steps svg, .sync-state-grid svg { color: var(--primary-deep); }
+.runtime-steps strong, .sync-state-grid strong { font-size: 14px; font-weight: 500; }
+.troubleshooting-list { margin-top: 20px; border-top: 1px solid var(--hairline); }
+.troubleshooting-list > div { padding: 16px 0; border-bottom: 1px solid var(--hairline); display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 18px; }
+.troubleshooting-list strong { font-size: 14px; font-weight: 500; }
+.troubleshooting-list code { padding: 2px 4px; border: 1px solid var(--hairline); border-radius: 4px; background: var(--canvas-soft); color: var(--ink); font-size: 12px; }
 
 .reference-browser { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 0; border: 1px solid var(--hairline); border-radius: 8px; overflow: hidden; min-height: 560px; }
 .endpoint-list { border-right: 1px solid var(--hairline); background: var(--canvas-soft); padding: 8px; overflow: auto; }
@@ -376,7 +391,10 @@ button.field-chip:hover { border-color: var(--primary-deep); color: var(--primar
 .setting-grid label { display: flex; flex-direction: column; gap: 6px; color: var(--ink-secondary); font-size: 12px; font-weight: 500; }
 .setting-grid select, .setting-grid input { width: 100%; min-height: 36px; padding: 7px 10px; border: 1px solid var(--hairline); border-radius: 7px; background: var(--canvas); color: var(--ink); font-size: 13px; }
 .setting-grid code { color: var(--muted); font-weight: 400; }
-@media (max-width: 640px) { .setting-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .setting-grid, .runtime-steps, .sync-state-grid { grid-template-columns: 1fr; }
+  .troubleshooting-list > div { grid-template-columns: 1fr; gap: 6px; }
+}
 .secret-panel { padding: 20px; }
 .secret-warning { margin-bottom: 12px; color: #7d5a13; font-size: 12px; }
 .secret-list { display: grid; gap: 16px; }

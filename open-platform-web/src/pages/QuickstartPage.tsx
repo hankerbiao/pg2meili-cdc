@@ -1,4 +1,4 @@
-import { ArrowRight, Braces, CheckCircle2, KeyRound, PackageCheck, Search, ShieldCheck, UploadCloud } from 'lucide-react'
+import { Activity, ArrowRight, Braces, CheckCircle2, KeyRound, PackageCheck, Search, ShieldCheck, UploadCloud } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { CodeBlock } from '../components/CodeBlock'
 import { CodeExamples } from '../components/CodeExamples'
@@ -100,6 +100,7 @@ export function QuickstartPage() {
             <Link to="/docs/authentication"><ShieldCheck size={18} /><span><strong>认证与权限</strong><small>请求头、scope 与安全实践</small></span><ArrowRight size={18} /></Link>
             <Link to="/docs/python-sdk"><PackageCheck size={18} /><span><strong>Python SDK</strong><small>安装、客户端与常用接口</small></span><ArrowRight size={18} /></Link>
             <Link to="/docs/api-reference"><Braces size={18} /><span><strong>API Reference</strong><small>浏览端点与请求契约</small></span><ArrowRight size={18} /></Link>
+            <Link to="/docs/runtime-architecture"><Activity size={18} /><span><strong>区域搜索与同步</strong><small>理解 Agent、CDC 与搜索状态</small></span><ArrowRight size={18} /></Link>
           </div>
         </section>
       </article>
