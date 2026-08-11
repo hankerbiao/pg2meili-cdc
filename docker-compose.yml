@@ -185,9 +185,6 @@ services:
       HTTP_ADDR: :8091
       UNIDATA_URL: http://unidata:8080
       REDIS_ADDR: redis:6379
-      AGENT_IP: ${AGENT_IP:-10.2.48.5}
-      AGENT_PORT: 8091
-      AGENT_PUBLIC_URL: http://${AGENT_IP:-10.2.48.5}:8091
     ports:
       - "${MEILI_SYNC_PORT:-8091}:8091"
     entrypoint:
