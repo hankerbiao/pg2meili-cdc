@@ -28,3 +28,6 @@ addopts = "--strict-markers --strict-config"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "integration: exercises the local Docker service stack, including the CDC path",
+]
