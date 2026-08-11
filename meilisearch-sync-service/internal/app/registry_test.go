@@ -25,6 +25,14 @@ func TestUniqueTopics(t *testing.T) {
 	}
 }
 
+func TestUniqueStrings(t *testing.T) {
+	got := uniqueStrings([]string{"commands", "", "api-keys", "commands"})
+	want := []string{"commands", "api-keys"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("uniqueStrings() = %v, want %v", got, want)
+	}
+}
+
 func TestBuildHandlers(t *testing.T) {
 	registry := &apikey.Registry{}
 	handlers := BuildHandlers(Topics{

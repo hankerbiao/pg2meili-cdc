@@ -57,12 +57,19 @@ func (a *App) Run(ctx context.Context) error {
 	// 2. 创建 Meilisearch 客户端，用于后续索引写入和配置更新。
 	meiliClient := newMeiliClient(a.cfg)
 
-	// 3. 创建 Kafka 客户端并订阅所有需要消费的 topic。
-	client, err := newKafkaClient(a.cfg, a.topics)
+	// 3. 为 CDC 与 API Key 事件建立独立的消费者。
+	// CDC 写入 Meilisearch 可能耗时较长，不能阻塞 API Key 更新，否则新密钥
+	// 会在快照回放期间持续返回 401。
+	cdcClient, err := newKafkaClient(a.cfg, a.cfg.GroupID, append(a.topics.CDC, a.topics.Command))
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer cdcClient.Close()
+	apiKeyClient, err := newKafkaClient(a.cfg, a.cfg.GroupID+"-api-keys", []string{a.topics.APIKey})
+	if err != nil {
+		return err
+	}
+	defer apiKeyClient.Close()
 
 	// 4. 初始化并预热区域 API Key 注册表。
 	keyRegistry, err := apikey.New(a.cfg)
@@ -102,10 +109,13 @@ func (a *App) Run(ctx context.Context) error {
 	})
 
 	g.Go(func() error {
-		// 根据 topics 构建 topic -> handler 路由表。
-		handlers := BuildHandlers(a.topics, meiliClient, keyRegistry, a.cfg)
-		// 启动消费主循环：从 Kafka 拉取消息，按 topic 分发给对应 handler。
-		return service.Run(ctx, client, a.cfg, handlers)
+		handlers := BuildHandlers(Topics{CDC: a.topics.CDC, Command: a.topics.Command}, meiliClient, keyRegistry, a.cfg)
+		return service.Run(ctx, cdcClient, a.cfg, handlers)
+	})
+
+	g.Go(func() error {
+		handlers := BuildHandlers(Topics{APIKey: a.topics.APIKey}, meiliClient, keyRegistry, a.cfg)
+		return service.Run(ctx, apiKeyClient, a.cfg, handlers)
 	})
 
 	// 7. 等待外部 ctx 被取消（例如收到中断信号）。
@@ -134,15 +144,15 @@ func newMeiliClient(cfg config.AppConfig) meilisearch.ServiceManager {
 	)
 }
 
-func newKafkaClient(cfg config.AppConfig, topics Topics) (*kgo.Client, error) {
+func newKafkaClient(cfg config.AppConfig, groupID string, topics []string) (*kgo.Client, error) {
 	// newKafkaClient 创建 Kafka 客户端，并以消费者身份订阅所有需要处理的 topic。
 	// 使用 franz-go 提供的 kgo.Client，可以在单个 consumer group 内实现高可用消费。
 
 	// 计算需要订阅的去重后的 topic 列表。
-	subscribeTopics := uniqueTopics(topics)
+	subscribeTopics := uniqueStrings(topics)
 	return kgo.NewClient(
 		kgo.SeedBrokers(cfg.Brokers...),
-		kgo.ConsumerGroup(cfg.GroupID),
+		kgo.ConsumerGroup(groupID),
 		kgo.ConsumeTopics(subscribeTopics...),
 		// 新区域首次创建 group 时从仍在保留期内的最早消息开始回放。
 		// 已存在的 group 仍优先使用其已提交 offset。
@@ -160,29 +170,21 @@ func uniqueTopics(topics Topics) []string {
 	// uniqueTopics 负责从 Topics 中提取出所有需要订阅的 topic，并进行去重。
 	// 由于同一个物理 topic 可能同时承载 CDC 与其他用途，这里通过 map 进行去重，
 	// 保证 Kafka 客户端不会重复订阅同名 topic。
-	seen := make(map[string]struct{})
-	var result []string
-	for _, t := range topics.CDC {
-		if t == "" {
+	return uniqueStrings(append(append(append([]string{}, topics.CDC...), topics.Command), topics.APIKey))
+}
+
+func uniqueStrings(topics []string) []string {
+	seen := make(map[string]struct{}, len(topics))
+	result := make([]string, 0, len(topics))
+	for _, topic := range topics {
+		if topic == "" {
 			continue
 		}
-		if _, ok := seen[t]; ok {
+		if _, ok := seen[topic]; ok {
 			continue
 		}
-		seen[t] = struct{}{}
-		result = append(result, t)
-	}
-	if topics.Command != "" {
-		if _, ok := seen[topics.Command]; !ok {
-			seen[topics.Command] = struct{}{}
-			result = append(result, topics.Command)
-		}
-	}
-	if topics.APIKey != "" {
-		if _, ok := seen[topics.APIKey]; !ok {
-			seen[topics.APIKey] = struct{}{}
-			result = append(result, topics.APIKey)
-		}
+		seen[topic] = struct{}{}
+		result = append(result, topic)
 	}
 	return result
 }
