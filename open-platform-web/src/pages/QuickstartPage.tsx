@@ -10,7 +10,7 @@ const curlWrite = `curl -X POST https://meilisearch.1oa.com.cn/api/v1/data/produ
   -H "Content-Type: application/json" \\
   -d '{"id":"sku-001","name":"Mechanical Keyboard","price":699}'`
 
-const curlSearch = `curl -X POST https://meilisearch.1oa.com.cn/api/v1/collections/products/search \\
+const curlSearch = `curl -X POST https://meilisearch.1oa.com.cn/documents/api/v1/collections/products/search \\
   -H "Authorization: Bearer $MELIDATA_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"q":"keyboard","limit":10,"showRankingScore":true}'`
@@ -41,10 +41,13 @@ const searchExamples = {
   python: `import os
 from melidata_sdk import MeliDataClient
 
-client = MeliDataClient("https://meilisearch.1oa.com.cn", os.environ["MELIDATA_API_KEY"], search_url="https://meilisearch.1oa.com.cn")
+BASE_URL = "https://meilisearch.1oa.com.cn"
+SEARCH_URL = "https://meilisearch.1oa.com.cn/documents"
+
+client = MeliDataClient(BASE_URL, os.environ["MELIDATA_API_KEY"], search_url=SEARCH_URL)
 result = client.search("products", query="keyboard", limit=10, show_ranking_score=True)`,
   javascript: `const response = await fetch(
-  "https://meilisearch.1oa.com.cn/api/v1/collections/products/search",
+  "https://meilisearch.1oa.com.cn/documents/api/v1/collections/products/search",
   {
     method: "POST",
     headers: {

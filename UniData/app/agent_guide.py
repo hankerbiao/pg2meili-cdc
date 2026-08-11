@@ -113,10 +113,13 @@ EXAMPLES = [
         "code": '''import os
 from melidata_sdk import MeliDataClient
 
+BASE_URL = "https://meilisearch.1oa.com.cn"
+SEARCH_URL = "https://meilisearch.1oa.com.cn/documents"
+
 with MeliDataClient(
-    "https://meilisearch.1oa.com.cn",
+    BASE_URL,
     os.environ["MELIDATA_API_KEY"],
-    region="shanghai",
+    search_url=SEARCH_URL,
 ) as client:
     # 写入文档
     client.upsert_document(

@@ -11,10 +11,13 @@ pip install ./melidata-sdk-0.1.0.zip`
 const clientCode = `import os
 from melidata_sdk import MeliDataClient
 
+BASE_URL = "https://meilisearch.1oa.com.cn"
+SEARCH_URL = "https://meilisearch.1oa.com.cn/documents"
+
 client = MeliDataClient(
-    "https://meilisearch.1oa.com.cn",
+    BASE_URL,
     os.environ["MELIDATA_API_KEY"],
-    region="shanghai",
+    search_url=SEARCH_URL,
 )
 
 client.upsert_document(
@@ -66,10 +69,13 @@ print(data)`
 const asyncCode = `import os
 from melidata_sdk import AsyncMeliDataClient
 
+BASE_URL = "https://meilisearch.1oa.com.cn"
+SEARCH_URL = "https://meilisearch.1oa.com.cn/documents"
+
 async with AsyncMeliDataClient(
-    "https://meilisearch.1oa.com.cn",
+    BASE_URL,
     os.environ["MELIDATA_API_KEY"],
-    region="shanghai",
+    search_url=SEARCH_URL,
 ) as client:
     await client.upsert_documents("products", documents)
     result = await client.search("products", query="monitor")
@@ -87,17 +93,20 @@ except MeliDataError as error:
 const keysCode = `import os
 from melidata_sdk import MeliDataClient
 
+BASE_URL = "https://meilisearch.1oa.com.cn"
+SEARCH_URL = "https://meilisearch.1oa.com.cn/documents"
+
 # 后端服务：需要读写数据
 data_client = MeliDataClient(
-    "https://meilisearch.1oa.com.cn",
+    BASE_URL,
     os.environ["MELIDATA_DATA_KEY"],          # scope: data:read, data:write
 )
 
 # 前端 / 只读场景：只需搜索能力（绝不授予写权限）
 search_client = MeliDataClient(
-    "https://meilisearch.1oa.com.cn",
+    BASE_URL,
     os.environ["MELIDATA_SEARCH_KEY"],        # scope: search:read
-    search_url="https://meilisearch.1oa.com.cn", # 固定走搜索 Agent
+    search_url=SEARCH_URL, # 固定走搜索 Agent
 )
 
 # 不同 Key 调用不同 scope 的方法
@@ -133,11 +142,14 @@ print(result.raw.get("facetDistribution"))  # 分面计数（raw 兜底）`
 const e2eCode = `import os, time, uuid
 from melidata_sdk import MeliDataClient
 
-data_client = MeliDataClient("https://meilisearch.1oa.com.cn", os.environ["MELIDATA_DATA_KEY"])
+BASE_URL = "https://meilisearch.1oa.com.cn"
+SEARCH_URL = "https://meilisearch.1oa.com.cn/documents"
+
+data_client = MeliDataClient(BASE_URL, os.environ["MELIDATA_DATA_KEY"])
 search_client = MeliDataClient(
-    "https://meilisearch.1oa.com.cn",
+    BASE_URL,
     os.environ["MELIDATA_SEARCH_KEY"],
-    search_url="https://meilisearch.1oa.com.cn",
+    search_url=SEARCH_URL,
 )
 
 doc_id = f"doc-{uuid.uuid4().hex[:8]}"
