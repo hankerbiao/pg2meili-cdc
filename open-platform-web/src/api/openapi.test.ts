@@ -14,4 +14,10 @@ describe('extractPublicOperations', () => {
     })
     expect(operations.map((item) => item.id)).toEqual(['write', 'indexes', 'python-sdk'])
   })
+
+  it('uses the reverse-proxy search base URL for the regional search contract', async () => {
+    const { regionalSearchOperation } = await import('./openapi')
+    expect(regionalSearchOperation.path).toBe('/api/v1/collections/{collection}/search')
+    expect(regionalSearchOperation.requiredScope).toBe('search:read')
+  })
 })

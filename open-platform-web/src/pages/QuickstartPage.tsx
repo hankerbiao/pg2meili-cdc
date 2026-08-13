@@ -55,17 +55,22 @@ curl --fail-with-body "$MELIDATA_BASE_URL/api/v1/data/$COLLECTION?limit=20&offse
 curl --fail-with-body -X DELETE "$MELIDATA_BASE_URL/api/v1/data/$COLLECTION/sku-001" \
   -H "Authorization: Bearer $MELIDATA_API_KEY"`
 
-const pollCode = `for attempt in range(6):
-    result = client.search(COLLECTION, query="keyboard")
-    if any(hit.get("id") == "sku-001" for hit in result.hits):
-        break
-    time.sleep(2 ** attempt)
-else:
-    raise RuntimeError("数据已写入中心服务，但尚未同步到目标区域")`
+const pollCode = `import os
+import time
+
+COLLECTION = os.environ.get("COLLECTION", "products")
+with MeliDataClient(os.environ["MELIDATA_BASE_URL"], os.environ["MELIDATA_API_KEY"], search_url=os.environ["SEARCH_BASE_URL"]) as client:
+    for attempt in range(6):
+        result = client.search(COLLECTION, query="keyboard")
+        if any(hit.get("id") == "sku-001" for hit in result.hits):
+            break
+        time.sleep(2 ** attempt)
+    else:
+        raise RuntimeError("数据已写入中心服务，但尚未同步到目标区域")`
 
 export function QuickstartPage() {
   return (
-    <DocsLayout toc={[{ href: '#instructions', label: 'AI 使用规则' }, { href: '#variables', label: '配置变量' }, { href: '#write', label: '写入数据' }, { href: '#crud', label: '读取与删除' }, { href: '#search', label: '区域搜索' }, { href: '#consistency', label: '同步等待' }, { href: '#errors', label: '错误处理' }]}> 
+    <DocsLayout toc={[{ href: '#instructions', label: 'AI 使用规则' }, { href: '#variables', label: '配置变量' }, { href: '#write', label: '写入数据' }, { href: '#crud', label: '读取与删除' }, { href: '#search', label: '区域搜索' }, { href: '#consistency', label: '同步等待' }, { href: '#errors', label: '错误处理' }]}>
       <article className="doc-article">
         <div className="eyebrow">AI AGENT QUICKSTART</div>
         <h1>用 MeliData 完成写入、读取与区域搜索</h1>
@@ -95,7 +100,7 @@ export function QuickstartPage() {
 
         <section id="search">
           <span className="step-number">03</span><h2>区域搜索</h2>
-          <p><code>SEARCH_BASE_URL=https://meilisearch.1oa.com.cn/documents</code> 是天津默认入口。实际 HTTP 请求为：</p><CodeBlock language="text" code="POST {SEARCH_BASE_URL}/api/v1/collections/{collection}/search" /><p>其他区域只替换 <code>SEARCH_BASE_URL</code> 为在线 Agent 的完整公网 Base URL，路径、请求体、Bearer Key 和 <code>search:read</code> 保持不变。</p>
+          <p><code>SEARCH_BASE_URL=https://meilisearch.1oa.com.cn/documents</code> 是天津默认入口。<code>/documents</code> 是 Nginx 反向代理前缀，不是完整搜索请求。实际 HTTP 请求为：</p><CodeBlock language="text" code="POST {SEARCH_BASE_URL}/api/v1/collections/{collection}/search" /><p>其他区域只替换 <code>SEARCH_BASE_URL</code> 为在线 Agent 的完整公网 Base URL，路径、请求体、Bearer Key 和 <code>search:read</code> 保持不变。</p>
           <CodeExamples examples={searchExamples} />
         </section>
 

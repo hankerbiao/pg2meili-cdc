@@ -6,7 +6,7 @@ import { DocsLayout } from '../components/DocsLayout'
 const discoverAgentCode = `curl -sS "https://meilisearch.1oa.com.cn/api/v1/agents/online?region=shanghai" \
   -H "Authorization: Bearer $MELIDATA_SEARCH_KEY"`
 
-const searchCode = `curl -X POST "https://meilisearch.1oa.com.cn/documents" \
+const searchCode = `curl -X POST "https://meilisearch.1oa.com.cn/documents/api/v1/collections/products/search" \
   -H "Authorization: Bearer $MELIDATA_SEARCH_KEY" \
   -H "Content-Type: application/json" \
   -H "X-Request-ID: storefront-search-001" \
@@ -41,7 +41,7 @@ else:
 
 const runtimeSteps = [
   { icon: KeyRound, title: '发现区域节点', detail: '调用 GET /api/v1/agents/online，可带 region 参数。仅返回健康且未超出心跳 TTL 的节点。' },
-  { icon: Search, title: '提交搜索', detail: '向 POST https://meilisearch.1oa.com.cn/documents 发起请求，并携带同一把 API Key。' },
+  { icon: Search, title: '提交搜索', detail: '向 POST https://meilisearch.1oa.com.cn/documents/api/v1/collections/{collection}/search 发起请求，并携带同一把 API Key。' },
   { icon: ShieldCheck, title: '本地鉴权与隔离', detail: '区域 Agent 从本地 Key 注册表校验 search:read，按 app_id + collection 派生专属索引 UID。' },
   { icon: Server, title: '代理至 Meilisearch', detail: 'Agent 将搜索参数透传到目标索引；Meilisearch 服务凭证始终只保留在 Agent 侧。' },
 ]
@@ -79,7 +79,7 @@ export function RuntimeArchitecturePage() {
 
         <section id="search-flow">
           <h2>搜索如何执行</h2>
-          <p>区域搜索入口为 <code>POST https://meilisearch.1oa.com.cn/documents</code>。调用方使用具有 <code>search:read</code> 的同一把 Key 发起请求。</p>
+          <p>区域搜索 Base URL 为 <code>https://meilisearch.1oa.com.cn/documents</code>，实际请求为 <code>POST https://meilisearch.1oa.com.cn/documents/api/v1/collections/{'{'}collection{'}'}/search</code>。调用方使用具有 <code>search:read</code> 的同一把 Key 发起请求。</p>
           <div className="callout"><Search size={18} /><span>默认地址 <code>https://meilisearch.1oa.com.cn/documents</code> 是天津服务器的搜索入口。若要使用其他区域的 Agent，请先获取在线 Agent 的地址，再将请求 URL 替换为该地址；鉴权、请求参数和调用方式保持不变，仅 URL 不同。</span></div>
           <div className="runtime-steps">
             {runtimeSteps.map(({ icon: Icon, title, detail }) => <div key={title}><Icon size={20} /><strong>{title}</strong><span>{detail}</span></div>)}

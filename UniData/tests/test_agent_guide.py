@@ -4,8 +4,10 @@ import re
 from httpx import AsyncClient
 
 from app.agent_guide import (
+    DATA_BASE_URL,
     GUIDE_SCHEMA_VERSION,
     PUBLIC_OPERATIONS,
+    SEARCH_BASE_URL,
     build_agent_guide,
     render_llms_text,
     _is_excluded,
@@ -102,6 +104,7 @@ class TestAgentGuideEndpoints:
         policy = data.get("usage_policy", {})
         assert policy.get("mode") == "reference_only"
         assert policy.get("direct_agent_execution") is False
+        assert policy.get("authorization_required_for_real_requests") is True
         assert "instruction" in policy
 
     @pytest.mark.asyncio
@@ -114,6 +117,14 @@ class TestAgentGuideEndpoints:
         assert "/docs" in links.get("human_docs", "")
         assert "/llms.txt" in links.get("llms", "")
         assert "/api/v1/sdk/python/download" in links.get("python_sdk_download", "")
+
+    @pytest.mark.asyncio
+    async def test_agent_guide_json_search_contract(self, clean_client: AsyncClient):
+        data = (await clean_client.get("/agent-guide.json")).json()
+        endpoints = data["endpoints"]
+        assert endpoints["data_base_url"] == DATA_BASE_URL
+        assert endpoints["search_base_url"] == SEARCH_BASE_URL
+        assert endpoints["search_path_template"] == "{search_base_url}/api/v1/collections/{collection}/search"
 
     @pytest.mark.asyncio
     async def test_agent_guide_json_architecture(self, clean_client: AsyncClient):

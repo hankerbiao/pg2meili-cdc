@@ -11,6 +11,7 @@ export interface AgentGuide {
   usage_policy: {
     mode: 'reference_only'
     direct_agent_execution: boolean
+    authorization_required_for_real_requests: boolean
     instruction: string
   }
   links: {
@@ -18,6 +19,13 @@ export interface AgentGuide {
     human_docs: string
     llms: string
     python_sdk_download: string
+  }
+  endpoints: {
+    data_base_url: string
+    search_base_url: string
+    search_path_template: string
+    search_url_rule: string
+    default_region: string
   }
   architecture: {
     write_path: Array<{

@@ -174,7 +174,8 @@ async function findOnlineAgent(region?: string) {
 
 // 3. 向区域节点搜索
 async function regionalSearch(agentUrl: string, collection: string, query: string) {
-  const response = await fetch(`${SEARCH_BASE_URL}/api/v1/collections/${collection}/search`, {
+  const searchBaseUrl = agentUrl || SEARCH_BASE_URL;
+  const response = await fetch(`${searchBaseUrl}/api/v1/collections/${collection}/search`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${API_KEY}`,
@@ -328,10 +329,12 @@ def build_agent_guide(
         },
         "usage_policy": {
             "mode": "reference_only",
-            "direct_agent_execution": "仅用户明确授权并提供 API Key 后允许一次验证请求",
+            "direct_agent_execution": False,
+            "authorization_required_for_real_requests": True,
             "instruction": (
                 "Use this guide to generate integration code for a user. "
-                "Do not call service APIs or request credentials on the user's behalf."
+                "Do not call service APIs or request credentials on the user's behalf. "
+                "A real request is allowed only after the user explicitly authorizes it and supplies the API key."
             ),
         },
         "links": {

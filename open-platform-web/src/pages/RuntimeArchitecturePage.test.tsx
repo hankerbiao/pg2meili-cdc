@@ -8,7 +8,7 @@ describe('RuntimeArchitecturePage', () => {
     render(<MemoryRouter><RuntimeArchitecturePage /></MemoryRouter>)
 
     expect(screen.getByRole('heading', { name: '区域搜索与同步运行机制' })).toBeInTheDocument()
-    expect(screen.getByText('POST https://meilisearch.1oa.com.cn/documents', { selector: 'code' })).toBeInTheDocument()
+    expect(screen.getAllByText(/POST https:\/\/meilisearch\.1oa\.com\.cn\/documents\/api\/v1\/collections\//).length).toBeGreaterThan(0)
     expect(screen.getByText(/默认地址.*天津服务器/)).toBeInTheDocument()
     expect(screen.getByText(/仅 URL 不同/)).toBeInTheDocument()
     expect(screen.getAllByText('search:read', { selector: 'code' }).length).toBeGreaterThan(0)

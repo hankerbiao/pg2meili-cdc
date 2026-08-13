@@ -9,6 +9,7 @@ export interface OpenApiParameter {
 export interface ApiResponseInfo {
   status: string
   description: string
+  example?: string | null
 }
 
 export interface PublicOperation {
@@ -18,6 +19,7 @@ export interface PublicOperation {
   summary: string
   description: string
   tag: string
+  requiredScope: string | null
   parameters: OpenApiParameter[]
   requestBodyExample: string | null
   responses: ApiResponseInfo[]
@@ -50,7 +52,7 @@ interface OpenApiOperation {
   tags?: string[]
   parameters?: OpenApiParameterRaw[]
   requestBody?: { content?: Record<string, { schema?: OpenApiSchema; example?: unknown }> }
-  responses?: Record<string, { description?: string; content?: Record<string, { schema?: OpenApiSchema }> }>
+  responses?: Record<string, { description?: string; content?: Record<string, { schema?: OpenApiSchema; example?: unknown }> }>
 }
 
 interface OpenApiDocument {
@@ -60,6 +62,13 @@ interface OpenApiDocument {
 
 const allowedTags = new Set(['generic-data', 'indexes', 'agents', 'sdk'])
 const methods = new Set(['get', 'post', 'put', 'patch', 'delete'])
+
+function scopeForOperation(path: string, method: string): string | null {
+  if (path.startsWith('/api/v1/agents/online')) return 'search:read'
+  if (path.startsWith('/api/v1/data/')) return method === 'get' ? 'data:read' : 'data:write'
+  if (path.startsWith('/api/v1/indexes')) return method === 'get' ? 'data:read' : 'data:write'
+  return null
+}
 
 // 需要排除的路径前缀（与 agent_guide.py 保持同步）
 const excludedPathPrefixes = [
@@ -139,6 +148,12 @@ export function extractPublicOperations(document: OpenApiDocument): PublicOperat
       const responses: ApiResponseInfo[] = Object.entries(operation.responses ?? {}).map(([status, resp]) => ({
         status,
         description: resp?.description ?? '',
+        example: (() => {
+          const content = resp?.content?.['application/json']
+          if (!content) return null
+          const value = content.example ?? sampleFromSchema(content.schema, document)
+          return value === null || value === undefined ? null : JSON.stringify(value, null, 2)
+        })(),
       }))
       operations.push({
         id: operation.operationId ?? `${method}-${path}`,
@@ -147,6 +162,7 @@ export function extractPublicOperations(document: OpenApiDocument): PublicOperat
         summary: operation.summary ?? path,
         description: operation.description ?? '',
         tag,
+        requiredScope: scopeForOperation(path, method),
         parameters,
         requestBodyExample,
         responses,
@@ -159,16 +175,17 @@ export function extractPublicOperations(document: OpenApiDocument): PublicOperat
 export const regionalSearchOperation: PublicOperation = {
   id: 'regional-search',
   method: 'POST',
-  path: '/documents',
+  path: '/api/v1/collections/{collection}/search',
   summary: '在区域节点执行搜索',
   description: '使用具有 search:read scope 的 API Key 调用就近的区域搜索节点。',
   tag: 'search',
-  parameters: [],
+  requiredScope: 'search:read',
+  parameters: [{ name: 'collection', in: 'path', required: true, description: '目标集合名称' }],
   requestBodyExample: JSON.stringify({ q: 'keyboard', limit: 10, show_ranking_score: true }, null, 2),
   responses: [
-    { status: '200', description: '搜索结果' },
-    { status: '400', description: '请求参数错误' },
-    { status: '401', description: 'API Key 无效或缺少 search:read scope' },
+    { status: '200', description: '搜索结果', example: JSON.stringify({ hits: [], estimatedTotalHits: 0 }, null, 2) },
+    { status: '400', description: '请求参数错误', example: null },
+    { status: '401', description: 'API Key 无效或缺少 search:read scope', example: null },
   ],
 }
 
