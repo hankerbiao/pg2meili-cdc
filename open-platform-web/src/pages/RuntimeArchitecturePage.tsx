@@ -6,7 +6,7 @@ import { DocsLayout } from '../components/DocsLayout'
 const discoverAgentCode = `curl -sS "https://meilisearch.1oa.com.cn/api/v1/agents/online?region=shanghai" \
   -H "Authorization: Bearer $MELIDATA_SEARCH_KEY"`
 
-const searchCode = `curl -X POST "$AGENT_BASE_URL/api/v1/collections/products/search" \
+const searchCode = `curl -X POST "https://meilisearch.1oa.com.cn/documents" \
   -H "Authorization: Bearer $MELIDATA_SEARCH_KEY" \
   -H "Content-Type: application/json" \
   -H "X-Request-ID: storefront-search-001" \
@@ -41,7 +41,7 @@ else:
 
 const runtimeSteps = [
   { icon: KeyRound, title: '发现区域节点', detail: '调用 GET /api/v1/agents/online，可带 region 参数。仅返回健康且未超出心跳 TTL 的节点。' },
-  { icon: Search, title: '提交搜索', detail: '对返回的 base_url 发起 POST /api/v1/collections/{collection}/search，并携带同一把 API Key。' },
+  { icon: Search, title: '提交搜索', detail: '向 POST https://meilisearch.1oa.com.cn/documents 发起请求，并携带同一把 API Key。' },
   { icon: ShieldCheck, title: '本地鉴权与隔离', detail: '区域 Agent 从本地 Key 注册表校验 search:read，按 app_id + collection 派生专属索引 UID。' },
   { icon: Server, title: '代理至 Meilisearch', detail: 'Agent 将搜索参数透传到目标索引；Meilisearch 服务凭证始终只保留在 Agent 侧。' },
 ]
@@ -79,7 +79,7 @@ export function RuntimeArchitecturePage() {
 
         <section id="search-flow">
           <h2>搜索如何执行</h2>
-          <p>区域搜索只接受 <code>POST /api/v1/collections/{'{'}collection{'}'}/search</code>。调用方先发现在线节点，再向返回的 <code>base_url</code> 发起请求；全程使用具有 <code>search:read</code> 的同一把 Key。</p>
+          <p>区域搜索入口为 <code>POST https://meilisearch.1oa.com.cn/documents</code>。调用方使用具有 <code>search:read</code> 的同一把 Key 发起请求。</p>
           <div className="runtime-steps">
             {runtimeSteps.map(({ icon: Icon, title, detail }) => <div key={title}><Icon size={20} /><strong>{title}</strong><span>{detail}</span></div>)}
           </div>

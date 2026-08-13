@@ -159,7 +159,7 @@ export function extractPublicOperations(document: OpenApiDocument): PublicOperat
 export const regionalSearchOperation: PublicOperation = {
   id: 'regional-search',
   method: 'POST',
-  path: '/api/v1/collections/{collection}/search',
+  path: '/documents',
   summary: '在区域节点执行搜索',
   description: '使用具有 search:read scope 的 API Key 调用就近的区域搜索节点。',
   tag: 'search',
