@@ -5,11 +5,10 @@ interface CodeExamplesProps {
   examples: {
     curl: string
     python: string
-    javascript: string
   }
 }
 
-const labels = { curl: 'cURL', python: 'Python', javascript: 'JavaScript' } as const
+const labels = { curl: 'cURL', python: 'Python' } as const
 
 export function CodeExamples({ examples }: CodeExamplesProps) {
   const [language, setLanguage] = useState<keyof typeof examples>('curl')

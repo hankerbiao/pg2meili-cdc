@@ -12,6 +12,8 @@ from typing import Any
 
 # 当前 Guide Schema 版本
 GUIDE_SCHEMA_VERSION = "1.0"
+DATA_BASE_URL = "https://meilisearch.1oa.com.cn"
+SEARCH_BASE_URL = "https://meilisearch.1oa.com.cn/documents"
 
 # 公开 API 路径 allowlist：(路径, 方法, scope)
 # 与 agent-guide.md 第 4 节保持同步
@@ -97,7 +99,7 @@ WORKFLOWS = [
         "steps": [
             "使用 search:read 请求 GET /api/v1/agents/online，可携带目标 region 参数",
             "选择返回的 base_url",
-            "将同一 Bearer Key 转发给区域节点的搜索端点",
+            "使用 SEARCH_BASE_URL/api/v1/collections/{collection}/search，并转发同一 Bearer Key",
             "区域节点不可用时重新发现或由 SDK 的节点池处理重试",
         ],
         "required_scopes": ["search:read"],
@@ -109,7 +111,7 @@ EXAMPLES = [
     {
         "language": "python",
         "title": "Python SDK 示例",
-        "description": "使用官方 Python SDK 进行文档写入和搜索",
+        "description": "使用官方 Python SDK 进行文档写入和搜索；SDK 会自动拼接区域搜索路径",
         "code": '''import os
 from melidata_sdk import MeliDataClient
 
@@ -134,9 +136,10 @@ with MeliDataClient(
     {
         "language": "typescript",
         "title": "TypeScript fetch 示例",
-        "description": "使用原生 fetch 进行区域搜索",
+        "description": "使用原生 fetch 进行区域搜索；公网 Search Base URL 需要追加集合搜索路径",
         "code": '''const API_KEY = process.env.MELIDATA_API_KEY;
 const BASE_URL = "https://meilisearch.1oa.com.cn";
+const SEARCH_BASE_URL = "https://meilisearch.1oa.com.cn/documents";
 
 // 1. 写入文档
 async function writeDocument(collection: string, doc: object) {
@@ -171,7 +174,7 @@ async function findOnlineAgent(region?: string) {
 
 // 3. 向区域节点搜索
 async function regionalSearch(agentUrl: string, collection: string, query: string) {
-  const response = await fetch(`${agentUrl}/api/v1/collections/${collection}/search`, {
+  const response = await fetch(`${SEARCH_BASE_URL}/api/v1/collections/${collection}/search`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${API_KEY}`,
@@ -325,7 +328,7 @@ def build_agent_guide(
         },
         "usage_policy": {
             "mode": "reference_only",
-            "direct_agent_execution": False,
+            "direct_agent_execution": "仅用户明确授权并提供 API Key 后允许一次验证请求",
             "instruction": (
                 "Use this guide to generate integration code for a user. "
                 "Do not call service APIs or request credentials on the user's behalf."
@@ -336,6 +339,13 @@ def build_agent_guide(
             "human_docs": "/docs",
             "llms": "/llms.txt",
             "python_sdk_download": "/api/v1/sdk/python/download",
+        },
+        "endpoints": {
+            "data_base_url": DATA_BASE_URL,
+            "search_base_url": SEARCH_BASE_URL,
+            "search_path_template": "{search_base_url}/api/v1/collections/{collection}/search",
+            "search_url_rule": "其他区域只替换 search_base_url；路径、请求体、Bearer Key 和 search:read 保持不变",
+            "default_region": "天津",
         },
         "architecture": {
             "write_path": [
@@ -377,7 +387,7 @@ def build_agent_guide(
                     "order": 3,
                     "component": "用户应用",
                     "purpose": "向节点 base_url 发送搜索请求",
-                    "endpoint": "POST {base_url}/api/v1/collections/{collection}/search",
+                    "endpoint": "POST {search_base_url}/api/v1/collections/{collection}/search",
                 },
                 {
                     "order": 4,
@@ -437,11 +447,17 @@ The following operations are available for user integrations:
 - GET /api/v1/agents/online (search:read) - Discover online regional nodes
 
 ## Regional Search Flow
-1. GET /api/v1/agents/online with Authorization: Bearer <key>
-2. Select an agent's base_url from the response
-3. POST {base_url}/api/v1/collections/{collection}/search with same Bearer key
+Default SEARCH_BASE_URL: https://meilisearch.1oa.com.cn/documents (Tianjin).
+1. For the default region, POST {SEARCH_BASE_URL}/api/v1/collections/{collection}/search with the same Bearer key.
+2. For another region, call GET /api/v1/agents/online with Authorization: Bearer <key> and choose an online agent's public base_url.
+3. Replace only SEARCH_BASE_URL; keep the path, body, Bearer key, and search:read scope unchanged.
+4. The /documents prefix is an Nginx reverse-proxy prefix, not a complete search request by itself.
+
+## Eventual Consistency and Retry
+Writes propagate asynchronously through PostgreSQL, the outbox, Debezium, Kafka, the regional Agent, and Meilisearch. An immediately empty search result may be synchronization lag. Retry 429, 5xx, and network errors with bounded backoff; stop on 401, 403, 404, and 422.
 
 ## Authentication
 All data operations require: Authorization: Bearer <api_key>
 Keys must be stored server-side, never in client code.
+AI may execute a real request only when the user explicitly authorizes that request and supplies the API key.
 """

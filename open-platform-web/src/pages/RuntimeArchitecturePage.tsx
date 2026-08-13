@@ -80,6 +80,7 @@ export function RuntimeArchitecturePage() {
         <section id="search-flow">
           <h2>搜索如何执行</h2>
           <p>区域搜索入口为 <code>POST https://meilisearch.1oa.com.cn/documents</code>。调用方使用具有 <code>search:read</code> 的同一把 Key 发起请求。</p>
+          <div className="callout"><Search size={18} /><span>默认地址 <code>https://meilisearch.1oa.com.cn/documents</code> 是天津服务器的搜索入口。若要使用其他区域的 Agent，请先获取在线 Agent 的地址，再将请求 URL 替换为该地址；鉴权、请求参数和调用方式保持不变，仅 URL 不同。</span></div>
           <div className="runtime-steps">
             {runtimeSteps.map(({ icon: Icon, title, detail }) => <div key={title}><Icon size={20} /><strong>{title}</strong><span>{detail}</span></div>)}
           </div>

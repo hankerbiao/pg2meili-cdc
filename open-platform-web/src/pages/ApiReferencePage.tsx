@@ -1,4 +1,4 @@
-import { ChevronRight, LoaderCircle } from 'lucide-react'
+import { ChevronRight, LoaderCircle, ShieldAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { CodeBlock } from '../components/CodeBlock'
 import { DocsLayout } from '../components/DocsLayout'
@@ -14,11 +14,13 @@ export function ApiReferencePage() {
   const selected = operations.find((item) => item.id === selectedId) ?? operations[0]
 
   return (
-    <DocsLayout toc={[{ href: '#endpoints', label: '端点列表' }, { href: '#operation', label: '请求详情' }]}>
+    <DocsLayout toc={[{ href: '#instructions', label: 'AI 使用规则' }, { href: '#contract', label: '核心契约' }, { href: '#endpoints', label: '端点列表' }, { href: '#operation', label: '请求详情' }]}> 
       <article className="doc-article reference-article">
         <div className="eyebrow">API REFERENCE</div>
         <h1>调用方 API</h1>
-        <p className="lead">端点详情来自当前 MeliData OpenAPI，并补充区域搜索契约。管理员和内部同步接口不会在此公开。</p>
+        <p className="lead">本页是 AI Agent 生成业务集成代码的契约。管理员、内部同步和 API Key 生命周期接口不会在此公开。</p>
+        <section id="instructions"><h2>AI 使用规则</h2><div className="callout warning"><ShieldAlert size={18} /><span>只使用本页公开业务 API。不要直接写入 Meilisearch，不要创建或猜测 API Key；只有用户明确授权并提供 Key 后才执行实际请求。</span></div></section>
+        <section id="contract"><h2>核心契约</h2><table className="docs-table"><thead><tr><th>能力</th><th>Scope</th><th>路径</th></tr></thead><tbody><tr><td>写入</td><td><code>data:write</code></td><td><code>POST /api/v1/data/{'{'}collection{'}'}</code>、<code>/batch</code></td></tr><tr><td>读取</td><td><code>data:read</code></td><td><code>GET /api/v1/data/{'{'}collection{'}'}</code></td></tr><tr><td>删除/索引设置</td><td><code>data:write</code></td><td><code>DELETE /api/v1/data/...</code></td></tr><tr><td>区域搜索</td><td><code>search:read</code></td><td><code>POST {SEARCH_BASE_URL}/api/v1/collections/{'{'}collection{'}'}/search</code></td></tr></tbody></table><p>默认 <code>SEARCH_BASE_URL</code> 为 <code>https://meilisearch.1oa.com.cn/documents</code>（天津）。其他区域只替换 Base URL。</p></section>
         <section id="endpoints" className="reference-browser">
           <div className="endpoint-list">
             {query.isLoading && <div className="loading-row"><LoaderCircle className="spin" size={18} />正在读取 OpenAPI</div>}
@@ -37,12 +39,16 @@ function EndpointButton({ operation, selected, onClick }: { operation: PublicOpe
 }
 
 function OperationDetail({ operation }: { operation: PublicOperation }) {
-  const url = operation.path.replace('{collection}', 'products').replace('{id}', 'doc-001')
-  const isPublicDownload = operation.tag === 'sdk'
-  const code = isPublicDownload
+ const url = operation.path.replace('{collection}', 'products').replace('{id}', 'doc-001')
+ const isPublicDownload = operation.tag === 'sdk'
+  const requestUrl = operation.id === 'regional-search'
+    ? 'https://meilisearch.1oa.com.cn/documents' + url
+    : 'https://meilisearch.1oa.com.cn' + url
+ const code = isPublicDownload
     ? `curl -LO https://meilisearch.1oa.com.cn${url}`
-    : `curl -X ${operation.method} https://meilisearch.1oa.com.cn${url} \\
+    : `curl -X ${operation.method} ${requestUrl} \\
   -H "Authorization: Bearer $MELIDATA_API_KEY" \\
   -H "Content-Type: application/json"`
-  return <div id="operation" className="operation-detail"><div className="operation-title"><span className={methodClass(operation.method)}>{operation.method}</span><code>{operation.path}</code></div><h2>{operation.summary}</h2><p>{operation.description || '使用开放平台 API Key 调用此端点。'}</p><h3>认证</h3><p>{isPublicDownload ? '无需认证' : <code>Authorization: Bearer &lt;api_key&gt;</code>}</p><h3>请求示例</h3><CodeBlock code={code} /></div>
+  const requestBody = operation.requestBodyExample ?? (operation.id === 'regional-search' ? JSON.stringify({ q: 'keyboard', limit: 10 }, null, 2) : null)
+  return <div id="operation" className="operation-detail"><div className="operation-title"><span className={methodClass(operation.method)}>{operation.method}</span><code>{operation.path}</code></div><h2>{operation.summary}</h2><p>{operation.description || '使用开放平台 API Key 调用此端点。'}</p><h3>认证与 Scope</h3><p>{isPublicDownload ? '无需认证' : <code>Authorization: Bearer &lt;api_key&gt;</code>}</p>{operation.parameters.length > 0 && <><h3>参数</h3><table className="docs-table"><tbody>{operation.parameters.map((parameter) => <tr key={parameter.name}><td><code>{parameter.name}</code></td><td>{parameter.in}</td><td>{parameter.required ? '必填' : '可选'}</td><td>{parameter.description || '-'}</td></tr>)}</tbody></table></>}{requestBody && <><h3>请求体</h3><CodeBlock language="json" code={requestBody} /></>}<h3>请求示例</h3><CodeBlock code={code} /><h3>响应</h3><table className="docs-table"><tbody>{operation.responses.map((response) => <tr key={response.status}><td><code>{response.status}</code></td><td>{response.description || '响应结果'}</td></tr>)}</tbody></table><p><strong>错误策略：</strong><code>401</code>/<code>403</code> 停止并检查权限；<code>404</code>/<code>422</code> 修正参数；<code>429</code>、<code>5xx</code> 和网络错误有限次数退避重试。</p></div>
 }
