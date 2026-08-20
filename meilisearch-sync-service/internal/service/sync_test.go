@@ -54,6 +54,9 @@ func TestProcessSearchOutboxUpsert(t *testing.T) {
 	if doc["name"] != "x" || doc["id"] != "doc-1" {
 		t.Fatalf("unexpected outbox document: %v", doc)
 	}
+	if doc["_meili_id"] != model.MeiliDocumentID("doc-1") {
+		t.Fatalf("unexpected Meilisearch document ID: %v", doc["_meili_id"])
+	}
 	if ResolveIndex(doc) != model.IndexUID("app-a", "items") {
 		t.Fatalf("unexpected outbox index route: %s", ResolveIndex(doc))
 	}
@@ -72,6 +75,9 @@ func TestProcessSearchOutboxUpsertWithStringDocument(t *testing.T) {
 	}
 	if doc["name"] != "x" || doc["id"] != "doc-1" {
 		t.Fatalf("unexpected outbox document: %v", doc)
+	}
+	if doc["_meili_id"] != model.MeiliDocumentID("doc-1") {
+		t.Fatalf("unexpected Meilisearch document ID: %v", doc["_meili_id"])
 	}
 	if ResolveIndex(doc) != model.IndexUID("app-a", "items") {
 		t.Fatalf("unexpected outbox index route: %s", ResolveIndex(doc))

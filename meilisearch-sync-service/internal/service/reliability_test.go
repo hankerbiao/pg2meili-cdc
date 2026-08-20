@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 
+	"meilisearch-sync-service/internal/model"
+
 	"github.com/meilisearch/meilisearch-go"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
@@ -140,6 +142,40 @@ func TestRevisionGateSkipsOldUpsertAndPreventsResurrection(t *testing.T) {
 	}
 	if deletes != 1 {
 		t.Fatalf("DeleteDocument 调用次数 = %d, 期望 1（仅 rev7）", deletes)
+	}
+}
+
+func TestMeiliDocumentIDUsedForUpsertAndDelete(t *testing.T) {
+	client, calls := newFakeMeili(t, false)
+	handler := DebeziumHandler{MeiliClient: client}
+	rawID := "part:54000762"
+
+	if err := handler.Handle(context.Background(), upsertEvent("app-id", "items", rawID, 0)); err != nil {
+		t.Fatalf("handle upsert: %v", err)
+	}
+	if err := handler.Handle(context.Background(), deleteEvent("app-id", "items", rawID, 0)); err != nil {
+		t.Fatalf("handle delete: %v", err)
+	}
+
+	var upsertBody string
+	var deletePath string
+	for _, call := range *calls {
+		if call.method == http.MethodPost && strings.HasSuffix(call.path, "/documents") {
+			upsertBody = call.body
+		}
+		if call.method == http.MethodDelete && strings.Contains(call.path, "/documents/") {
+			deletePath = call.path
+		}
+	}
+	meiliID := model.MeiliDocumentID(rawID)
+	if !strings.Contains(upsertBody, `"_meili_id":"`+meiliID+`"`) {
+		t.Fatalf("upsert body does not contain encoded primary key %q: %s", meiliID, upsertBody)
+	}
+	if !strings.Contains(upsertBody, `"id":"`+rawID+`"`) {
+		t.Fatalf("upsert body does not preserve raw ID %q: %s", rawID, upsertBody)
+	}
+	if !strings.HasSuffix(deletePath, "/documents/"+meiliID) {
+		t.Fatalf("delete path = %q, want encoded ID %q", deletePath, meiliID)
 	}
 }
 

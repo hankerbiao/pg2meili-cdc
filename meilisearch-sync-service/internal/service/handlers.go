@@ -99,9 +99,10 @@ func waitForTask(ctx context.Context, client meilisearch.ServiceManager, info *m
 
 // deleteDocument 统一执行 Meilisearch 文档删除并等待任务完成。
 func (h DebeziumHandler) deleteDocument(ctx context.Context, indexName, id, label string) error {
-	task, err := h.MeiliClient.Index(indexName).DeleteDocumentWithContext(ctx, id, nil)
+	meiliID := model.MeiliDocumentID(id)
+	task, err := h.MeiliClient.Index(indexName).DeleteDocumentWithContext(ctx, meiliID, nil)
 	if err != nil {
-		return meiliOperationError(fmt.Sprintf("Meilisearch %s失败 index=%s id=%s", label, indexName, id), err)
+		return meiliOperationError(fmt.Sprintf("Meilisearch %s失败 index=%s id=%s meili_id=%s", label, indexName, id, meiliID), err)
 	}
 	return waitForTask(ctx, h.MeiliClient, task, "Meilisearch "+label)
 }
@@ -191,7 +192,7 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 		task, err := h.MeiliClient.Index(indexName).AddDocumentsWithContext(
 			ctx,
 			[]map[string]interface{}{doc},
-			&meilisearch.DocumentOptions{PrimaryKey: meilisearch.StringPtr("id")},
+			&meilisearch.DocumentOptions{PrimaryKey: meilisearch.StringPtr("_meili_id")},
 		)
 		if err != nil {
 			return meiliOperationError(fmt.Sprintf("Meilisearch 插入/更新失败 index=%s id=%s", indexName, id), err)

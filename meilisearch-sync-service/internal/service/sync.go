@@ -297,6 +297,7 @@ func processSearchOutbox(after map[string]interface{}) (string, string, map[stri
 			return "", "", nil, "", 0, "", fmt.Errorf("outbox document 必须是对象")
 		}
 		document["id"] = documentID
+		document["_meili_id"] = model.MeiliDocumentID(documentID)
 		document["app_id"] = appID
 		document["collection"] = collection
 		return "c", documentID, document, "", revision, epoch, nil
