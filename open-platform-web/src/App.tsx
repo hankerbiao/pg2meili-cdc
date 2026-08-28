@@ -19,6 +19,7 @@ import { OaHomePage } from './pages/OaHomePage'
 import { PythonSdkPage } from './pages/PythonSdkPage'
 import { QuickstartPage } from './pages/QuickstartPage'
 import { RuntimeArchitecturePage } from './pages/RuntimeArchitecturePage'
+import { HowToUsePage } from './pages/HowToUsePage'
 
 function ProtectedRoute() {
   const { user, loading } = useAuth()
@@ -50,6 +51,7 @@ export function App() {
     <SiteLayout>
       <Routes>
         <Route index element={<Navigate to="/docs/quickstart" replace />} />
+        <Route path="docs/how-to-use" element={<HowToUsePage />} />
         <Route path="docs/quickstart" element={<QuickstartPage />} />
         <Route path="docs/authentication" element={<AuthenticationPage />} />
         <Route path="docs/python-sdk" element={<PythonSdkPage />} />

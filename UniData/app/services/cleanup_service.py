@@ -5,7 +5,8 @@
   实际清理由本模块推进，不依赖单次请求存活。
 - 每个 collection 的 Meili index 删除通过 Kafka delete_index 命令下发（幂等，
   不存在视为成功），并记录 status/attempts/error/时间戳。
-- PostgreSQL 租户 schema 删除（drop_tenant）同样幂等（DROP SCHEMA IF EXISTS）。
+- PostgreSQL 租户 schema 在 collection 快照后立即删除（drop_tenant），与索引回执解耦；
+  同样幂等（DROP SCHEMA IF EXISTS）。
 - 任意阶段失败置 cleanup_failed 并保留 last_error，可被重试或人工恢复。
 - run_cleanup_task 只 flush 不提交；run_cleanup_task_by_id 走独立会话提交，
   供 Worker（P1 的 lifecycle-cleaner）或请求内调用。
@@ -29,7 +30,6 @@ from app.models.cleanup_task import (
     CLEANUP_STATE_FAILED,
     CLEANUP_STATE_INDEXES_DONE,
     CLEANUP_STATE_INDEXES_PENDING,
-    CLEANUP_STATE_SCHEMA_PENDING,
 )
 from app.models.collection_settings import CollectionSettings
 from app.repositories.document_repository import document_repository
@@ -89,8 +89,21 @@ def _all_collections_done(task: AppCleanupTask) -> bool:
     return all(rec.get("status") == "confirmed" for rec in task.collection_cleanup)
 
 
-async def _collections_to_cleanup(db: AsyncSession, app_id: str) -> list[str]:
+async def _collections_to_cleanup(
+    db: AsyncSession, task: AppCleanupTask
+) -> list[str]:
     """合并文档与期望态配置中的集合，避免空索引成为孤儿资源。"""
+    # schema 已删除后不能再通过 document_repository 查询：ensure_tenant 会为
+    # 仍处于 deleting 的应用懒创建 schema。清理任务中的 collection 列表就是
+    # 删除前保存的快照，重试时直接使用它，避免已回收资源被重新创建。
+    if getattr(task, "schema_dropped", False):
+        return sorted({
+            str(record.get("collection"))
+            for record in (task.collection_cleanup or [])
+            if record.get("collection")
+        })
+
+    app_id = task.app_id
     document_collections = {
         collection
         async for collection in document_repository.iter_collections_by_app(
@@ -198,7 +211,17 @@ async def run_cleanup_task(db: AsyncSession, task: AppCleanupTask) -> AppCleanup
     task.attempts = (task.attempts or 0) + 1
 
     try:
-        collections = await _collections_to_cleanup(db, task.app_id)
+        collections = await _collections_to_cleanup(db, task)
+        # 先持久化 collection 快照，再回收 schema。这样即使后续索引清理
+        # 因 Agent 不可用而失败，重试也不会触发租户 schema 的懒初始化。
+        for collection in collections:
+            _collection_record(task, collection)
+        flag_modified(task, "collection_cleanup")
+
+        if not getattr(task, "schema_dropped", False):
+            await drop_tenant(db, task.app_id)
+            task.schema_dropped = True
+
         had_target_regions = bool(task.target_regions)
         target_regions = await _ensure_target_regions(db, task, collections)
         if target_regions and not had_target_regions:
@@ -224,7 +247,7 @@ async def run_cleanup_task(db: AsyncSession, task: AppCleanupTask) -> AppCleanup
                         target_regions=target_regions,
                     )
                     # Kafka flush 仅确认命令已投递；跨区域 Agent 回执前不能
-                    # 删除 schema 或把应用标记为 deleted。
+                    # 把应用标记为 deleted，schema 已在此前回收。
                     rec["status"] = "command_sent"
                     rec["error"] = None
                     rec["finished_at"] = _utc_now().isoformat()
@@ -237,12 +260,10 @@ async def run_cleanup_task(db: AsyncSession, task: AppCleanupTask) -> AppCleanup
                     await db.flush()
                     raise
 
-        # 阶段 2：只有区域 Agent 回执确认后才删除 PostgreSQL 租户 schema。
+        # 阶段 2：只有区域 Agent 回执确认后才完成 Meilisearch 清理。
         if task.state == CLEANUP_STATE_INDEXES_PENDING and _all_collections_done(task):
             task.state = CLEANUP_STATE_INDEXES_DONE
         if task.state == CLEANUP_STATE_INDEXES_DONE:
-            task.state = CLEANUP_STATE_SCHEMA_PENDING
-            await drop_tenant(db, task.app_id)
             task.state = CLEANUP_STATE_DELETED
 
         task.finished_at = _utc_now()

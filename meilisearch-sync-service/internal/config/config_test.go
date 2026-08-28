@@ -21,6 +21,24 @@ func TestLoadConfigDerivesConsumerGroupFromRegion(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate() error = %v", err)
 	}
+	if !cfg.MeiliBatchEnabled || cfg.MeiliBatchSize != 100 || cfg.MeiliBatchFlushMS != 100 || cfg.MeiliBatchMaxBytes != 5242880 {
+		t.Fatalf("unexpected batch defaults: %+v", cfg)
+	}
+}
+
+func TestValidateRejectsInvalidBatchConfig(t *testing.T) {
+	cfg := AppConfig{
+		Brokers:            []string{"localhost:9092"},
+		MeiliHost:          "http://localhost:7700",
+		GroupPrefix:        "meili-sync",
+		GroupID:            "meili-sync",
+		MeiliBatchSize:     0,
+		MeiliBatchFlushMS:  100,
+		MeiliBatchMaxBytes: 1024,
+	}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "MEILI_BATCH_SIZE") {
+		t.Fatalf("Validate() error = %v, want MEILI_BATCH_SIZE", err)
+	}
 }
 
 func TestConsumerGroupTopology(t *testing.T) {
@@ -90,12 +108,15 @@ func TestValidateRejectsConflictingLegacyGroupID(t *testing.T) {
 
 func TestValidateAllowsMatchingLegacyGroupDuringMigration(t *testing.T) {
 	cfg := AppConfig{
-		Brokers:       []string{"localhost:9092"},
-		MeiliHost:     "http://localhost:7700",
-		RegionID:      "beijing",
-		GroupPrefix:   "meili-sync",
-		GroupID:       "meili-sync-beijing",
-		legacyGroupID: "meili-sync-beijing",
+		Brokers:            []string{"localhost:9092"},
+		MeiliHost:          "http://localhost:7700",
+		RegionID:           "beijing",
+		GroupPrefix:        "meili-sync",
+		GroupID:            "meili-sync-beijing",
+		legacyGroupID:      "meili-sync-beijing",
+		MeiliBatchSize:     100,
+		MeiliBatchFlushMS:  100,
+		MeiliBatchMaxBytes: 1024,
 	}
 
 	if err := cfg.Validate(); err != nil {

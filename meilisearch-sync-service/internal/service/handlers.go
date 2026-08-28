@@ -46,6 +46,20 @@ type RecordHandler interface {
 	Handle(ctx context.Context, record *kgo.Record) error
 }
 
+// BatchRecordHandler is implemented by handlers that can acknowledge a group
+// of Kafka records only after the matching downstream batch has completed.
+// Results are returned in input order; a shortened result set means the first
+// retryable failure stopped processing the remainder of that batch.
+type BatchRecordHandler interface {
+	RecordHandler
+	HandleBatch(ctx context.Context, records []*kgo.Record) []BatchResult
+}
+
+type BatchResult struct {
+	Record *kgo.Record
+	Err    error
+}
+
 // TenantGate 供 CDC 消费端查询租户应用状态，阻止已回收租户的在途消息复活索引。
 type TenantGate interface {
 	AppStatus(ctx context.Context, appID string) (status string, found bool, err error)
@@ -62,6 +76,21 @@ type DebeziumHandler struct {
 	// Revisions 可选；为 nil 时不启用文档 revision 门禁。revision 严格大于已
 	// 处理值才执行，旧版本事件确认丢弃，防止乱序/重放覆盖新数据。
 	Revisions RevisionStore
+	// MaxBatchBytes caps the serialized Meilisearch request payload. Zero uses
+	// the service default so direct handler tests remain backward compatible.
+	MaxBatchBytes int
+}
+
+type preparedDebeziumEvent struct {
+	record     *kgo.Record
+	indexName  string
+	operation  string
+	document   map[string]interface{}
+	documentID string
+	appID      string
+	collection string
+	revisionID string
+	revision   int64
 }
 
 const (
@@ -92,28 +121,161 @@ func waitForTask(ctx context.Context, client meilisearch.ServiceManager, info *m
 		return fmt.Errorf("%s: Meilisearch 任务 %d 未返回状态", action, info.TaskUID)
 	}
 	if task.Status != meilisearch.TaskStatusSucceeded {
-		return permanent(fmt.Errorf("%s: Meilisearch 任务 %d 状态=%s 错误=%s", action, info.TaskUID, task.Status, task.Error.Message))
+		err := fmt.Errorf("%s: Meilisearch 任务 %d 状态=%s 错误=%s", action, info.TaskUID, task.Status, task.Error.Message)
+		if isPermanentTaskError(task.Error.Code, task.Error.Type) {
+			return permanent(err)
+		}
+		return err
 	}
 	return nil
 }
 
-// deleteDocument 统一执行 Meilisearch 文档删除并等待任务完成。
-func (h DebeziumHandler) deleteDocument(ctx context.Context, indexName, id, label string) error {
-	meiliID := model.MeiliDocumentID(id)
-	task, err := h.MeiliClient.Index(indexName).DeleteDocumentWithContext(ctx, meiliID, nil)
-	if err != nil {
-		return meiliOperationError(fmt.Sprintf("Meilisearch %s失败 index=%s id=%s meili_id=%s", label, indexName, id, meiliID), err)
+func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
+	event, err := h.prepare(ctx, record)
+	if err != nil || event == nil {
+		return err
 	}
-	return waitForTask(ctx, h.MeiliClient, task, "Meilisearch "+label)
+	if event.operation == "delete" {
+		task, err := h.MeiliClient.Index(event.indexName).DeleteDocumentWithContext(ctx, event.documentID, nil)
+		if err != nil {
+			return meiliOperationError(fmt.Sprintf("Meilisearch 删除失败 index=%s id=%s", event.indexName, event.documentID), err)
+		}
+		if err := waitForTask(ctx, h.MeiliClient, task, "Meilisearch 删除"); err != nil {
+			return err
+		}
+		return h.markRevisionApplied(event.appID, event.collection, event.revisionID, event.revision)
+	}
+	if err := h.applyPrepared(ctx, []preparedDebeziumEvent{*event}); err != nil {
+		return err
+	}
+	return h.markRevisionApplied(event.appID, event.collection, event.revisionID, event.revision)
 }
 
-func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
+// HandleBatch keeps source order by only coalescing consecutive events that
+// target the same index and operation. This avoids moving an update past a
+// delete or an index command while still collapsing normal CDC bursts.
+func (h DebeziumHandler) HandleBatch(ctx context.Context, records []*kgo.Record) []BatchResult {
+	results := make([]BatchResult, 0, len(records))
+	group := make([]preparedDebeziumEvent, 0, len(records))
+	groupBytes := 0
+
+	flush := func() bool {
+		if len(group) == 0 {
+			return true
+		}
+		groupResults := h.applyPreparedGroup(ctx, group)
+		results = append(results, groupResults...)
+		group = group[:0]
+		groupBytes = 0
+		for _, result := range groupResults {
+			if result.Err != nil && !isPermanent(result.Err) {
+				return false
+			}
+		}
+		return true
+	}
+
+	for _, record := range records {
+		// A Kafka partition is the ordering boundary. Flush before preparing a
+		// record from another partition so its revision gate observes all
+		// successful writes from the preceding partition group.
+		if len(group) > 0 && (group[0].record.Topic != record.Topic || group[0].record.Partition != record.Partition) {
+			if !flush() {
+				return results
+			}
+		}
+		event, err := h.prepare(ctx, record)
+		if err != nil {
+			if !flush() {
+				return results
+			}
+			results = append(results, BatchResult{Record: record, Err: err})
+			if !isPermanent(err) {
+				return results
+			}
+			continue
+		}
+		if event == nil {
+			if !flush() {
+				return results
+			}
+			results = append(results, BatchResult{Record: record})
+			continue
+		}
+		if len(group) > 0 && groupContainsDocument(group, *event) {
+			if !flush() {
+				return results
+			}
+			if h.revisionApplied(*event) {
+				results = append(results, BatchResult{Record: record})
+				continue
+			}
+		}
+		eventBytes, sizeErr := preparedEventSize(*event)
+		if sizeErr != nil {
+			if !flush() {
+				return results
+			}
+			results = append(results, BatchResult{Record: record, Err: permanent(fmt.Errorf("序列化 Meilisearch 批量事件失败: %w", sizeErr))})
+			continue
+		}
+		if len(group) > 0 && (group[0].indexName != event.indexName || group[0].operation != event.operation || groupBytes+eventBytes > h.maxBatchBytes()) {
+			if !flush() {
+				return results
+			}
+		}
+		group = append(group, *event)
+		groupBytes += eventBytes
+	}
+	flush()
+	return results
+}
+
+func groupContainsDocument(group []preparedDebeziumEvent, event preparedDebeziumEvent) bool {
+	if event.revision <= 0 || event.revisionID == "" {
+		return false
+	}
+	for _, candidate := range group {
+		if candidate.appID == event.appID && candidate.collection == event.collection && candidate.revisionID == event.revisionID {
+			return true
+		}
+	}
+	return false
+}
+
+func (h DebeziumHandler) revisionApplied(event preparedDebeziumEvent) bool {
+	return h.Revisions != nil && event.revision > 0 && h.Revisions.Applied(event.appID, event.collection, event.revisionID) >= event.revision
+}
+
+func (h DebeziumHandler) maxBatchBytes() int {
+	if h.MaxBatchBytes > 0 {
+		return h.MaxBatchBytes
+	}
+	return 5 * 1024 * 1024
+}
+
+func preparedEventSize(event preparedDebeziumEvent) (int, error) {
+	if event.operation == "upsert" {
+		payload, err := json.Marshal(event.document)
+		return len(payload) + 1, err // JSON array comma / brackets overhead
+	}
+	payload, err := json.Marshal(event.documentID)
+	return len(payload) + 1, err
+}
+
+func isPermanentTaskError(code, kind string) bool {
+	kind = strings.ToLower(kind)
+	code = strings.ToLower(code)
+	return kind == "invalid_request" || strings.HasPrefix(code, "invalid_") || strings.HasPrefix(code, "missing_") || strings.HasPrefix(code, "malformed_") || strings.HasPrefix(code, "primary_key_")
+}
+
+func (h DebeziumHandler) prepare(ctx context.Context, record *kgo.Record) (*preparedDebeziumEvent, error) {
 	op, id, doc, delID, revision, epoch, err := processDebeziumMessage(record.Value)
 	if err != nil {
-		return permanent(fmt.Errorf("处理 Debezium 消息失败: %w", err))
+		return nil, permanent(fmt.Errorf("处理 Debezium 消息失败: %w", err))
 	}
 	if op == "" {
-		return nil
+		return nil, nil
 	}
 
 	// 租户状态门禁：删除中/已删除的租户不再写入 Meilisearch。注册表不可用或
@@ -121,10 +283,10 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 	if h.TenantGate != nil {
 		skip, err := h.tenantGateDecision(ctx, record, doc)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if skip {
-			return nil
+			return nil, nil
 		}
 	}
 
@@ -136,14 +298,14 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 	if h.EpochGate != nil && epoch != "" {
 		cur, found, eerr := h.EpochGate.AppEpoch(ctx, appID)
 		if eerr != nil {
-			return eerr
+			return nil, eerr
 		}
 		if found && cur != "" && cur != epoch {
 			logger.DebugLogf(
 				"跳过过期 epoch 事件 app=%s eventEpoch=%s currentEpoch=%s topic=%s partition=%d offset=%d",
 				appID, epoch, cur, record.Topic, record.Partition, record.Offset,
 			)
-			return nil
+			return nil, nil
 		}
 	}
 
@@ -160,7 +322,7 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 				"跳过旧版本事件 app=%s collection=%s id=%s revision=%d topic=%s partition=%d offset=%d",
 				appID, collection, revisionKeyID, revision, record.Topic, record.Partition, record.Offset,
 			)
-			return nil
+			return nil, nil
 		}
 	}
 
@@ -170,16 +332,11 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 	case "c", "r", "u":
 		indexName := ResolveIndex(doc)
 		if indexName == "" {
-			return permanent(fmt.Errorf("写入消息缺少有效的 app_id 或 collection"))
+			return nil, permanent(fmt.Errorf("写入消息缺少有效的 app_id 或 collection"))
 		}
 
 		if isDeleted(doc) {
-			logger.DebugLogf("执行标记删除触发物理删除 index=%s id=%s", indexName, id)
-			if err := h.deleteDocument(ctx, indexName, id, "标记删除"); err != nil {
-				return err
-			}
-			log.Printf("[delete-by-flag] Meilisearch 索引=%s id=%s", indexName, id)
-			return h.markRevisionApplied(appID, collection, revisionKeyID, revision)
+			return &preparedDebeziumEvent{record: record, indexName: indexName, operation: "delete", documentID: model.MeiliDocumentID(id), appID: appID, collection: collection, revisionID: revisionKeyID, revision: revision}, nil
 		}
 
 		if doc != nil {
@@ -188,34 +345,75 @@ func (h DebeziumHandler) Handle(ctx context.Context, record *kgo.Record) error {
 			delete(doc, "collection")
 			delete(doc, "is_delete")
 		}
-		logger.DebugLogf("执行插入/更新 index=%s id=%s", indexName, id)
-		task, err := h.MeiliClient.Index(indexName).AddDocumentsWithContext(
-			ctx,
-			[]map[string]interface{}{doc},
-			&meilisearch.DocumentOptions{PrimaryKey: meilisearch.StringPtr("_meili_id")},
-		)
-		if err != nil {
-			return meiliOperationError(fmt.Sprintf("Meilisearch 插入/更新失败 index=%s id=%s", indexName, id), err)
-		}
-		if err := waitForTask(ctx, h.MeiliClient, task, "Meilisearch 插入/更新"); err != nil {
-			return err
-		}
-		log.Printf("[upsert] Meilisearch 索引=%s id=%s", indexName, id)
+		return &preparedDebeziumEvent{record: record, indexName: indexName, operation: "upsert", document: doc, appID: appID, collection: collection, revisionID: revisionKeyID, revision: revision}, nil
 	case "d":
 		indexName := ResolveIndex(doc)
 		if indexName == "" {
-			return permanent(fmt.Errorf("删除消息缺少有效的 app_id 或 collection"))
+			return nil, permanent(fmt.Errorf("删除消息缺少有效的 app_id 或 collection"))
 		}
-		logger.DebugLogf("执行硬删除 index=%s id=%s", indexName, delID)
-		if err := h.deleteDocument(ctx, indexName, delID, "硬删除"); err != nil {
-			return err
-		}
-		log.Printf("[delete] Meilisearch 索引=%s id=%s", indexName, delID)
+		return &preparedDebeziumEvent{record: record, indexName: indexName, operation: "delete", documentID: model.MeiliDocumentID(delID), appID: appID, collection: collection, revisionID: revisionKeyID, revision: revision}, nil
 	default:
-		return fmt.Errorf("未知的操作类型 %q", op)
+		return nil, permanent(fmt.Errorf("未知的操作类型 %q", op))
 	}
+}
 
-	return h.markRevisionApplied(appID, collection, revisionKeyID, revision)
+func (h DebeziumHandler) applyPreparedGroup(ctx context.Context, events []preparedDebeziumEvent) []BatchResult {
+	err := h.applyPrepared(ctx, events)
+	if err == nil {
+		results := make([]BatchResult, 0, len(events))
+		for _, event := range events {
+			_ = h.markRevisionApplied(event.appID, event.collection, event.revisionID, event.revision)
+			results = append(results, BatchResult{Record: event.record})
+		}
+		return results
+	}
+	if isPermanent(err) && len(events) > 1 {
+		middle := len(events) / 2
+		return append(h.applyPreparedGroup(ctx, events[:middle]), h.applyPreparedGroup(ctx, events[middle:])...)
+	}
+	results := make([]BatchResult, 0, len(events))
+	for _, event := range events {
+		results = append(results, BatchResult{Record: event.record, Err: err})
+	}
+	return results
+}
+
+func (h DebeziumHandler) applyPrepared(ctx context.Context, events []preparedDebeziumEvent) error {
+	if len(events) == 0 {
+		return nil
+	}
+	first := events[0]
+	started := time.Now()
+	if first.operation == "upsert" {
+		documents := make([]map[string]interface{}, 0, len(events))
+		for _, event := range events {
+			documents = append(documents, event.document)
+		}
+		logger.DebugLogf("批量插入/更新 index=%s size=%d", first.indexName, len(documents))
+		task, err := h.MeiliClient.Index(first.indexName).AddDocumentsWithContext(ctx, documents, &meilisearch.DocumentOptions{PrimaryKey: meilisearch.StringPtr("_meili_id")})
+		if err != nil {
+			return meiliOperationError(fmt.Sprintf("Meilisearch 批量插入/更新失败 index=%s size=%d", first.indexName, len(documents)), err)
+		}
+		err = waitForTask(ctx, h.MeiliClient, task, "Meilisearch 批量插入/更新")
+		if err == nil {
+			log.Printf("[meili-batch] completed operation=upsert index=%s size=%d duration=%s", first.indexName, len(documents), time.Since(started))
+		}
+		return err
+	}
+	ids := make([]string, 0, len(events))
+	for _, event := range events {
+		ids = append(ids, event.documentID)
+	}
+	logger.DebugLogf("批量删除 index=%s size=%d", first.indexName, len(ids))
+	task, err := h.MeiliClient.Index(first.indexName).DeleteDocumentsWithContext(ctx, ids, nil)
+	if err != nil {
+		return meiliOperationError(fmt.Sprintf("Meilisearch 批量删除失败 index=%s size=%d", first.indexName, len(ids)), err)
+	}
+	err = waitForTask(ctx, h.MeiliClient, task, "Meilisearch 批量删除")
+	if err == nil {
+		log.Printf("[meili-batch] completed operation=delete index=%s size=%d duration=%s", first.indexName, len(ids), time.Since(started))
+	}
+	return err
 }
 
 func (h DebeziumHandler) markRevisionApplied(appID, collection, documentID string, revision int64) error {

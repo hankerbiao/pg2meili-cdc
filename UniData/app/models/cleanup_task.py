@@ -3,17 +3,17 @@
 对应 docs/plans/2026-08-07-system-optimization.md §5：应用删除是跨 PostgreSQL、
 Redis、Kafka、Agent、Meilisearch 的长事务，必须改为可恢复任务。状态机：
 
-    active -> deleting -> indexes_pending -> indexes_done
-           -> schema_pending -> deleted
+    active -> deleting -> indexes_pending -> indexes_done -> deleted
     任意阶段失败 -> cleanup_failed -> 重试或人工恢复
 
 API 事务只把应用标记为 deleting、写 lifecycle_epoch、创建 cleanup task 并返回；
-清理由 cleanup_service.run_cleanup_task 推进，可从任意中间状态恢复。
+清理由 cleanup_service.run_cleanup_task 推进，可从任意中间状态恢复。schema
+在 collection 快照后单独回收，并由 schema_dropped 记录结果。
 """
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.models.base import Base
@@ -45,10 +45,12 @@ class AppCleanupTask(Base):
     state = Column(String, nullable=False, default=CLEANUP_STATE_DELETING, index=True)
     # 每个 collection 的清理结果：[{"collection","status","attempts","error","finished_at"}]
     # status: pending | command_sent | confirmed | failed；command_sent 仅表示 Kafka
-    # 已接收命令，只有所有区域确认后才能删 schema。
+    # 已接收命令，只有所有区域确认后才能完成索引清理。
     collection_cleanup = Column(JSONB, nullable=False, default=lambda: [])
-    # 任务创建时快照在线 Agent 区域；只有这些区域均确认后才能删除 tenant schema。
+    # 任务创建时快照在线 Agent 区域；只有这些区域均确认后才能完成索引清理。
     target_regions = Column(JSONB, nullable=True, default=None)
+    # PostgreSQL schema 与 Meilisearch 清理解耦，schema 回收成功后置为 true。
+    schema_dropped = Column(Boolean, nullable=False, default=False)
     # 清理任务整体重试次数
     attempts = Column(Integer, nullable=False, default=0)
     last_error = Column(Text, nullable=True)

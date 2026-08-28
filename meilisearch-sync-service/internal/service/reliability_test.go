@@ -48,6 +48,12 @@ func newFakeMeili(t *testing.T, meiliUnavailable bool) (meilisearch.ServiceManag
 		case r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "/documents/"):
 			w.WriteHeader(http.StatusAccepted)
 			_, _ = w.Write([]byte(`{"taskUid":1}`))
+		case r.Method == http.MethodDelete && strings.HasSuffix(r.URL.Path, "/documents"):
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"taskUid":1}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/documents/delete-batch"):
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"taskUid":1}`))
 		case strings.HasPrefix(r.URL.Path, "/tasks/"):
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"uid":1,"status":"succeeded","error":{"message":""}}`))
@@ -266,6 +272,184 @@ func TestHandlerRetriesOnMeiliFailure(t *testing.T) {
 	}
 	if got := revisions.Applied("app-f", "items", "doc-1"); got != 0 {
 		t.Fatalf("失败事件不能推进 revision，实际值=%d", got)
+	}
+}
+
+func TestHandleBatchCoalescesUpsertsAndAdvancesRevisionsAfterTask(t *testing.T) {
+	client, calls := newFakeMeili(t, false)
+	revisions := NewMemoryRevisionStore()
+	handler := DebeziumHandler{MeiliClient: client, Revisions: revisions}
+	records := []*kgo.Record{
+		upsertEvent("app-batch", "items", "one", 1),
+		upsertEvent("app-batch", "items", "two", 2),
+		upsertEvent("app-batch", "items", "three", 3),
+	}
+
+	results := handler.HandleBatch(context.Background(), records)
+	if len(results) != len(records) {
+		t.Fatalf("HandleBatch results = %d, want %d", len(results), len(records))
+	}
+	for _, result := range results {
+		if result.Err != nil {
+			t.Fatalf("HandleBatch error = %v", result.Err)
+		}
+	}
+
+	posts := 0
+	var body string
+	for _, call := range *calls {
+		if call.method == http.MethodPost && strings.HasSuffix(call.path, "/documents") {
+			posts++
+			body = call.body
+		}
+	}
+	if posts != 1 {
+		t.Fatalf("AddDocuments calls = %d, want 1", posts)
+	}
+	for _, id := range []string{"one", "two", "three"} {
+		if !strings.Contains(body, `"id":"`+id+`"`) {
+			t.Fatalf("batch request missing document %q: %s", id, body)
+		}
+	}
+	for _, id := range []string{"one", "two", "three"} {
+		if revisions.Applied("app-batch", "items", id) == 0 {
+			t.Fatalf("revision was not advanced for %q", id)
+		}
+	}
+}
+
+func TestHandleBatchUsesBulkDelete(t *testing.T) {
+	client, calls := newFakeMeili(t, false)
+	handler := DebeziumHandler{MeiliClient: client}
+	results := handler.HandleBatch(context.Background(), []*kgo.Record{
+		deleteEvent("app-batch", "items", "one", 1),
+		deleteEvent("app-batch", "items", "two", 2),
+	})
+	for _, result := range results {
+		if result.Err != nil {
+			t.Fatalf("HandleBatch error = %v", result.Err)
+		}
+	}
+	deletes := 0
+	for _, call := range *calls {
+		if call.method == http.MethodPost && strings.HasSuffix(call.path, "/documents/delete-batch") {
+			deletes++
+			if !strings.Contains(call.body, model.MeiliDocumentID("one")) || !strings.Contains(call.body, model.MeiliDocumentID("two")) {
+				t.Fatalf("bulk delete body = %s", call.body)
+			}
+		}
+	}
+	if deletes != 1 {
+		t.Fatalf("DeleteDocuments calls = %d, want 1", deletes)
+	}
+}
+
+func TestHandleBatchDoesNotAdvanceRevisionsOnRetryableFailure(t *testing.T) {
+	client, _ := newFakeMeili(t, true)
+	revisions := NewMemoryRevisionStore()
+	handler := DebeziumHandler{MeiliClient: client, Revisions: revisions}
+	results := handler.HandleBatch(context.Background(), []*kgo.Record{
+		upsertEvent("app-batch", "items", "one", 1),
+		upsertEvent("app-batch", "items", "two", 2),
+	})
+	if len(results) != 2 || results[0].Err == nil || isPermanent(results[0].Err) {
+		t.Fatalf("expected retryable batch error, got %#v", results)
+	}
+	if revisions.Applied("app-batch", "items", "one") != 0 || revisions.Applied("app-batch", "items", "two") != 0 {
+		t.Fatal("retryable batch failure must not advance revisions")
+	}
+}
+
+func TestHandleBatchSplitsOnPermanentTaskFailure(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/documents"):
+			calls++
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"taskUid":1}`))
+		case strings.HasPrefix(r.URL.Path, "/tasks/"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"uid":1,"status":"failed","error":{"message":"invalid document","code":"invalid_document","type":"invalid_request"}}`))
+		default:
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{}`))
+		}
+	}))
+	defer server.Close()
+	handler := DebeziumHandler{MeiliClient: meilisearch.New(server.URL)}
+	results := handler.HandleBatch(context.Background(), []*kgo.Record{
+		upsertEvent("app-batch", "items", "one", 1),
+		upsertEvent("app-batch", "items", "two", 2),
+	})
+	if len(results) != 2 || !isPermanent(results[0].Err) || !isPermanent(results[1].Err) {
+		t.Fatalf("expected permanent per-record errors, got %#v", results)
+	}
+	if calls != 3 { // initial two-record request plus two single-record probes
+		t.Fatalf("AddDocuments calls = %d, want 3", calls)
+	}
+}
+
+func TestWaitForTaskRetriesUnknownFailedTask(t *testing.T) {
+	httpClient := &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"uid":1,"status":"failed","error":{"message":"engine unavailable","code":"internal","type":"internal"}}`)),
+		}, nil
+	})}
+	client := meilisearch.New("http://meili.test", meilisearch.WithCustomClient(httpClient))
+	err := waitForTask(context.Background(), client, &meilisearch.TaskInfo{TaskUID: 1}, "test")
+	if err == nil || isPermanent(err) {
+		t.Fatalf("expected retryable failed task, got %v", err)
+	}
+}
+
+func TestHandleBatchSplitsBySerializedPayloadSize(t *testing.T) {
+	client, calls := newFakeMeili(t, false)
+	handler := DebeziumHandler{MeiliClient: client, MaxBatchBytes: 80}
+	results := handler.HandleBatch(context.Background(), []*kgo.Record{
+		upsertEvent("app-batch", "items", "one", 1),
+		upsertEvent("app-batch", "items", "two", 2),
+	})
+	for _, result := range results {
+		if result.Err != nil {
+			t.Fatalf("HandleBatch error = %v", result.Err)
+		}
+	}
+	posts := 0
+	for _, call := range *calls {
+		if call.method == http.MethodPost && strings.HasSuffix(call.path, "/documents") {
+			posts++
+		}
+	}
+	if posts != 2 {
+		t.Fatalf("AddDocuments calls = %d, want 2", posts)
+	}
+}
+
+func TestHandleBatchKeepsPartitionsAndRevisionGateIsolated(t *testing.T) {
+	client, calls := newFakeMeili(t, false)
+	revisions := NewMemoryRevisionStore()
+	handler := DebeziumHandler{MeiliClient: client, Revisions: revisions}
+	newer := upsertEvent("app-batch", "items", "same", 2)
+	older := upsertEvent("app-batch", "items", "same", 1)
+	older.Partition = 1
+	results := handler.HandleBatch(context.Background(), []*kgo.Record{newer, older})
+	for _, result := range results {
+		if result.Err != nil {
+			t.Fatalf("HandleBatch error = %v", result.Err)
+		}
+	}
+	posts := 0
+	for _, call := range *calls {
+		if call.method == http.MethodPost && strings.HasSuffix(call.path, "/documents") {
+			posts++
+		}
+	}
+	if posts != 1 {
+		t.Fatalf("AddDocuments calls = %d, want 1 because stale revision must be skipped", posts)
 	}
 }
 

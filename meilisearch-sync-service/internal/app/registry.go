@@ -37,10 +37,11 @@ func BuildHandlers(topics Topics, meiliClient meilisearch.ServiceManager, regist
 	// CDC 消息，并丢弃应用删除/重建后旧 epoch 的迟到事件，防止索引复活。
 	// Revisions 提供文档级 revision 门禁（内存实现），丢弃乱序/重放的旧版本事件。
 	cdcHandler := service.DebeziumHandler{
-		MeiliClient: meiliClient,
-		TenantGate:  registry,
-		EpochGate:   registry,
-		Revisions:   service.NewMemoryRevisionStore(),
+		MeiliClient:   meiliClient,
+		TenantGate:    registry,
+		EpochGate:     registry,
+		Revisions:     service.NewMemoryRevisionStore(),
+		MaxBatchBytes: cfg.MeiliBatchMaxBytes,
 	}
 	for _, topic := range topics.CDC {
 		register(topic, cdcHandler)

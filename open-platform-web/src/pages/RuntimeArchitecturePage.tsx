@@ -31,13 +31,26 @@ const responseCode = `{
   "error": null
 }`
 
-const pollCode = `for attempt in range(10):
+const pollCode = `import os
+import time
+from melidata_sdk import MeliDataClient
+
+search_client = MeliDataClient(
+    os.environ["MELIDATA_BASE_URL"],
+    os.environ["MELIDATA_SEARCH_KEY"],
+    search_url=os.environ["SEARCH_BASE_URL"],
+)
+document_id = "sku-001"
+
+for attempt in range(10):
     result = search_client.search("products", query="keyboard")
     if any(hit["id"] == document_id for hit in result.hits):
         break
     time.sleep(2)
 else:
-    raise TimeoutError("Document has not reached the regional search index")`
+    raise TimeoutError("Document has not reached the regional search index")
+
+search_client.close()`
 
 const runtimeSteps = [
   { icon: KeyRound, title: '发现区域节点', detail: '调用 GET /api/v1/agents/online，可带 region 参数。仅返回健康且未超出心跳 TTL 的节点。' },

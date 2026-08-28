@@ -57,6 +57,7 @@ curl --fail-with-body -X DELETE "$MELIDATA_BASE_URL/api/v1/data/$COLLECTION/sku-
 
 const pollCode = `import os
 import time
+from melidata_sdk import MeliDataClient
 
 COLLECTION = os.environ.get("COLLECTION", "products")
 with MeliDataClient(os.environ["MELIDATA_BASE_URL"], os.environ["MELIDATA_API_KEY"], search_url=os.environ["SEARCH_BASE_URL"]) as client:
@@ -85,7 +86,7 @@ export function QuickstartPage() {
           <div><Search /><strong>就近搜索</strong><span>区域节点低延迟查询</span></div>
         </div>
 
-        <section id="instructions"><h2>AI 使用规则</h2><CodeBlock language="instructions" code={'MUST: 使用用户提供的 API Key，通过 Authorization: Bearer <api_key> 发送。\nMUST: 业务写入、读取和删除经过 /api/v1/data/...。\nMUST: 搜索经过区域 Agent，不直接写入或查询 Meilisearch。\nMUST: 用户明确授权后才执行真实请求，否则只生成代码。\nDO NOT: 创建、申请或猜测 API Key。\nDO NOT: 将 API Key 写入前端源码、日志、仓库或长期记忆。'} /></section>
+        <section id="instructions"><h2>AI 使用规则</h2><CodeBlock language="instructions" code={'MUST: 使用用户提供的 API Key，通过 Authorization: Bearer <api_key> 发送。\nMUST: 业务写入、读取和删除经过 /api/v1/data/...。\nMUST: 搜索经过区域 Agent，不直接写入或查询 Meilisearch。\nMUST: 用户明确授权后才执行真实请求，否则只生成代码。\nMUST: 本页与 /agent-guide.json 或 /openapi.json 不一致时，以机器可读契约为准。\nDO NOT: 创建、申请或猜测 API Key。\nDO NOT: 将 API Key 写入前端源码、日志、仓库或长期记忆。'} /></section>
         <section id="variables"><h2>配置变量</h2><p><code>MELIDATA_BASE_URL</code> 用于数据 API 和 Agent 发现；<code>SEARCH_BASE_URL</code> 是区域搜索公网 Base URL，默认是天津服务器。</p><CodeBlock language="dotenv" code={variablesCode} /></section>
 
         <section id="write">
@@ -105,7 +106,7 @@ export function QuickstartPage() {
         </section>
 
         <section id="consistency"><span className="step-number">04</span><h2>等待区域同步</h2><p>数据经过 PostgreSQL、Outbox、Debezium、Kafka、区域 Agent 和 Meilisearch 异步传播。刚写入后搜索为空不代表写入失败。</p><CodeBlock language="python" code={'import time\n\n' + pollCode} /></section>
-        <section id="errors"><h2>错误处理</h2><table className="docs-table"><thead><tr><th>状态</th><th>处理</th></tr></thead><tbody><tr><td><code>401</code>/<code>403</code></td><td>停止，检查 Key 或 scope</td></tr><tr><td><code>404</code>/<code>422</code></td><td>修正集合、文档 ID 或请求体</td></tr><tr><td><code>429</code></td><td>按 Retry-After 或退避重试</td></tr><tr><td><code>5xx</code>/<code>网络错误</code></td><td>有限次数退避重试并保留 request ID</td></tr></tbody></table></section>
+        <section id="errors"><h2>错误处理</h2><table className="docs-table"><thead><tr><th>状态</th><th>处理</th></tr></thead><tbody><tr><td><code>401</code>/<code>403</code></td><td>停止，检查 Key 或 scope</td></tr><tr><td><code>404</code>/<code>422</code></td><td>修正集合、文档 ID 或请求体</td></tr><tr><td><code>409</code></td><td>停止写入，检查应用是否正在删除（<code>APP_DELETING</code>）</td></tr><tr><td><code>413</code></td><td>缩小请求体或批量大小（<code>REQUEST_BODY_TOO_LARGE</code>）</td></tr><tr><td><code>429</code></td><td>按 Retry-After 或退避重试</td></tr><tr><td><code>5xx</code>/<code>网络错误</code></td><td>有限次数退避重试并保留 request ID</td></tr></tbody></table></section>
 
         <section id="guides" className="next-section">
           <h2>完善集成</h2>

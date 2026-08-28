@@ -173,7 +173,8 @@ class OpenPlatformService:
         source_ip: str | None,
     ) -> OpenPlatformApp:
         """异步回收租户：标记 deleting + 冻结密钥 + 写 lifecycle_epoch + 创建 cleanup task，
-        由 cleanup_service 推进可恢复状态机完成索引与 schema 清理。
+        由 cleanup_service 推进可恢复状态机完成索引清理；独立数据库 schema
+        在 collection 快照后立即回收。
 
         - 应用进入 deleting 后，文档/配置写入被 409 APP_DELETING 拒绝（见 app/core/auth.py）。
         - 清理失败不会回退为 active：deleting 态与 cleanup_failed 任务均落盘，可重试。

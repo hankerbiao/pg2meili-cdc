@@ -83,8 +83,8 @@ func (a *App) Run(ctx context.Context) error {
 		return err
 	}
 	log.Printf(
-		"服务启动，监听 region=%s cdcTopics=%v commandTopic=%s apiKeyTopic=%s dlqTopic=%s group=%s brokers=%v meiliHost=%s debug=%v",
-		a.cfg.RegionID, a.topics.CDC, a.topics.Command, a.topics.APIKey, a.cfg.DLQTopic, a.cfg.GroupID, a.cfg.Brokers, a.cfg.MeiliHost, a.cfg.Debug,
+		"服务启动，监听 region=%s cdcTopics=%v commandTopic=%s apiKeyTopic=%s dlqTopic=%s group=%s brokers=%v meiliHost=%s batchEnabled=%v batchSize=%d batchFlushMS=%d batchMaxBytes=%d debug=%v",
+		a.cfg.RegionID, a.topics.CDC, a.topics.Command, a.topics.APIKey, a.cfg.DLQTopic, a.cfg.GroupID, a.cfg.Brokers, a.cfg.MeiliHost, a.cfg.MeiliBatchEnabled, a.cfg.MeiliBatchSize, a.cfg.MeiliBatchFlushMS, a.cfg.MeiliBatchMaxBytes, a.cfg.Debug,
 	)
 
 	// 5. 创建对外 HTTP 服务，提供 /search 代理与 /health 健康检查接口。

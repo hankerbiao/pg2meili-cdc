@@ -71,6 +71,10 @@ from melidata_sdk import AsyncMeliDataClient
 
 BASE_URL = "https://meilisearch.1oa.com.cn"
 SEARCH_URL = "https://meilisearch.1oa.com.cn/documents"
+documents = [
+    {"id": "sku-001", "name": "Keyboard"},
+    {"id": "sku-002", "name": "Mouse"},
+]
 
 async with AsyncMeliDataClient(
     BASE_URL,
@@ -102,7 +106,7 @@ data_client = MeliDataClient(
     os.environ["MELIDATA_DATA_KEY"],          # scope: data:read, data:write
 )
 
-# 前端 / 只读场景：只需搜索能力（绝不授予写权限）
+# 搜索 BFF / 服务端只读场景：只需搜索能力（绝不授予写权限）
 search_client = MeliDataClient(
     BASE_URL,
     os.environ["MELIDATA_SEARCH_KEY"],        # scope: search:read
@@ -239,7 +243,7 @@ export function PythonSdkPage() {
 
         <section id="errors">
           <span className="step-number">06</span><h2>错误与重试</h2>
-          <p>所有 SDK 异常继承自 <code>MeliDataError</code>。默认对可重试请求额外尝试两次，并遵循服务端 <code>Retry-After</code>；认证、权限、校验和未找到错误不会重试。</p>
+          <p>所有 SDK 异常继承自 <code>MeliDataError</code>。默认对可重试请求额外尝试两次，并遵循服务端 <code>Retry-After</code>；认证、权限、校验、未找到、<code>409 APP_DELETING</code> 和 <code>413 REQUEST_BODY_TOO_LARGE</code> 都不会重试。</p>
           <CodeBlock language="python" code={errorCode} />
         </section>
 
@@ -249,12 +253,12 @@ export function PythonSdkPage() {
           <table className="docs-table sdk-methods">
             <thead><tr><th>scope</th><th>允许的操作</th><th>典型使用方</th></tr></thead>
             <tbody>
-              <tr><td><code>data:read</code></td><td>读取文档、列举索引、列举 Agent</td><td>后台任务、只读报表</td></tr>
+              <tr><td><code>data:read</code></td><td>读取文档、列举索引</td><td>后台任务、只读报表</td></tr>
               <tr><td><code>data:write</code></td><td>写入 / 批量写入 / 删除文档、更新索引设置</td><td>数据管道、管理后台</td></tr>
-              <tr><td><code>search:read</code></td><td>发起搜索请求（仅搜索 Agent）</td><td>前端页面、C 端查询</td></tr>
+              <tr><td><code>search:read</code></td><td>发现在线 Agent、发起搜索请求（仅搜索 Agent）</td><td>搜索 BFF、服务端只读查询</td></tr>
             </tbody>
           </table>
-          <p>控制台会创建「后端完整访问」与「前端搜索只读」两类 Key。后端 Key 包含全部三个 scope，可读写并搜索文档；前端只注入 <code>search:read</code> 的 Key，即使泄露也只暴露查询能力。</p>
+          <p>控制台会创建「后端完整访问」与「搜索服务只读」两类 Key。后端 Key 包含全部三个 scope，可读写并搜索文档；搜索 BFF 只注入 <code>search:read</code> 的 Key。该 scope 只限制权限，不能替代服务端保管密钥，浏览器仍不得直接保存 API Key。</p>
           <CodeBlock language="python" code={keysCode} />
           <div className="callout"><AlertCircle size={18} /><span>在开放平台「应用与密钥」中按调用方类型创建 Key；Key 的明文仅在创建时展示一次，遗失需吊销后重新生成。</span></div>
         </section>

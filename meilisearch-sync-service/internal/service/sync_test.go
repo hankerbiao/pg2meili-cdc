@@ -190,7 +190,7 @@ func TestWaitForTaskChecksFinalStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.status, func(t *testing.T) {
 			httpClient := &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
-				body := `{"uid":1,"status":"` + tt.status + `","error":{"message":"invalid document"}}`
+				body := `{"uid":1,"status":"` + tt.status + `","error":{"message":"invalid document","code":"invalid_document","type":"invalid_request"}}`
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     http.Header{"Content-Type": []string{"application/json"}},

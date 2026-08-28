@@ -2,6 +2,8 @@
 
 一个基于 Go 的实时数据同步服务，从 Kafka 消费 Debezium CDC 消息并同步到 Meilisearch 搜索引擎。
 
+面向 AI Agent 的完整编译、验证和运行前置说明见 [BUILDING_FOR_AGENTS.md](BUILDING_FOR_AGENTS.md)。
+
 ## 功能特性
 
 - 实时消费 Kafka 中的 Debezium 变更数据捕获 (CDC) 消息

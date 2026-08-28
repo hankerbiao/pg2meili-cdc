@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	maxPollRecords = 50
+	maxPollRecords = 100
 	retryBackoff   = time.Second
 
 	// Kafka metadata errors (for example UNKNOWN_TOPIC_ID) can be returned
@@ -42,6 +42,18 @@ func Run(
 	cfg config.AppConfig,
 	handlers map[string]RecordHandler,
 ) error {
+	batchSize := cfg.MeiliBatchSize
+	if batchSize <= 0 {
+		batchSize = maxPollRecords
+	}
+	batchFlush := time.Duration(cfg.MeiliBatchFlushMS) * time.Millisecond
+	if batchFlush <= 0 {
+		batchFlush = 100 * time.Millisecond
+	}
+	pollLimit := maxPollRecords
+	if cfg.MeiliBatchEnabled && batchSize > pollLimit {
+		pollLimit = batchSize
+	}
 	fetchErrorBackoff := fetchErrorInitialBackoff
 	lastFetchError := ""
 	lastFetchLog := time.Time{}
@@ -53,7 +65,7 @@ func Run(
 		}
 
 		// 从 Kafka 拉取一批消息，如果有错误先记录日志再继续下一轮
-		fetches := client.PollRecords(ctx, maxPollRecords)
+		fetches := client.PollRecords(ctx, pollLimit)
 		if errs := fetches.Errors(); len(errs) > 0 {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -90,20 +102,136 @@ func Run(
 			suppressedFetchErrors = 0
 		}
 
-		// 整批处理完成后再提交，失败时允许 Kafka 重新投递。
+		// After the first record arrives, keep polling until the configured
+		// window expires. This is the low-traffic flush trigger; busy consumers
+		// reach batchSize before the timer in the usual case.
 		iter := fetches.RecordIter()
+		fetchedRecords := make([]*kgo.Record, 0, pollLimit)
+		for !iter.Done() {
+			fetchedRecords = append(fetchedRecords, iter.Next())
+		}
+		if cfg.MeiliBatchEnabled && len(fetchedRecords) > 0 && len(fetchedRecords) < batchSize {
+			deadline := time.Now().Add(batchFlush)
+			for len(fetchedRecords) < batchSize && time.Now().Before(deadline) {
+				pollCtx, cancel := context.WithDeadline(ctx, deadline)
+				more := client.PollRecords(pollCtx, batchSize-len(fetchedRecords))
+				timedOut := pollCtx.Err() == context.DeadlineExceeded
+				cancel()
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				if errs := more.Errors(); len(errs) > 0 {
+					log.Printf("批量聚合期间从 Kafka 拉取消息出错，提前 flush: %s", summarizeFetchErrors(errs))
+					break
+				}
+				if timedOut || more.Empty() {
+					break
+				}
+				moreIter := more.RecordIter()
+				for !moreIter.Done() && len(fetchedRecords) < batchSize {
+					fetchedRecords = append(fetchedRecords, moreIter.Next())
+				}
+			}
+		}
+
+		// 整批处理完成后再提交，失败时允许 Kafka 重新投递。
 		var records []*kgo.Record
 		retry := false
 		blocked := make(map[recordPartition]struct{})
+		var pending []*kgo.Record
+		var pendingHandler BatchRecordHandler
+		pendingBytes := 0
 
-		for !iter.Done() {
-			record := iter.Next()
+		settle := func(result BatchResult) error {
+			if result.Record == nil {
+				return nil
+			}
+			partition := recordPartition{topic: result.Record.Topic, partition: result.Record.Partition}
+			if _, isBlocked := blocked[partition]; isBlocked {
+				return nil
+			}
+			if result.Err != nil {
+				if !isPermanent(result.Err) {
+					if ctx.Err() != nil {
+						return ctx.Err()
+					}
+					log.Printf("处理批量消息失败，将重试 topic=%s partition=%d offset=%d: %v", result.Record.Topic, result.Record.Partition, result.Record.Offset, result.Err)
+					blocked[partition] = struct{}{}
+					retry = true
+					return nil
+				}
+				log.Printf("批量中的永久消息错误，写入 DLQ: %v", result.Err)
+				if err := sendToDLQ(ctx, client, cfg, result.Record, result.Err); err != nil {
+					return fmt.Errorf("写入 DLQ 失败，保留原消息 offset: %w", err)
+				}
+			}
+			records = append(records, result.Record)
+			return nil
+		}
+		flushBatch := func(reason string) error {
+			if len(pending) == 0 {
+				return nil
+			}
+			log.Printf("[meili-batch] flush reason=%s size=%d sourceBytes=%d topic=%s partition=%d", reason, len(pending), pendingBytes, pending[0].Topic, pending[0].Partition)
+			results := pendingHandler.HandleBatch(ctx, pending)
+			settled := make(map[*kgo.Record]struct{}, len(results))
+			for _, result := range results {
+				settled[result.Record] = struct{}{}
+				if err := settle(result); err != nil {
+					return err
+				}
+			}
+			// A retryable failure deliberately stops BatchRecordHandler early.
+			// Mark unreturned records blocked so no later offset can skip them.
+			for _, record := range pending {
+				if _, ok := settled[record]; ok {
+					continue
+				}
+				blocked[recordPartition{topic: record.Topic, partition: record.Partition}] = struct{}{}
+				retry = true
+			}
+			pending = pending[:0]
+			pendingHandler = nil
+			pendingBytes = 0
+			return nil
+		}
+
+		for _, record := range fetchedRecords {
 			partition := recordPartition{topic: record.Topic, partition: record.Partition}
 			if _, ok := blocked[partition]; ok {
 				continue
 			}
 
 			handler := handlers[record.Topic]
+			batchHandler, canBatch := handler.(BatchRecordHandler)
+			if cfg.MeiliBatchEnabled && canBatch {
+				// The handler is registered once per CDC topic. Topic changes are a
+				// boundary: it keeps offsets and source ordering straightforward.
+				if len(pending) > 0 && (record.Topic != pending[0].Topic || record.Partition != pending[0].Partition || len(pending) >= batchSize) {
+					if err := flushBatch("boundary"); err != nil {
+						return err
+					}
+					if _, isBlocked := blocked[partition]; isBlocked {
+						continue
+					}
+				}
+				pending = append(pending, record)
+				pendingHandler = batchHandler
+				pendingBytes += len(record.Value)
+				if len(pending) >= batchSize {
+					if err := flushBatch("size-or-bytes"); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+
+			if err := flushBatch("non-batch-handler"); err != nil {
+				return err
+			}
+			if _, isBlocked := blocked[partition]; isBlocked {
+				continue
+			}
 			var handleErr error
 			if handler == nil {
 				handleErr = permanent(fmt.Errorf("未注册的 topic: %s", record.Topic))
@@ -127,6 +255,9 @@ func Run(
 				}
 			}
 			records = append(records, record)
+		}
+		if err := flushBatch("flush-window"); err != nil {
+			return err
 		}
 
 		if len(records) > 0 {

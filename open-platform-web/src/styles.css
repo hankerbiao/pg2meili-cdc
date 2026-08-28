@@ -88,6 +88,22 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .doc-article p { color: var(--muted); font-size: 16px; line-height: 1.7; }
 .doc-article p code, .callout code { padding: 2px 5px; border: 1px solid var(--hairline); border-radius: 4px; background: var(--canvas-soft); color: var(--ink); font-size: 13px; }
 .step-number { font-family: ui-monospace, monospace; font-size: 12px; color: var(--primary-deep); font-weight: 600; }
+.how-to-use-note { margin-top: 34px; padding: 14px 16px; border: 1px solid #bcebd5; border-radius: 6px; background: #f3fff9; display: flex; align-items: flex-start; gap: 10px; color: #226044; font-size: 14px; line-height: 1.55; }
+.how-to-use-note svg { flex: 0 0 auto; margin-top: 2px; }
+.how-to-use-steps { margin-top: 54px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.how-to-use-step { min-width: 0; padding: 22px; border: 1px solid var(--hairline); border-radius: 8px; display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 14px; align-items: start; }
+.how-to-use-step:hover { border-color: var(--primary-deep); }
+.how-to-use-step-icon { width: 38px; height: 38px; border-radius: 6px; display: grid; place-items: center; background: #e8f7ef; color: var(--primary-deep); }
+.how-to-use-step-content { min-width: 0; }
+.how-to-use-step-number { color: var(--primary-deep); font: 600 11px ui-monospace, monospace; }
+.how-to-use-step h2 { margin: 7px 0 10px; font-size: 18px; line-height: 1.35; }
+.how-to-use-step p { margin: 0; font-size: 14px; line-height: 1.65; }
+.how-to-use-action { margin-top: 16px; display: inline-flex; align-items: center; gap: 6px; color: var(--ink); font-size: 13px; font-weight: 500; }
+.how-to-use-action:hover { color: var(--primary-deep); }
+.how-to-use-next { margin-top: 72px !important; }
+.how-to-use-next h2 { margin-top: 0; }
+.how-to-use-next > p { margin-top: 0; }
+.how-to-use-url-hint { display: flex; align-items: center; gap: 6px; color: var(--muted-2) !important; font-size: 12px !important; }
 .quick-facts { margin-top: 38px; border: 1px solid var(--hairline); border-radius: 8px; display: grid; grid-template-columns: repeat(3, 1fr); overflow: hidden; }
 .quick-facts > div { min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 7px; }
 .quick-facts > div + div { border-left: 1px solid var(--hairline); }
@@ -471,6 +487,7 @@ button.field-chip:hover { border-color: var(--primary-deep); color: var(--primar
   .doc-article section { margin-top: 54px; }
   .doc-article h2 { font-size: 23px; }
   .quick-facts { grid-template-columns: 1fr; }
+  .how-to-use-steps { grid-template-columns: 1fr; }
   .sdk-download { align-items: stretch; flex-direction: column; }
   .sdk-download .button { width: 100%; }
   .sdk-download-action { align-items: stretch; }

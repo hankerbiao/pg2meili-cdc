@@ -40,7 +40,8 @@ ALTER TABLE collection_settings
 
 _CLEANUP_TASKS_EXTEND_SQL = """
 ALTER TABLE app_cleanup_tasks
-    ADD COLUMN IF NOT EXISTS target_regions JSONB;
+    ADD COLUMN IF NOT EXISTS target_regions JSONB,
+    ADD COLUMN IF NOT EXISTS schema_dropped BOOLEAN NOT NULL DEFAULT FALSE;
 """
 
 

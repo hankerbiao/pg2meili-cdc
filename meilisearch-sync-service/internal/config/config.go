@@ -25,22 +25,26 @@ type AppConfig struct {
 	GroupID                string   // 由 GroupPrefix 和 RegionID 派生的有效消费者组 ID
 	MeiliHost              string   // Meilisearch 服务地址，格式如 http://localhost:7700
 	MeiliAPIKey            string   // Meilisearch API 密钥，为空时表示无需认证
+	MeiliBatchEnabled      bool     // 是否将连续 CDC 事件合并为 Meilisearch 批量请求
+	MeiliBatchSize         int      // 单次批量写入的最大文档数
+	MeiliBatchFlushMS      int      // 低流量时允许等待批次聚合的最长时间
+	MeiliBatchMaxBytes     int      // 单次批量写入的最大 JSON 请求体估算大小
 	Debug                  bool
 	HTTPAddr               string
-	UniDataURL             string // UniData 服务地址，用于代理注册
-	AgentIP                string // 代理节点对外 IP
-	AgentPort              int    // 代理节点对外端口
-	AgentName              string // 代理节点名称/主机名
-	AgentVersion           string // 代理程序版本
-	AgentMeta              string // 代理扩展元信息（JSON 字符串）
-	AgentPublicURL         string // 外部服务访问 Agent 的稳定地址
-	AgentRegistrationToken string // Agent 向 UniData 注册时使用的共享凭证
-	RedisAddr              string // Redis 地址，默认本机
-	RedisPass              string // Redis 密码
-	RedisDB                int    // Redis DB
+	UniDataURL             string   // UniData 服务地址，用于代理注册
+	AgentIP                string   // 代理节点对外 IP
+	AgentPort              int      // 代理节点对外端口
+	AgentName              string   // 代理节点名称/主机名
+	AgentVersion           string   // 代理程序版本
+	AgentMeta              string   // 代理扩展元信息（JSON 字符串）
+	AgentPublicURL         string   // 外部服务访问 Agent 的稳定地址
+	AgentRegistrationToken string   // Agent 向 UniData 注册时使用的共享凭证
+	RedisAddr              string   // Redis 地址，默认本机
+	RedisPass              string   // Redis 密码
+	RedisDB                int      // Redis DB
 	CORSAllowedOrigins     []string // 允许跨域的 Origin 白名单；为空表示开发模式允许任意（*）
 	CORSRequireAllowlist   bool     // 生产环境置 true 时，白名单为空则启动校验失败
-	legacyGroupID          string // 仅用于校验遗留 KAFKA_GROUP_ID，禁止其覆盖派生结果
+	legacyGroupID          string   // 仅用于校验遗留 KAFKA_GROUP_ID，禁止其覆盖派生结果
 }
 
 // getenv 安全地从环境变量读取配置值
@@ -95,7 +99,6 @@ func (c AppConfig) Validate() error {
 	if !strings.HasPrefix(c.MeiliHost, "http://") && !strings.HasPrefix(c.MeiliHost, "https://") {
 		return fmt.Errorf("MEILI_HOST 必须以 http:// 或 https:// 开头，当前值: %q", c.MeiliHost)
 	}
-
 	if err := validateKafkaIdentifier("KAFKA_GROUP_PREFIX", c.GroupPrefix, 128); err != nil {
 		return err
 	}
@@ -129,6 +132,15 @@ func (c AppConfig) Validate() error {
 	}
 	if c.CORSRequireAllowlist && len(c.CORSAllowedOrigins) == 0 {
 		return fmt.Errorf("CORS_REQUIRE_ALLOWLIST 已启用但 CORS_ALLOWED_ORIGINS 为空；生产环境必须显式配置跨域白名单")
+	}
+	if c.MeiliBatchSize <= 0 {
+		return fmt.Errorf("MEILI_BATCH_SIZE 必须大于 0")
+	}
+	if c.MeiliBatchFlushMS <= 0 {
+		return fmt.Errorf("MEILI_BATCH_FLUSH_MS 必须大于 0")
+	}
+	if c.MeiliBatchMaxBytes <= 0 {
+		return fmt.Errorf("MEILI_BATCH_MAX_BYTES 必须大于 0")
 	}
 	return nil
 }
@@ -175,6 +187,10 @@ func LoadConfig() AppConfig {
 	}
 	corsRequire := getenv("CORS_REQUIRE_ALLOWLIST", "false")
 	corsRequireBool := corsRequire == "1" || strings.EqualFold(corsRequire, "true")
+	batchEnabled := getenv("MEILI_BATCH_ENABLED", "true")
+	batchSize := positiveInt(getenv("MEILI_BATCH_SIZE", "100"))
+	batchFlushMS := positiveInt(getenv("MEILI_BATCH_FLUSH_MS", "100"))
+	batchMaxBytes := positiveInt(getenv("MEILI_BATCH_MAX_BYTES", "5242880"))
 	return AppConfig{
 		Brokers:                splitAndTrim(brokersEnv),
 		Topics:                 splitAndTrim(topicEnv),
@@ -186,6 +202,10 @@ func LoadConfig() AppConfig {
 		GroupID:                groupID,
 		MeiliHost:              getenv("MEILI_HOST", ""),
 		MeiliAPIKey:            getenv("MEILI_API_KEY", ""),
+		MeiliBatchEnabled:      batchEnabled == "1" || strings.EqualFold(batchEnabled, "true"),
+		MeiliBatchSize:         batchSize,
+		MeiliBatchFlushMS:      batchFlushMS,
+		MeiliBatchMaxBytes:     batchMaxBytes,
 		Debug:                  debug,
 		HTTPAddr:               getenv("HTTP_ADDR", ":8091"),
 		UniDataURL:             getenv("UNIDATA_URL", ""),
@@ -203,4 +223,14 @@ func LoadConfig() AppConfig {
 		CORSRequireAllowlist:   corsRequireBool,
 		legacyGroupID:          legacyGroupID,
 	}
+}
+
+// positiveInt returns zero for malformed input so Validate can report the
+// invalid environment variable instead of silently accepting a bad setting.
+func positiveInt(raw string) int {
+	v, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		return 0
+	}
+	return v
 }

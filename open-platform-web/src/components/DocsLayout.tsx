@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 
 const quickstartLinks = [
+  { to: '/docs/how-to-use', label: 'How to use' },
   { to: '/docs/authentication', label: '认证与权限' },
   { to: '/docs/python-sdk', label: 'Python SDK' },
   { to: '/docs/api-reference', label: 'API Reference' },

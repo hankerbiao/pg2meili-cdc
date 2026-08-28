@@ -255,6 +255,30 @@ class _FakeSession:
 
 
 class TestCleanupStateMachineUnit:
+    async def test_schema_is_reclaimed_without_waiting_for_agent_confirmation(self, monkeypatch):
+        _patch_infra(monkeypatch, collections=["c1"], regions=())
+        dropped = []
+
+        async def fake_drop_tenant(*args, **kwargs):
+            dropped.append(kwargs.get("app_id") or args[1])
+
+        monkeypatch.setattr(cleanup_service, "drop_tenant", fake_drop_tenant)
+        task = AppCleanupTask(id="t-schema", app_id="a-schema", app_name="a-schema", state=CLEANUP_STATE_DELETING)
+
+        with pytest.raises(RuntimeError, match="没有在线"):
+            await cleanup_service.run_cleanup_task(_FakeSession(), task)
+
+        assert dropped == ["a-schema"]
+        assert task.schema_dropped is True
+        assert task.state == CLEANUP_STATE_FAILED
+
+    async def test_schema_cleanup_snapshot_does_not_recreate_schema_on_retry(self):
+        task = AppCleanupTask(id="t-snapshot", app_id="a-snapshot", app_name="a-snapshot")
+        task.collection_cleanup = [{"collection": "c1", "status": "command_sent"}]
+        task.schema_dropped = True
+
+        assert await cleanup_service._collections_to_cleanup(object(), task) == ["c1"]
+
     async def test_run_cleanup_task_completes_without_db(self, monkeypatch):
         _patch_infra(monkeypatch, collections=["c1", "c2"])
         task = AppCleanupTask(id="t1", app_id="a1", app_name="a1", state=CLEANUP_STATE_DELETING)
