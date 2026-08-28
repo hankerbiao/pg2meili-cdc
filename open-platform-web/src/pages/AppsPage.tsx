@@ -60,6 +60,11 @@ export function AppsPage() {
   const selectedProfile = accessProfiles.find((profile) => profile.value === accessProfile)!
   const defaultExpiry = new Date(Date.now() + 90 * 86400000)
   defaultExpiry.setMinutes(defaultExpiry.getMinutes() - defaultExpiry.getTimezoneOffset())
+  const maxExpiry = new Date()
+  const maxExpiryMonth = maxExpiry.getMonth()
+  maxExpiry.setFullYear(maxExpiry.getFullYear() + 100)
+  if (maxExpiry.getMonth() !== maxExpiryMonth) maxExpiry.setDate(0)
+  maxExpiry.setMinutes(maxExpiry.getMinutes() - maxExpiry.getTimezoneOffset())
 
   function openCreateDialog() {
     create.reset()
@@ -151,7 +156,7 @@ export function AppsPage() {
         <form className="form-grid" onSubmit={submit}>
           <label>显示名称<input name="display_name" required maxLength={128} placeholder="商品搜索" /></label>
           <label>应用标识<input name="app_name" required pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}" placeholder="product_search" /></label>
-          <label>Key 到期时间<input type="datetime-local" name="expires_at" required defaultValue={defaultExpiry.toISOString().slice(0, 16)} /></label>
+          <label>Key 到期时间<input type="datetime-local" name="expires_at" required defaultValue={defaultExpiry.toISOString().slice(0, 16)} max={maxExpiry.toISOString().slice(0, 16)} /></label>
           <fieldset className="full-field">
             <legend>初始 API Key 权限</legend>
             <div className="scope-options access-profile-options">

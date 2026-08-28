@@ -162,3 +162,23 @@ class TestOpenPlatform:
             headers={"Authorization": f"Bearer {api_key}"},
         )
         assert rejected.status_code == 401
+
+    async def test_key_allows_a_hundred_year_expiry(self, platform_client: AsyncClient):
+        csrf = await login(platform_client)
+        app_response = await platform_client.post(
+            "/api/v1/open-platform/apps",
+            headers={"X-CSRF-Token": csrf},
+            json={"app_name": "century-key", "display_name": "Century Key", "owner_itcode": "owner"},
+        )
+        app_id = app_response.json()["data"]["id"]
+        now = datetime.now(timezone.utc)
+        key_response = await platform_client.post(
+            f"/api/v1/open-platform/apps/{app_id}/keys",
+            headers={"X-CSRF-Token": csrf},
+            json={
+                "name": "long-lived",
+                "scopes": ["data:read"],
+                "expires_at": now.replace(year=now.year + 100).isoformat(),
+            },
+        )
+        assert key_response.status_code == 201, key_response.text

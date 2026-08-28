@@ -80,6 +80,7 @@ describe('AppsPage', () => {
 
     await screen.findByText('创建第一个应用')
     await user.click(screen.getAllByRole('button', { name: '新建应用' })[0])
+    expect(new Date(screen.getByLabelText('Key 到期时间').getAttribute('max')!).getFullYear()).toBe(new Date().getFullYear() + 100)
     await user.type(screen.getByLabelText('显示名称'), app.display_name)
     await user.type(screen.getByLabelText('应用标识'), app.app_name)
     await user.type(screen.getByLabelText('描述'), app.description!)

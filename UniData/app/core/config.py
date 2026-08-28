@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     # HTTP（含本地 / 容器 localhost）下浏览器不会发送 Secure Cookie，会导致开放平台
     # 管理员登录会话失效，因此默认关闭。若服务前置 HTTPS / TLS 终止，请改为 true。
     open_platform_cookie_secure: bool = False
-    api_key_max_ttl_days: int = 365
+    api_key_max_ttl_years: int = 100
 
     # OA 单点登录（springboard）配置
     oa_jwt_secret: str = ""  # springboard 回调 payload（HS256 JWT）验签密钥；必填，经 .env 注入；缺失时 callback 报 500

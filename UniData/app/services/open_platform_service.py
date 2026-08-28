@@ -5,7 +5,7 @@ import asyncio
 import hashlib
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -288,9 +288,14 @@ class OpenPlatformService:
         now = utc_now()
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
-        max_expiry = now + timedelta(days=get_settings().api_key_max_ttl_days)
+        max_ttl_years = get_settings().api_key_max_ttl_years
+        try:
+            max_expiry = now.replace(year=now.year + max_ttl_years)
+        except ValueError:
+            # 2 月 29 日没有对应日期时，以目标年的 2 月 28 日为上限。
+            max_expiry = now.replace(year=now.year + max_ttl_years, month=2, day=28)
         if expires_at <= now or expires_at > max_expiry:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="有效期必须在未来 1 至 365 天内")
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"有效期必须在未来 {max_ttl_years} 年内")
         existing = await db.scalar(select(ApiKey.id).where(ApiKey.app_id == app_id, ApiKey.name == name))
         if existing:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="该应用下的 Key 名称已存在")
