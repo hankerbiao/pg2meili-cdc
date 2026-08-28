@@ -2,6 +2,7 @@ import { AlertTriangle, LoaderCircle, Send } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { CodeBlock } from '../components/CodeBlock'
 import {
+  DEFAULT_REGIONAL_SEARCH_BASE_URL,
   PLATFORM_TAG_LABELS,
   regionalSearchOperation,
   type ApiResponseInfo,
@@ -67,8 +68,8 @@ export function ApiPlaygroundPage() {
   const selected: PublicOperation =
     operations.find((item) => item.id === selectedId) ?? operations[0] ?? regionalSearchOperation
 
-  // 调试台固定同源：不允许用户改 Base URL，避免把 Bearer API Key 发往任意外部主机（P1）
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080'
+  const sameOriginBaseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080'
+  const [regionalSearchBaseUrl, setRegionalSearchBaseUrl] = useState(DEFAULT_REGIONAL_SEARCH_BASE_URL)
   const [apiKey, setApiKey] = useState('')
   const [pathValues, setPathValues] = useState<Record<string, string>>({})
   const [queryValues, setQueryValues] = useState<Record<string, string>>({})
@@ -79,6 +80,7 @@ export function ApiPlaygroundPage() {
   const pathParams = useMemo(() => extractPathParams(selected.path), [selected.path])
   const queryParams = useMemo(() => selected.parameters.filter((item) => item.in === 'query'), [selected.parameters])
   const hasBody = ['POST', 'PUT', 'PATCH'].includes(selected.method)
+  const baseUrl = selected.id === regionalSearchOperation.id ? regionalSearchBaseUrl : sameOriginBaseUrl
 
   useEffect(() => {
     setPathValues({})
@@ -200,6 +202,18 @@ export function ApiPlaygroundPage() {
           <p className="operation-desc">{selected.description || '使用开放平台 API Key 调用此端点。'}</p>
 
           <div className="request-form">
+            <label className="field">
+              <span className="field-label">Base URL{selected.id === regionalSearchOperation.id ? '（区域节点）' : ''}</span>
+              <input
+                className="text-input"
+                type="url"
+                value={baseUrl}
+                onChange={(event) => setRegionalSearchBaseUrl(event.target.value)}
+                readOnly={selected.id !== regionalSearchOperation.id}
+                aria-label="Base URL"
+              />
+            </label>
+
             <label className="field">
               <span className="field-label">API Key（Authorization: Bearer）</span>
               <input

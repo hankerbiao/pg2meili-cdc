@@ -189,6 +189,9 @@ export const regionalSearchOperation: PublicOperation = {
   ],
 }
 
+/** 公网天津区域 Agent 的默认搜索入口。 */
+export const DEFAULT_REGIONAL_SEARCH_BASE_URL = 'https://meilisearch.1oa.com.cn/documents'
+
 export const PLATFORM_TAG_LABELS: Record<string, string> = {
   'generic-data': '数据',
   indexes: '索引',
