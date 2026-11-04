@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,7 +21,11 @@ import (
 
 const (
 	maxPollRecords = 100
-	retryBackoff   = time.Second
+
+	// 处理失败的重试退避：指数递增直到上限。重试期间不提交对应分区的 offset，
+	// 消息会重复投递，由 Meilisearch upsert/delete 幂等兜底。
+	retryBackoffInitial = time.Second
+	retryBackoffMax     = 30 * time.Second
 
 	// Kafka metadata errors (for example UNKNOWN_TOPIC_ID) can be returned
 	// for every subscribed partition while brokers converge.  Polling without
@@ -28,6 +34,23 @@ const (
 	fetchErrorMaxBackoff     = 30 * time.Second
 	fetchErrorLogInterval    = time.Minute
 )
+
+// maxHandleAttempts 同一条消息连续以「完全相同错误」可重试失败的最大次数，
+// 超过后判定为毒消息写入 DLQ，防止单分区头阻塞拖死整条管道。可用
+// KAFKA_HANDLE_MAX_ATTEMPTS 覆盖；0 或负数表示永不放弃。默认 30 次，
+// 配合指数退避约相当于持续 12 分钟的确定性失败。
+func maxHandleAttempts() int {
+	if v := strings.TrimSpace(os.Getenv("KAFKA_HANDLE_MAX_ATTEMPTS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return 30
+}
+
+func recordKey(record *kgo.Record) string {
+	return fmt.Sprintf("%s/%d/%d", record.Topic, record.Partition, record.Offset)
+}
 
 type recordPartition struct {
 	topic     string
@@ -58,6 +81,30 @@ func Run(
 	lastFetchError := ""
 	lastFetchLog := time.Time{}
 	var suppressedFetchErrors int
+
+	// 毒消息追踪：按 topic/partition/offset 记录连续相同错误的失败次数。
+	// 提交成功后清理对应条目，避免 map 无限增长。
+	maxAttempts := maxHandleAttempts()
+	handleAttempts := make(map[string]int)
+	handleLastErr := make(map[string]string)
+	retryBackoff := retryBackoffInitial
+	// parkedToDLQ 把超限消息转入 DLQ 并返回 true（调用方应提交其 offset）。
+	parkToDLQ := func(record *kgo.Record, handleErr error) bool {
+		key := recordKey(record)
+		if maxAttempts <= 0 || handleAttempts[key] < maxAttempts || handleLastErr[key] != handleErr.Error() {
+			return false
+		}
+		log.Printf("消息连续 %d 次相同错误，判定为毒消息写入 DLQ topic=%s partition=%d offset=%d: %v", handleAttempts[key], record.Topic, record.Partition, record.Offset, handleErr)
+		dlqErr := sendToDLQ(ctx, client, cfg, record, permanent(fmt.Errorf("重试 %d 次仍失败: %w", handleAttempts[key], handleErr)))
+		if dlqErr != nil {
+			// DLQ 也写不进去时保留原状态继续重试，宁可阻塞也不丢消息。
+			log.Printf("毒消息写入 DLQ 失败，将继续重试原消息 topic=%s partition=%d offset=%d: %v", record.Topic, record.Partition, record.Offset, dlqErr)
+			return false
+		}
+		delete(handleAttempts, key)
+		delete(handleLastErr, key)
+		return true
+	}
 
 	for {
 		if ctx.Err() != nil {
@@ -155,7 +202,18 @@ func Run(
 					if ctx.Err() != nil {
 						return ctx.Err()
 					}
+					if parkToDLQ(result.Record, result.Err) {
+						records = append(records, result.Record)
+						return nil
+					}
 					log.Printf("处理批量消息失败，将重试 topic=%s partition=%d offset=%d: %v", result.Record.Topic, result.Record.Partition, result.Record.Offset, result.Err)
+					key := recordKey(result.Record)
+					if handleLastErr[key] == result.Err.Error() {
+						handleAttempts[key]++
+					} else {
+						handleAttempts[key] = 1
+					}
+					handleLastErr[key] = result.Err.Error()
 					blocked[partition] = struct{}{}
 					retry = true
 					return nil
@@ -244,7 +302,18 @@ func Run(
 					if ctx.Err() != nil {
 						return ctx.Err()
 					}
+					if parkToDLQ(record, handleErr) {
+						records = append(records, record)
+						continue
+					}
 					log.Printf("处理消息失败，将重试 topic=%s partition=%d offset=%d: %v", record.Topic, record.Partition, record.Offset, handleErr)
+					key := recordKey(record)
+					if handleLastErr[key] == handleErr.Error() {
+						handleAttempts[key]++
+					} else {
+						handleAttempts[key] = 1
+					}
+					handleLastErr[key] = handleErr.Error()
 					blocked[partition] = struct{}{}
 					retry = true
 					continue
@@ -261,8 +330,14 @@ func Run(
 		}
 
 		if len(records) > 0 {
-			if err := client.CommitRecords(ctx, records...); err != nil {
+			if err := commitWithRetry(ctx, client, records); err != nil {
 				return fmt.Errorf("提交 Kafka offset 失败: %w", err)
+			}
+			// 已提交的消息不再追踪毒消息计数。
+			for _, record := range records {
+				key := recordKey(record)
+				delete(handleAttempts, key)
+				delete(handleLastErr, key)
 			}
 		}
 
@@ -274,8 +349,38 @@ func Run(
 				return ctx.Err()
 			case <-timer.C:
 			}
+			retryBackoff *= 2
+			if retryBackoff > retryBackoffMax {
+				retryBackoff = retryBackoffMax
+			}
+		} else {
+			retryBackoff = retryBackoffInitial
 		}
 	}
+}
+
+// commitWithRetry 对 offset 提交做有限次退避重试：broker 短暂重启或网络抖动
+// 不应导致整个进程退出重启（实测会造成 1-2 分钟的消费中断）。
+func commitWithRetry(ctx context.Context, client *kgo.Client, records []*kgo.Record) error {
+	delay := time.Second
+	var lastErr error
+	const maxAttempts = 5
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if err := client.CommitRecords(ctx, records...); err != nil {
+			lastErr = err
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			log.Printf("提交 Kafka offset 失败（第 %d/%d 次）: %v", attempt, maxAttempts, err)
+			if werr := waitForRetry(ctx, delay); werr != nil {
+				return werr
+			}
+			delay *= 2
+			continue
+		}
+		return nil
+	}
+	return lastErr
 }
 
 func waitForRetry(ctx context.Context, delay time.Duration) error {
@@ -380,6 +485,12 @@ func processDebeziumMessage(value []byte) (string, string, map[string]interface{
 	}
 
 	if msg.Payload.After == nil {
+		// outbox 行被清理删除时，Debezium 产生 before=行、after=null 的 delete
+		// 事件。文档级协议只认行内的 operation 字段，行的删除本身不需要任何
+		// 同步动作，按 no-op 确认跳过；否则清理一次 outbox 表就会灌满 DLQ。
+		if msg.Payload.Before != nil {
+			return "", "", nil, "", 0, "", nil
+		}
 		return "", "", nil, "", 0, "", fmt.Errorf("search_outbox 事件缺少 after")
 	}
 	return processSearchOutbox(msg.Payload.After)

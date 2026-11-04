@@ -18,6 +18,7 @@ import (
 	"meilisearch-sync-service/internal/handler"
 	"meilisearch-sync-service/internal/logger"
 	"meilisearch-sync-service/internal/service"
+	"meilisearch-sync-service/internal/version"
 
 	"github.com/meilisearch/meilisearch-go"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -71,7 +72,7 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	defer apiKeyClient.Close()
 
-	// 4. 初始化并预热区域 API Key 注册表。
+	// 4. 初始化区域 API Key 注册表。
 	keyRegistry, err := apikey.New(a.cfg)
 	if err != nil {
 		return err
@@ -79,20 +80,28 @@ func (a *App) Run(ctx context.Context) error {
 	defer func() {
 		_ = keyRegistry.Close()
 	}()
-	if err := keyRegistry.Warmup(ctx, a.cfg); err != nil {
-		return err
-	}
-	log.Printf(
-		"服务启动，监听 region=%s cdcTopics=%v commandTopic=%s apiKeyTopic=%s dlqTopic=%s group=%s brokers=%v meiliHost=%s batchEnabled=%v batchSize=%d batchFlushMS=%d batchMaxBytes=%d debug=%v",
-		a.cfg.RegionID, a.topics.CDC, a.topics.Command, a.topics.APIKey, a.cfg.DLQTopic, a.cfg.GroupID, a.cfg.Brokers, a.cfg.MeiliHost, a.cfg.MeiliBatchEnabled, a.cfg.MeiliBatchSize, a.cfg.MeiliBatchFlushMS, a.cfg.MeiliBatchMaxBytes, a.cfg.Debug,
-	)
 
-	// 5. 创建对外 HTTP 服务，提供 /search 代理与 /health 健康检查接口。
-	server := newHTTPServer(a.cfg, keyRegistry)
-
-	// 6. 使用 errgroup 并发管理 HTTP 服务、注册重试与 Kafka 消费循环，
+	// 5. 使用 errgroup 并发管理 HTTP 服务、注册重试与 Kafka 消费循环，
 	// 任一子协程返回错误都会导致整体退出。
 	g, ctx := errgroup.WithContext(ctx)
+
+	// 预热失败不再阻断启动：中心服务（UniData）不可用时转后台退避重试，
+	// 避免启动期硬依赖形成 crash-loop。注册表未就绪期间消费会被 TenantGate
+	// fail-closed 阻塞，消息滞留 Kafka，不丢失。
+	if err := keyRegistry.Warmup(ctx, a.cfg); err != nil {
+		log.Printf("API Key 注册表预热失败（转后台重试，期间消费将被租户门禁阻塞）: %v", err)
+		g.Go(func() error {
+			warmupKeyRegistryLoop(ctx, keyRegistry, a.cfg)
+			return nil
+		})
+	}
+	log.Printf(
+		"服务启动 版本=%s region=%s cdcTopics=%v commandTopic=%s apiKeyTopic=%s dlqTopic=%s group=%s brokers=%v meiliHost=%s batchEnabled=%v batchSize=%d batchFlushMS=%d batchMaxBytes=%d debug=%v",
+		version.Version, a.cfg.RegionID, a.topics.CDC, a.topics.Command, a.topics.APIKey, a.cfg.DLQTopic, a.cfg.GroupID, a.cfg.Brokers, a.cfg.MeiliHost, a.cfg.MeiliBatchEnabled, a.cfg.MeiliBatchSize, a.cfg.MeiliBatchFlushMS, a.cfg.MeiliBatchMaxBytes, a.cfg.Debug,
+	)
+
+	// 6. 创建对外 HTTP 服务，提供 /search 代理与 /health 健康检查接口。
+	server := newHTTPServer(a.cfg, keyRegistry)
 
 	// 注册失败不影响本地搜索服务启动，但会在后台退避重试，直到中心服务可用。
 	g.Go(func() error {
@@ -131,6 +140,35 @@ func (a *App) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
+// warmupKeyRegistryLoop 中心服务不可用时的注册表预热重试循环：指数退避直到
+// 成功或进程退出。成功后 TenantGate 恢复正常放行，消费自动继续。
+func warmupKeyRegistryLoop(ctx context.Context, registry *apikey.Registry, cfg config.AppConfig) {
+	delay := 2 * time.Second
+	const maxDelay = 30 * time.Second
+	for {
+		err := registry.Warmup(ctx, cfg)
+		if err == nil {
+			log.Printf("API Key 注册表预热成功（后台重试恢复）")
+			return
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		log.Printf("API Key 注册表预热重试失败（%s 后再试）: %v", delay, err)
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+		delay *= 2
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+	}
+}
+
 func newMeiliClient(cfg config.AppConfig) meilisearch.ServiceManager {
 	// newMeiliClient 基于配置创建一个 Meilisearch 客户端。
 	// 该客户端在整个应用生命周期内复用，用于：
@@ -159,8 +197,10 @@ func newKafkaClient(cfg config.AppConfig, groupID string, topics []string) (*kgo
 		kgo.ConsumeStartOffset(kgo.NewOffset().AtStart()),
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
 		kgo.DisableAutoCommit(),
-		// 增大 SessionTimeout 以应对网络抖动或 handler 处理耗时稍长的情况。
-		kgo.SessionTimeout(60*time.Second),
+		// SessionTimeout 必须显著大于单批最长处理时间（taskTimeout 默认 5 分钟，
+		// 见 internal/service/handlers.go），否则处理长批次时会被 broker 判定死亡
+		// 而触发 rebalance，造成重复消费。
+		kgo.SessionTimeout(6 * time.Minute),
 		// HeartbeatInterval 用于维持与 broker 的心跳，避免因心跳超时被移出消费组。
 		kgo.HeartbeatInterval(5*time.Second),
 	)

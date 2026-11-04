@@ -31,6 +31,9 @@ until curl -fsS "${CONNECT_URL}/" >/dev/null 2>&1; do
   sleep 3
 done
 
+# snapshot.mode=never：仅增量消费 WAL。不要改回 always——always 会在 connector
+# 每次任务重启或本脚本重跑（删除重建）时把 search_outbox 全表重灌进 Kafka；
+# 确需全量重建索引时手动执行快照。
 JSON=$(cat <<EOF
 {
   "name": "${CONNECTOR_NAME}",
@@ -45,7 +48,7 @@ JSON=$(cat <<EOF
     "schema.include.list": "public",
     "table.include.list": "${TABLE_INCLUDE_LIST}",
     "plugin.name": "pgoutput",
-    "snapshot.mode": "always",
+    "snapshot.mode": "never",
     "publication.autocreate.mode": "disabled",
     "publication.name": "${PUBLICATION_NAME}",
     "slot.name": "${SLOT_NAME}",

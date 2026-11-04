@@ -79,7 +79,7 @@ Go 侧：`model.IndexUID(appID, collection)`（`internal/model/model.go`）、�
 
 访问原则：API Key 鉴权只查控制面；文档 CRUD/集合统计/索引管理必须走租户上下文；管理员访问租户数据也须显式指定 `app_id`；**业务数据库角色须为普通角色（非超级用户），否则 RLS 被绕过**。
 
-outbox 豁免：Debezium 复制角色经 `outbox_cdc_full_read` 策略（`FOR SELECT ... USING (true)`，按 `SEARCH_OUTBOX_CDC_ROLE` 配置、角色存在时幂等创建）或角色级 `BYPASSRLS` 读取全量 outbox——pgoutput 流式解码不受 RLS 影响，但 `snapshot.mode=always` 的初始快照 SELECT 需要豁免。业务角色没有该豁免，注入后也只能读到自身租户的 outbox 行。
+outbox 豁免：Debezium 复制角色经 `outbox_cdc_full_read` 策略（`FOR SELECT ... USING (true)`，按 `SEARCH_OUTBOX_CDC_ROLE` 配置、角色存在时幂等创建）或角色级 `BYPASSRLS` 读取全量 outbox——pgoutput 流式解码不受 RLS 影响，connector 固定 `snapshot.mode=never` 仅增量消费、无需快照；如需手动全量快照重建索引，快照 SELECT 仍依赖该豁免。业务角色没有该豁免，注入后也只能读到自身租户的 outbox 行。
 
 ### 4.4 事务上下文
 
@@ -91,7 +91,7 @@ outbox 豁免：Debezium 复制角色经 `outbox_cdc_full_read` 策略（`FOR SE
 
 触发器 `emit_search_outbox`（`AFTER INSERT/UPDATE/DELETE`）调公共函数 `public.emit_search_outbox`：INSERT/UPDATE(`is_delete=false`)→`upsert`；UPDATE(`is_delete=true`)/DELETE→`delete`。业务行变更与 outbox 写入同事务，提交/回滚一致。函数为 `SECURITY DEFINER`，outbox 的 `WITH CHECK` 依赖调用方事务内已设置 `app.tenant_id`（正常请求流与迁移均已设置）。
 
-Debezium 配置：connector `pg-search-outbox-connector`、slot `unidata_search_outbox_slot`、publication `unidata_search_outbox_pub`、`table.include.list=public.search_outbox`、`plugin.name=pgoutput`、`snapshot.mode=always`、topic `pg.public.search_outbox`（见 `docker/register-connector.sh`、`meilisearch-sync-service/.env.example`）。Debezium 不再直连租户业务表。
+Debezium 配置：connector `pg-search-outbox-connector`、slot `unidata_search_outbox_slot`、publication `unidata_search_outbox_pub`、`table.include.list=public.search_outbox`、`plugin.name=pgoutput`、`snapshot.mode=never`（仅增量；避免 connector 重启/重注册时把 outbox 全表重灌进 Kafka）、topic `pg.public.search_outbox`（见 `docker/register-connector.sh`、`meilisearch-sync-service/.env.example`）。Debezium 不再直连租户业务表。
 
 Go 同步（`internal/service/sync.go`）：识别 `payload.after.operation`；upsert 强制注入 `id/app_id/collection`，delete 只删当前租户 index 的当前文档；`ResolveIndex()` 由 `app_id+collection` 重算 index UID，不信任消息中的 `index_uid`；缺路由字段/非法 operation 进 DLQ；日志记 app_id/collection 不记完整业务文档。`MeiliCommandHandler` 校验命令 `index_uid` 与 `model.IndexUID(app_id, collection)` 一致，否则进永久错误/DLQ；支持 `update_settings`/`delete_index`。
 

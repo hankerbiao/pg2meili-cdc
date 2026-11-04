@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -93,10 +94,23 @@ type preparedDebeziumEvent struct {
 	revision   int64
 }
 
-const (
+var (
 	taskPollInterval = 100 * time.Millisecond
-	taskTimeout      = 30 * time.Second
+	// taskTimeout 等待单个 Meilisearch 任务完成的上限。
+	// 生产中大批次（100 条 × 数 KB 文档）在 Meilisearch 端可执行 60s+，
+	// 过短的超时会形成「提交任务 → 等待超时 → 重试同一批」的死循环：
+	// offset 永不提交、Meilisearch 被重复任务堆积拖慢。可用 TASK_TIMEOUT 覆盖，默认 5 分钟。
+	taskTimeout = taskTimeoutFromEnv()
 )
+
+func taskTimeoutFromEnv() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("TASK_TIMEOUT")); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return 5 * time.Minute
+}
 
 func meiliOperationError(action string, err error) error {
 	wrapped := fmt.Errorf("%s: %w", action, err)
