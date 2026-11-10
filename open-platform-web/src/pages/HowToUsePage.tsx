@@ -1,4 +1,4 @@
-import { ArrowRight, Bot, BookOpen, CheckCircle2, Code2, ExternalLink, KeyRound, Rocket, Search } from 'lucide-react'
+import { ArrowRight, Bot, BookOpen, CheckCircle2, Code2, Download, ExternalLink, KeyRound, Rocket, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { DocsLayout } from '../components/DocsLayout'
 
@@ -64,6 +64,9 @@ export function HowToUsePage() {
         <div className="eyebrow">ONBOARDING OVERVIEW</div>
         <h1>从申请 Key 到搜索成功</h1>
         <p className="lead">从创建应用到区域搜索只有四步。先看流程，再按下方步骤完成接入；完整请求路径、参数和响应示例见 API Reference。</p>
+        <a className="button button-secondary how-to-use-download" href={`${import.meta.env.BASE_URL}assets/melidata-usage-guide.md`} download="MeliData-使用说明.md">
+          <Download size={16} />下载 Markdown 使用说明
+        </a>
 
         <section id="flow">
           <h2>接入流程一览</h2>

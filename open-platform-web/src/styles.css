@@ -97,6 +97,7 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .how-to-use-step p { margin: 0; font-size: 14px; line-height: 1.65; }
 .how-to-use-action { margin-top: 16px; display: inline-flex; align-items: center; gap: 6px; color: var(--ink); font-size: 13px; font-weight: 500; }
 .how-to-use-action:hover { color: var(--primary-deep); }
+.how-to-use-download { width: fit-content; margin-top: 18px; }
 .how-to-use-next { margin-top: 72px !important; }
 .how-to-use-next h2 { margin-top: 0; }
 .how-to-use-next > p { margin-top: 0; }
