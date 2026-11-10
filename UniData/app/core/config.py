@@ -14,6 +14,9 @@ SECRET_FILE_FIELDS = (
     "agent_registration_token",
     "kafka_sasl_password",
     "oa_jwt_secret",
+    "open_platform_service_client_secret",
+    "open_platform_service_jwt_secret",
+    "open_platform_credential_encryption_key",
 )
 
 
@@ -69,6 +72,21 @@ class Settings(BaseSettings):
     # 管理员登录会话失效，因此默认关闭。若服务前置 HTTPS / TLS 终止，请改为 true。
     open_platform_cookie_secure: bool = False
     api_key_max_ttl_years: int = 100
+
+    # APPS service-to-service authentication. Secrets should be supplied via
+    # *_FILE in production; values are optional for backwards-compatible
+    # browser-only deployments.
+    open_platform_service_client_id: str = "apps"
+    open_platform_service_client_secret: str = ""
+    open_platform_service_jwt_secret: str = ""
+    open_platform_service_jwt_issuer: str = "melidata"
+    open_platform_service_jwt_audience: str = "melidata-management"
+    open_platform_service_scopes: str = (
+        "open-platform:apps:write open-platform:collections:write"
+    )
+    open_platform_service_access_ttl_seconds: int = 600
+    open_platform_service_refresh_ttl_seconds: int = 86400
+    open_platform_credential_encryption_key: str = ""
 
     # OA 单点登录（springboard）配置
     oa_jwt_secret: str = ""  # springboard 回调 payload（HS256 JWT）验签密钥；必填，经 .env 注入；缺失时 callback 报 500

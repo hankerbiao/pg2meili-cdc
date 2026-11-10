@@ -17,7 +17,12 @@ class DocumentCreateRequest(DocumentBase):
 
 class DocumentBatchUpsertRequest(BaseModel):
     """批量创建/更新文档的请求模型。"""
-    items: List[DocumentCreateRequest] = Field(..., min_length=1, description="文档列表")
+    items: List[DocumentCreateRequest] = Field(
+        ...,
+        min_length=1,
+        max_length=1000,
+        description="文档列表，单次最多 1000 条",
+    )
 
     @model_validator(mode="after")
     def validate_unique_document_ids(self):

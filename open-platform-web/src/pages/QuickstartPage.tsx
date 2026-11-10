@@ -1,9 +1,8 @@
-import { Activity, ArrowRight, Braces, Database, KeyRound, PackageCheck, Search, ShieldCheck, UploadCloud } from 'lucide-react'
+import { Activity, ArrowRight, Braces, Database, KeyRound, Search, ShieldCheck, UploadCloud } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { CodeBlock } from '../components/CodeBlock'
 import { CodeExamples } from '../components/CodeExamples'
 import { DocsLayout } from '../components/DocsLayout'
-import { SdkDownloadButton } from '../components/SdkDownloadButton'
 
 const variablesCode = `MELIDATA_BASE_URL=https://meilisearch.1oa.com.cn
 SEARCH_BASE_URL=https://meilisearch.1oa.com.cn/documents
@@ -71,14 +70,14 @@ with MeliDataClient(os.environ["MELIDATA_BASE_URL"], os.environ["MELIDATA_API_KE
 
 export function QuickstartPage() {
   return (
-    <DocsLayout toc={[{ href: '#instructions', label: 'AI 使用规则' }, { href: '#variables', label: '配置变量' }, { href: '#write', label: '写入数据' }, { href: '#crud', label: '读取与删除' }, { href: '#search', label: '区域搜索' }, { href: '#consistency', label: '同步等待' }, { href: '#errors', label: '错误处理' }]}>
+    <DocsLayout toc={[{ href: '#instructions', label: 'AI 使用规则' }, { href: '#variables', label: '配置变量' }, { href: '#write', label: '写入数据' }, { href: '#crud', label: '读取与删除' }, { href: '#search', label: '区域搜索' }, { href: '#consistency', label: '同步等待' }, { href: '#errors', label: '错误处理' }, { href: '#limits', label: '平台限制' }]}>
       <article className="doc-article">
         <div className="eyebrow">AI AGENT QUICKSTART</div>
         <h1>用 MeliData 完成写入、读取与区域搜索</h1>
         <p className="lead">本页是给 AI Agent 读取的业务集成契约。AI 可以生成代码；只有在用户明确授权并提供 API Key 后，才可以执行实际验证请求。</p>
-        <div className="sdk-download compact-download">
-          <div><PackageCheck size={22} /><span><strong>官方 Python SDK</strong><small>封装数据、索引与区域搜索接口</small></span></div>
-          <SdkDownloadButton url="/api/v1/sdk/python/download" fallbackName="melidata-sdk-0.1.0.zip">下载 SDK</SdkDownloadButton>
+        <div className="reference-promo">
+          <div><Braces size={22} /><span><strong>按 API Reference 查找接口</strong><small>查看请求路径、权限、参数和响应示例</small></span></div>
+          <Link className="button button-secondary" to="/docs/api-reference">打开 API Reference<ArrowRight size={16} /></Link>
         </div>
         <div className="quick-facts">
           <div><KeyRound /><strong>Bearer 鉴权</strong><span>请求头保持标准格式</span></div>
@@ -108,13 +107,14 @@ export function QuickstartPage() {
         <section id="consistency"><span className="step-number">04</span><h2>等待区域同步</h2><p>数据经过 PostgreSQL、Outbox、Debezium、Kafka、区域 Agent 和 Meilisearch 异步传播。刚写入后搜索为空不代表写入失败。</p><CodeBlock language="python" code={'import time\n\n' + pollCode} /></section>
         <section id="errors"><h2>错误处理</h2><table className="docs-table"><thead><tr><th>状态</th><th>处理</th></tr></thead><tbody><tr><td><code>401</code>/<code>403</code></td><td>停止，检查 Key 或 scope</td></tr><tr><td><code>404</code>/<code>422</code></td><td>修正集合、文档 ID 或请求体</td></tr><tr><td><code>409</code></td><td>停止写入，检查应用是否正在删除（<code>APP_DELETING</code>）</td></tr><tr><td><code>413</code></td><td>缩小请求体或批量大小（<code>REQUEST_BODY_TOO_LARGE</code>）</td></tr><tr><td><code>429</code></td><td>按 Retry-After 或退避重试</td></tr><tr><td><code>5xx</code>/<code>网络错误</code></td><td>有限次数退避重试并保留 request ID</td></tr></tbody></table></section>
 
+        <section id="limits"><h2>平台限制</h2><p>以下为当前部署的固定限制，超限请求会在服务端被 <code>413</code> 或 <code>422</code> 拒绝。</p><table className="docs-table"><thead><tr><th>项目</th><th>限制</th></tr></thead><tbody><tr><td>批量写入</td><td>单次最多 1000 条，请求体不超过 5 MiB，同一请求内 id 必须唯一</td></tr><tr><td>文档 id</td><td>非空字符串；同一文档按 id 幂等覆盖，可安全重试</td></tr><tr><td>集合名称</td><td>1–128 位，仅字母、数字、下划线、连字符，以字母或数字开头</td></tr><tr><td>区域搜索请求体</td><td>不超过 1 MiB；<code>limit</code> 取值 1–1000 的整数</td></tr><tr><td>区域搜索响应</td><td>不超过 16 MiB</td></tr><tr><td>API Key 有效期</td><td>创建时最长可设 100 年，到期前在控制台轮换</td></tr></tbody></table></section>
+
         <section id="guides" className="next-section">
           <h2>完善集成</h2>
-          <p>快速开始将认证、SDK 和 API 契约汇集在同一组导航中；按你的接入方式继续深入。</p>
+          <p>按实际接口查看认证、参数和响应约定，或了解数据如何同步到区域搜索节点。</p>
           <div className="next-links integration-links">
+            <Link to="/docs/api-reference"><Braces size={18} /><span><strong>API Reference</strong><small>浏览端点、参数和请求示例</small></span><ArrowRight size={18} /></Link>
             <Link to="/docs/authentication"><ShieldCheck size={18} /><span><strong>认证与权限</strong><small>请求头、scope 与安全实践</small></span><ArrowRight size={18} /></Link>
-            <Link to="/docs/python-sdk"><PackageCheck size={18} /><span><strong>Python SDK</strong><small>安装、客户端与常用接口</small></span><ArrowRight size={18} /></Link>
-            <Link to="/docs/api-reference"><Braces size={18} /><span><strong>API Reference</strong><small>浏览端点与请求契约</small></span><ArrowRight size={18} /></Link>
             <Link to="/docs/runtime-architecture"><Activity size={18} /><span><strong>区域搜索与同步</strong><small>理解 Agent、CDC 与搜索状态</small></span><ArrowRight size={18} /></Link>
           </div>
         </section>

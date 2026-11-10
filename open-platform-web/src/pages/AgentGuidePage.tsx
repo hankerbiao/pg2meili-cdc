@@ -1,4 +1,4 @@
-import { AlertCircle, BookOpen, Bot, CheckCircle2, Code, KeyRound, Link2, Search, ShieldAlert } from 'lucide-react'
+import { AlertCircle, BookOpen, Bot, CheckCircle2, KeyRound, Link2, ShieldAlert } from 'lucide-react'
 import { DocsLayout } from '../components/DocsLayout'
 import { CodeBlock } from '../components/CodeBlock'
 import { useAgentGuide } from '../api/useAgentGuide'
@@ -38,128 +38,59 @@ function ScopeTag({ scope }: { scope: string }) {
   return <span className={`scope-tag ${colors[scope] || ''}`}>{scope}</span>
 }
 
-function OperationRow({ op }: { op: { method: string; path: string; summary: string; required_scopes: string[]; openapi_ref: string | null } }) {
-  return (
-    <tr>
-      <td><span className={`method-badge ${op.method.toLowerCase()}`}>{op.method}</span></td>
-      <td><code>{op.path}</code></td>
-      <td>{op.summary}</td>
-      <td>{op.required_scopes.map(s => <ScopeTag key={s} scope={s} />)}</td>
-      <td>{op.openapi_ref && <a href={op.openapi_ref} target="_blank" rel="noopener">详情</a>}</td>
-    </tr>
-  )
-}
-
-function WorkflowSection({ workflow }: { workflow: { id: string; title: string; steps: string[]; required_scopes: string[] } }) {
-  return (
-    <div className="workflow-card">
-      <h4>{workflow.title}</h4>
-      <ol>
-        {workflow.steps.map((step, i) => <li key={i}>{step}</li>)}
-      </ol>
-      <div className="workflow-scopes">
-        {workflow.required_scopes.map(s => <ScopeTag key={s} scope={s} />)}
-      </div>
-    </div>
-  )
-}
-
 export function AgentGuidePage() {
   const { data, isLoading, isError, error } = useAgentGuide()
-
   const toc = [
-    { href: '#overview', label: '概述' },
+    { href: '#start', label: '接入流程' },
     { href: '#authentication', label: '认证与权限' },
-    { href: '#workflows', label: '接入流程' },
-    { href: '#operations', label: '公开能力' },
-    { href: '#examples', label: '代码示例' },
-    { href: '#boundaries', label: '边界说明' },
+    { href: '#examples', label: 'cURL 示例' },
+    { href: '#operations', label: 'API 清单' },
   ]
 
   if (isLoading) {
-    return (
-      <DocsLayout toc={toc}>
-        <article className="doc-article">
-          <div className="eyebrow">AGENT GUIDE</div>
-          <h1>AI Agent 集成指南</h1>
-          <LoadingSkeleton />
-        </article>
-      </DocsLayout>
-    )
+    return <DocsLayout toc={toc}><article className="doc-article"><div className="eyebrow">AGENT GUIDE</div><h1>AI Agent 集成指南</h1><LoadingSkeleton /></article></DocsLayout>
+  }
+  if (isError || !data) {
+    return <DocsLayout toc={toc}><article className="doc-article"><div className="eyebrow">AGENT GUIDE</div><h1>AI Agent 集成指南</h1><ErrorState message={error instanceof Error ? error.message : '未知错误'} /></article></DocsLayout>
   }
 
-  if (isError || !data) {
-    return (
-      <DocsLayout toc={toc}>
-        <article className="doc-article">
-          <div className="eyebrow">AGENT GUIDE</div>
-          <h1>AI Agent 集成指南</h1>
-          <ErrorState message={error instanceof Error ? error.message : '未知错误'} />
-        </article>
-      </DocsLayout>
-    )
-  }
+  const searchExample = `curl --request POST \\
+  --url "$SEARCH_BASE_URL/api/v1/collections/products/search" \\
+  --header "Authorization: Bearer $MELIDATA_API_KEY" \\
+  --header "Content-Type: application/json" \\
+  --data '{"q":"keyboard","limit":10}'`
 
   return (
     <DocsLayout toc={toc}>
-      <article className="doc-article">
+      <article className="doc-article agent-guide-article">
         <div className="eyebrow">AGENT GUIDE</div>
         <h1>AI Agent 集成指南</h1>
-        <p className="lead">
-          本指南为 AI Agent 提供 MeliData 服务的只读参考信息，用于为终端用户生成正确的集成代码。
-          本指南不是可执行工具接口，不会创建应用、申请密钥或调用任何管理接口。
-        </p>
+        <p className="lead">给 AI 编程助手的 MeliData 接入速查。按顺序验证 cURL 请求，再将请求集成到服务端应用。</p>
 
         <div className="guide-notice">
           <Bot size={20} />
           <div>
-            <strong>用途说明</strong>
-            <p>AI Agent 应仅使用本指南识别的公开业务路径生成集成代码。实际业务调用由用户应用在获得 API Key 后完成。</p>
-            <p>将浏览器当前页面的 URL 提供给 AI Agent，使其能够参考这里的公开开发接口、鉴权要求与代码示例完成集成。</p>
+            <strong>把本页链接交给 AI 助手即可</strong>
+            <p>API Key 由你的服务端安全保存。请勿将 Key 粘贴到聊天、浏览器代码或仓库。</p>
           </div>
         </div>
 
         <div className="guide-meta">
-          <span><BookOpen size={16} /> 机器可读版本: <a href="/agent-guide.json">/agent-guide.json</a></span>
-          <span><Link2 size={16} /> OpenAPI Schema: <a href="/openapi.json">/openapi.json</a></span>
-          <span>服务版本: {data.service.version}</span>
+          <span><BookOpen size={16} /> <a href="/docs/api-reference">API Reference</a></span>
+          <span><Link2 size={16} /> <a href="/openapi.json">OpenAPI Schema</a></span>
+          <span>服务版本：{data.service.version}</span>
         </div>
 
-        <section id="overview">
-          <h2>系统架构</h2>
-          <p>MeliData 是一个多区域文档存储与搜索集成服务，支持&quot;单点写入 + 多区域搜索&quot;架构。</p>
-
-          <div className="arch-grid">
-            <div className="arch-card">
-              <h4>写入路径</h4>
-              <ul className="arch-steps">
-                {data.architecture.write_path.map((step, i) => (
-                  <li key={i}>
-                    <span className="step-num">{step.order}</span>
-                    <div>
-                      <strong>{step.component}</strong>
-                      <p>{step.purpose}</p>
-                      {step.endpoint && <code className="endpoint-ref">{step.endpoint}</code>}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="arch-card">
-              <h4>搜索路径</h4>
-              <ul className="arch-steps">
-                {data.architecture.search_path.map((step, i) => (
-                  <li key={i}>
-                    <span className="step-num">{step.order}</span>
-                    <div>
-                      <strong>{step.component}</strong>
-                      <p>{step.purpose}</p>
-                      {step.endpoint && <code className="endpoint-ref">{step.endpoint}</code>}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
+        <section id="start">
+          <h2>三步完成接入</h2>
+          <ol className="onboarding-flow" aria-label="AI Agent 接入步骤">
+            <li className="onboarding-flow-step"><span className="onboarding-flow-number">01</span><h3>准备服务端 API Key</h3><p>按需申请 <code>data:write</code>、<code>data:read</code> 或 <code>search:read</code> 权限。</p></li>
+            <li className="onboarding-flow-step"><span className="onboarding-flow-number">02</span><h3>用 cURL 验证请求</h3><p>在安全的终端环境验证写入、节点发现和搜索请求。</p></li>
+            <li className="onboarding-flow-step"><span className="onboarding-flow-number">03</span><h3>集成到服务端</h3><p>将请求转换为应用代码，并从密钥管理系统读取 API Key。</p></li>
+          </ol>
+          <div className="guide-meta">
+            <span><strong>数据 API</strong> <code>{data.endpoints.data_base_url}</code></span>
+            <span><strong>区域搜索</strong> 使用在线节点返回的 <code>base_url</code></span>
           </div>
         </section>
 
@@ -168,106 +99,54 @@ export function AgentGuidePage() {
           <div className="auth-info">
             <div className="auth-header">
               <KeyRound size={24} />
-              <div>
-                <h4>Bearer 认证</h4>
-                <p>所有数据操作都需要在请求头中携带 API Key</p>
-              </div>
+              <div><h4>Bearer 认证</h4><p>所有业务请求都在请求头中携带 API Key。</p></div>
             </div>
-            <CodeBlock language="http" code={`Authorization: Bearer <api_key>`} />
+            <p>请求头：<code>Authorization: Bearer $MELIDATA_API_KEY</code></p>
           </div>
-
-          <h3>Scope 权限矩阵</h3>
-          <table className="scope-table">
-            <thead>
-              <tr>
-                <th>Scope</th>
-                <th>允许能力</th>
-                <th>典型使用方</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(data.authentication.scopes).map(([scope, info]) => (
-                <tr key={scope}>
-                  <td><ScopeTag scope={scope} /></td>
-                  <td>{info.description}</td>
-                  <td>{info.typical_users.join(', ')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="callout warning">
-            <ShieldAlert size={18} />
-            <div>
-              <strong>Key 安全要求</strong>
-              <ul>
-                {data.authentication.key_requirements.map((req, i) => <li key={i}>{req}</li>)}
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        <section id="workflows">
-          <h2>推荐接入流程</h2>
-          <div className="workflows-grid">
-            {data.workflows.map((workflow) => (
-              <WorkflowSection key={workflow.id} workflow={workflow} />
+          <div className="scope-list">
+            {Object.entries(data.authentication.scopes).map(([scope, info]) => (
+              <div className="scope-list-item" key={scope}><ScopeTag scope={scope} /><span>{info.description}</span></div>
             ))}
           </div>
-        </section>
-
-        <section id="operations">
-          <h2>公开能力索引</h2>
-          <p>以下 API 操作可用于业务集成。点击&quot;详情&quot;查看完整参数定义。</p>
-          <div className="operations-table-wrapper">
-            <table className="operations-table">
-              <thead>
-                <tr>
-                  <th>方法</th>
-                  <th>路径</th>
-                  <th>说明</th>
-                  <th>Scope</th>
-                  <th>参考</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.operations.map((op) => (
-                  <OperationRow key={op.operation_id} op={op} />
-                ))}
-              </tbody>
-            </table>
+          <div className="callout warning">
+            <ShieldAlert size={18} />
+            <div><strong>Key 安全要求</strong><ul>{data.authentication.key_requirements.slice(0, 3).map((req, i) => <li key={i}>{req}</li>)}</ul></div>
           </div>
         </section>
 
         <section id="examples">
-          <h2>代码示例</h2>
-          <div className="examples-tabs">
-            {data.examples.map((example) => (
-              <div key={example.language} className="example-section">
-                <h3>{example.title}</h3>
-                <p>{example.description}</p>
-                <CodeBlock language={example.language === 'python' ? 'python' : example.language === 'typescript' ? 'typescript' : 'text'} code={example.code} />
-              </div>
-            ))}
-          </div>
+          <h2>cURL 示例</h2>
+          <p>先在终端安全设置 <code>MELIDATA_API_KEY</code>，以下命令可直接作为请求模板。</p>
+          <h3>写入一条文档</h3>
+          <CodeBlock language="curl" code={`curl --request POST \\
+  --url "${data.endpoints.data_base_url}/api/v1/data/products" \\
+  --header "Authorization: Bearer $MELIDATA_API_KEY" \\
+  --header "Content-Type: application/json" \\
+  --data '{"id":"sku-001","name":"Keyboard","price":699}'`} />
+          <h3>查询在线区域节点</h3>
+          <CodeBlock language="curl" code={`curl --request GET \\
+  --url "${data.endpoints.data_base_url}/api/v1/agents/online" \\
+  --header "Authorization: Bearer $MELIDATA_API_KEY"`} />
+          <h3>搜索文档</h3>
+          <p>将在线节点响应中的区域 <code>base_url</code> 设为 <code>SEARCH_BASE_URL</code>，再发起搜索。</p>
+          <CodeBlock language="curl" code={searchExample} />
         </section>
 
-        <section id="boundaries">
-          <h2>边界说明</h2>
-          <p>以下端点不属于业务集成目标：</p>
-          <div className="non-targets-list">
-            {data.non_targets.map((nt) => (
-              <div key={nt.category} className="non-target-card">
-                <h4><ShieldAlert size={16} /> {nt.category}</h4>
-                <code>{nt.paths.join(', ')}</code>
-                <p>{nt.reason}</p>
-              </div>
-            ))}
+        <section id="operations">
+          <h2>业务 API 清单</h2>
+          <div className="operations-table-wrapper">
+            <table className="operations-table">
+              <thead><tr><th>方法</th><th>路径</th><th>用途</th><th>权限</th></tr></thead>
+              <tbody>{data.operations.filter((op) => op.operation_id !== 'python_sdk_download').map((op) => (
+                <tr key={op.operation_id}>
+                  <td><span className={`method-badge ${op.method.toLowerCase()}`}>{op.method}</span></td>
+                  <td><code>{op.path}</code></td><td>{op.summary}</td>
+                  <td>{op.required_scopes.map((scope) => <ScopeTag key={scope} scope={scope} />)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
           </div>
-          <div className="callout">
-            <CheckCircle2 size={18} />
-            <span>AI Agent 应只使用本页面公开的 API 操作，不应尝试访问上述受限端点。</span>
-          </div>
+          <div className="callout"><CheckCircle2 size={18} /><span>完整参数、请求和响应定义请查看 <a href="/docs/api-reference">API Reference</a>。管理与内部接口不用于业务集成。</span></div>
         </section>
       </article>
     </DocsLayout>

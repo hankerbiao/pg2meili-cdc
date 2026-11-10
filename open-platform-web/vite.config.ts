@@ -9,8 +9,9 @@ export default defineConfig(({ command }) => ({
     port: 3100,
     proxy: {
       '/api': 'http://127.0.0.1:8080',
+      '/agent-guide.json': 'http://127.0.0.1:8080',
       '/openapi.json': 'http://127.0.0.1:8080',
-      '/docs': 'http://127.0.0.1:8080',
+      '^/docs$': 'http://127.0.0.1:8080',
     },
   },
 }))

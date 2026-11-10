@@ -106,89 +106,35 @@ WORKFLOWS = [
     },
 ]
 
-# 代码示例（使用占位值）
+# cURL 示例（使用环境变量存放 API Key）
 EXAMPLES = [
     {
-        "language": "python",
-        "title": "Python SDK 示例",
-        "description": "使用官方 Python SDK 进行文档写入和搜索；SDK 会自动拼接区域搜索路径",
-        "code": '''import os
-from melidata_sdk import MeliDataClient
-
-BASE_URL = "https://meilisearch.1oa.com.cn"
-SEARCH_URL = "https://meilisearch.1oa.com.cn/documents"
-
-with MeliDataClient(
-    BASE_URL,
-    os.environ["MELIDATA_API_KEY"],
-    search_url=SEARCH_URL,
-) as client:
-    # 写入文档
-    client.upsert_document(
-        "products",
-        {"id": "sku-001", "name": "Mechanical Keyboard", "price": 699},
-    )
-    # 搜索文档
-    result = client.search("products", query="keyboard", limit=10)
-    print(result)
-''',
+        "language": "curl",
+        "title": "写入一条文档",
+        "description": "使用 data:write 权限向 products 集合写入文档。",
+        "code": f'''curl --request POST \\
+  --url "{DATA_BASE_URL}/api/v1/data/products" \\
+  --header "Authorization: Bearer $MELIDATA_API_KEY" \\
+  --header "Content-Type: application/json" \\
+  --data '{{"id":"sku-001","name":"Keyboard","price":699}}' '''.strip(),
     },
     {
-        "language": "typescript",
-        "title": "TypeScript fetch 示例",
-        "description": "使用原生 fetch 进行区域搜索；公网 Search Base URL 需要追加集合搜索路径",
-        "code": '''const API_KEY = process.env.MELIDATA_API_KEY;
-const BASE_URL = "https://meilisearch.1oa.com.cn";
-const SEARCH_BASE_URL = "https://meilisearch.1oa.com.cn/documents";
-
-// 1. 写入文档
-async function writeDocument(collection: string, doc: object) {
-  const response = await fetch(`${BASE_URL}/api/v1/data/${collection}`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${API_KEY}`,
-      "Content-Type": "application/json",
+        "language": "curl",
+        "title": "查询在线区域节点",
+        "description": "使用 search:read 权限发现可用节点，并从响应中读取 base_url。",
+        "code": f'''curl --request GET \\
+  --url "{DATA_BASE_URL}/api/v1/agents/online" \\
+  --header "Authorization: Bearer $MELIDATA_API_KEY"''',
     },
-    body: JSON.stringify(doc),
-  });
-  if (!response.ok) {
-    throw new Error(`写入失败: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-// 2. 发现在线区域节点
-async function findOnlineAgent(region?: string) {
-  const url = region
-    ? `${BASE_URL}/api/v1/agents/online?region=${region}`
-    : `${BASE_URL}/api/v1/agents/online`;
-  const response = await fetch(url, {
-    headers: { "Authorization": `Bearer ${API_KEY}` },
-  });
-  if (!response.ok) {
-    throw new Error(`节点发现失败: ${response.statusText}`);
-  }
-  const { data: agents } = await response.json();
-  return agents[0]; // 选择第一个可用节点
-}
-
-// 3. 向区域节点搜索
-async function regionalSearch(agentUrl: string, collection: string, query: string) {
-  const searchBaseUrl = agentUrl || SEARCH_BASE_URL;
-  const response = await fetch(`${searchBaseUrl}/api/v1/collections/${collection}/search`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ q: query, limit: 10 }),
-  });
-  if (!response.ok) {
-    throw new Error(`搜索失败: ${response.statusText}`);
-  }
-  return response.json();
-}
-''',
+    {
+        "language": "curl",
+        "title": "搜索文档",
+        "description": "将在线节点响应中的 base_url 设置为 SEARCH_BASE_URL；搜索路径和 Bearer Key 保持不变。",
+        "code": '''curl --request POST \\
+  --url "$SEARCH_BASE_URL/api/v1/collections/products/search" \\
+  --header "Authorization: Bearer $MELIDATA_API_KEY" \\
+  --header "Content-Type: application/json" \\
+  --data '{"q":"keyboard","limit":10}' '''.strip(),
     },
 ]
 

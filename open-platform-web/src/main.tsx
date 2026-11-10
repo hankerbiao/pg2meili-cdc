@@ -13,7 +13,7 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter basename="/open-platform">
+      <BrowserRouter basename={import.meta.env.DEV ? '/' : '/open-platform'}>
         <AuthProvider>
           <App />
         </AuthProvider>

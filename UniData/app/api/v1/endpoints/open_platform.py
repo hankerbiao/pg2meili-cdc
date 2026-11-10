@@ -2,12 +2,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import hashlib
+import json
+import uuid
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.api.v1.endpoints.agents import require_agent_registration_token
 from app.api.v1.response import ApiResponse, ok
@@ -22,8 +27,15 @@ from app.core.admin_auth import (
 from app.core.any_auth import ROLE_OA, AnySession, get_any_session, require_any_csrf
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.service_auth import (
+    SERVICE_SCOPE_APPS_WRITE,
+    SERVICE_SCOPE_COLLECTIONS_WRITE,
+    ManagementIdentity,
+    require_management_auth,
+    require_service_scope,
+)
 from app.models.oa import OaUser
-from app.models.open_platform import ApiKey, OpenPlatformApp, utc_now
+from app.models.open_platform import ApiKey, BootstrapOperation, OpenPlatformApp, utc_now
 from app.api.v1.validation import valid_collection_name
 from app.schemas.document import CollectionDetail, CollectionSettingsUpdate
 from app.services.agent_service import agent_service
@@ -96,10 +108,11 @@ class KeyResponse(BaseModel):
     revoked_at: datetime | None
     version: int
     created_at: datetime
+    credential_ref: str | None = None
 
 
 class KeySecretResponse(KeyResponse):
-    api_key: str
+    api_key: str | None = None
 
 
 class AppBootstrapResponse(BaseModel):
@@ -153,12 +166,65 @@ class AgentNodeResponse(BaseModel):
     updated_at: datetime | None
 
 
+class OverviewAppStats(BaseModel):
+    total: int
+    active: int
+    disabled: int
+
+
+class OverviewKeyStats(BaseModel):
+    total: int
+    active: int
+    expiring_in_30_days: int
+    unused_30_days: int | None = None
+
+
+class OverviewAgentStats(BaseModel):
+    total: int
+    online: int
+    offline: int
+
+
+class OverviewAuditStats(BaseModel):
+    last_7_days: int
+
+
+class OverviewExpiringKey(BaseModel):
+    key_id: str
+    app_id: str
+    app_name: str
+    name: str
+    scopes: list[str]
+    expires_at: datetime
+    last_used_at: datetime | None
+
+
+class OverviewRecentApp(BaseModel):
+    id: str
+    app_name: str
+    display_name: str
+    status: str
+    updated_at: datetime
+    active_key_count: int
+
+
+class OverviewResponse(BaseModel):
+    scope: Literal["platform", "self"]
+    apps: OverviewAppStats
+    keys: OverviewKeyStats
+    expiring_keys: list[OverviewExpiringKey]
+    agents: OverviewAgentStats | None = None
+    audit: OverviewAuditStats | None = None
+    recent_audit: list[AuditResponse] | None = None
+    apps_recent: list[OverviewRecentApp] | None = None
+
+
 def source_ip(request: Request) -> str | None:
     forwarded = request.headers.get("X-Forwarded-For", "").split(",", 1)[0].strip()
     return forwarded or (request.client.host if request.client else None)
 
 
-def _assert_owned(identity: AnySession, app: OpenPlatformApp) -> None:
+def _assert_owned(identity: AnySession | ManagementIdentity, app: OpenPlatformApp) -> None:
     """OA 普通用户只能访问 owner_itcode 为自己的应用；管理员不受限。"""
     if identity.role == ROLE_OA and app.owner_itcode != identity.username:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该应用")
@@ -182,8 +248,137 @@ def serialize_key(key: ApiKey, plaintext: str | None = None) -> KeyResponse | Ke
         "revoked_at": key.revoked_at,
         "version": key.version,
         "created_at": key.created_at,
+        "credential_ref": key.credential_ref,
     }
-    return KeySecretResponse(**values, api_key=plaintext) if plaintext else KeyResponse(**values)
+    return KeySecretResponse(**values, api_key=plaintext) if plaintext is not None else KeyResponse(**values)
+
+
+def serialize_bootstrap_replay_key(key: ApiKey) -> KeySecretResponse:
+    """Serialize retry metadata using the bootstrap response's nullable secret field."""
+    return KeySecretResponse.model_validate(serialize_key(key).model_dump())
+
+
+def _bootstrap_fingerprint(body: AppBootstrapRequest) -> str:
+    serialized = json.dumps(body.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+async def _bootstrap_service_call(
+    body: AppBootstrapRequest,
+    request: Request,
+    identity: ManagementIdentity,
+    db: AsyncSession,
+) -> tuple[AppBootstrapResponse, int]:
+    require_service_scope(identity, SERVICE_SCOPE_APPS_WRITE)
+    idempotency_key = request.headers.get("Idempotency-Key", "").strip()
+    if not idempotency_key or len(idempotency_key) > 128:
+        raise HTTPException(status_code=400, detail="Idempotency-Key 必填且长度不超过128")
+
+    fingerprint = _bootstrap_fingerprint(body)
+
+    async def load_operation() -> BootstrapOperation | None:
+        return await db.scalar(
+            select(BootstrapOperation)
+            .where(
+                BootstrapOperation.client_id == identity.client_id,
+                BootstrapOperation.idempotency_key == idempotency_key,
+            )
+            .with_for_update()
+        )
+
+    operation = await load_operation()
+    created = operation is None
+    if created:
+        candidate = BootstrapOperation(
+            id=uuid.uuid4().hex,
+            client_id=identity.client_id or identity.username,
+            idempotency_key=idempotency_key,
+            request_fingerprint=fingerprint,
+            status="pending",
+        )
+        try:
+            # A savepoint turns the unique-key race into a normal lookup
+            # without aborting the request transaction.
+            async with db.begin_nested():
+                db.add(candidate)
+                await db.flush()
+            operation = candidate
+        except IntegrityError:
+            operation = await load_operation()
+            created = False
+            if operation is None:
+                raise
+
+    if not created:
+        if operation.request_fingerprint != fingerprint:
+            raise HTTPException(status_code=409, detail="IDEMPOTENCY_KEY_REUSED")
+        if operation.status == "pending":
+            raise HTTPException(status_code=409, detail="BOOTSTRAP_IN_PROGRESS")
+        if operation.status == "failed":
+            raise HTTPException(status_code=409, detail="BOOTSTRAP_FAILED")
+        if operation.status == "recovery_required":
+            raise HTTPException(status_code=409, detail="BOOTSTRAP_RECOVERY_REQUIRED")
+        if operation.status == "succeeded" and operation.app_id:
+            app = await open_platform_service.get_app(db, operation.app_id)
+            keys = [
+                await db.get(ApiKey, key_id)
+                for key_id in (operation.key_ids or [])
+            ]
+            return (
+                AppBootstrapResponse(
+                    app=serialize_app(app),
+                    keys=[
+                        serialize_bootstrap_replay_key(key)
+                        for key in keys
+                        if key is not None
+                    ],
+                ),
+                200,
+            )
+
+    actor = f"service:{identity.client_id}"
+    try:
+        # Keep app, tenant, keys, credentials, outbox and audit rows in one
+        # atomic unit. The operation row remains durable if that unit fails.
+        async with db.begin_nested():
+            app = await open_platform_service.create_app(
+                db,
+                app_name=body.app_name,
+                display_name=body.display_name,
+                owner_itcode=body.owner_itcode,
+                description=body.description,
+                actor=actor,
+                source_ip=source_ip(request),
+            )
+            keys: list[KeySecretResponse] = []
+            key_ids: list[str] = []
+            credential_refs: list[str] = []
+            for initial_key in body.initial_keys:
+                key, plaintext = await open_platform_service.create_key(
+                    db,
+                    app_id=app.id,
+                    **initial_key.model_dump(),
+                    actor=actor,
+                    source_ip=source_ip(request),
+                )
+                key_ids.append(key.id)
+                if key.credential_ref:
+                    credential_refs.append(key.credential_ref)
+                keys.append(KeySecretResponse.model_validate(serialize_key(key, plaintext)))
+            operation.status = "succeeded"
+            operation.app_id = app.id
+            operation.key_ids = key_ids
+            operation.credential_refs = credential_refs
+            await db.flush()
+        return AppBootstrapResponse(app=serialize_app(app), keys=keys), 201
+    except Exception as exc:
+        operation.status = "failed" if isinstance(exc, HTTPException) else "recovery_required"
+        operation.last_error = type(exc).__name__
+        await db.flush()
+        # The outer request dependency would roll the operation row back when
+        # the business transaction fails, so persist only this safe status.
+        await db.commit()
+        raise
 
 
 @router.post("/session", summary="登录开放平台")
@@ -233,6 +428,55 @@ async def list_apps(
     return ok([serialize_app(app) for app in await open_platform_service.list_apps(db, app_status, owner_itcode=owner)])
 
 
+@router.get("/overview", summary="开放平台总览：管理员返回全局统计，普通用户返回本人名下统计")
+async def platform_overview(
+    identity: AnySession = Depends(get_any_session),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[OverviewResponse]:
+    now = utc_now()
+    owner = identity.username if identity.role == ROLE_OA else None
+    apps = await open_platform_service.app_stats(db, owner_itcode=owner)
+    keys = await open_platform_service.key_stats(db, owner_itcode=owner, now=now, include_unused=owner is None)
+    expiring = await open_platform_service.expiring_keys(db, owner_itcode=owner, now=now)
+    response = OverviewResponse(
+        scope="self" if owner is not None else "platform",
+        apps=OverviewAppStats(**apps),
+        keys=OverviewKeyStats(**keys),
+        expiring_keys=[
+            OverviewExpiringKey(
+                key_id=item["key"].id,
+                app_id=item["key"].app_id,
+                app_name=item["app_name"],
+                name=item["key"].name,
+                scopes=list(item["key"].scopes or []),
+                expires_at=item["key"].expires_at,
+                last_used_at=item["key"].last_used_at,
+            )
+            for item in expiring
+        ],
+    )
+    if owner is None:
+        agents = await open_platform_service.agent_stats(db, now=now)
+        recent_logs = await open_platform_service.list_audit_logs(db, None, None, None, None, 0, 5)
+        response.agents = OverviewAgentStats(**agents)
+        response.audit = OverviewAuditStats(last_7_days=await open_platform_service.audit_stats(db, now=now))
+        response.recent_audit = [AuditResponse.model_validate(item, from_attributes=True) for item in recent_logs]
+    else:
+        recent_apps = await open_platform_service.apps_recent_with_key_counts(db, owner_itcode=owner)
+        response.apps_recent = [
+            OverviewRecentApp(
+                id=item["app"].id,
+                app_name=item["app"].app_name,
+                display_name=item["app"].display_name,
+                status=item["app"].status,
+                updated_at=item["app"].updated_at,
+                active_key_count=item["active_key_count"],
+            )
+            for item in recent_apps
+        ]
+    return ok(response)
+
+
 @router.post("/apps", status_code=status.HTTP_201_CREATED, summary="创建开放平台应用")
 async def create_app(body: AppCreateRequest, request: Request, identity: AnySession = Depends(require_any_csrf), db: AsyncSession = Depends(get_db)) -> ApiResponse[AppResponse]:
     # 负责人强制为当前登录人本人（前端已无 itcode 输入项，请求体中的 owner_itcode 一律忽略）
@@ -257,9 +501,15 @@ async def create_app(body: AppCreateRequest, request: Request, identity: AnySess
 async def bootstrap_app(
     body: AppBootstrapRequest,
     request: Request,
-    identity: AnySession = Depends(require_any_csrf),
+    identity: ManagementIdentity = Depends(require_management_auth),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[AppBootstrapResponse]:
+    if identity.is_service:
+        result, response_status = await _bootstrap_service_call(body, request, identity, db)
+        return JSONResponse(
+            status_code=response_status,
+            content=ApiResponse(data=result).model_dump(mode="json"),
+        )
     # 负责人强制为当前登录人本人（与 create_app 一致，请求体中的 owner_itcode 一律忽略）
     owner_itcode = identity.username
     actor = f"{identity.role}:{identity.username}"
@@ -649,11 +899,38 @@ async def update_app_collection_settings(
     collection: str = Depends(valid_collection_name),
     body: CollectionSettingsUpdate = ...,
     request: Request = None,
-    identity: AnySession = Depends(require_any_csrf),
+    identity: ManagementIdentity = Depends(require_management_auth),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[CollectionDetail]:
+    require_service_scope(identity, SERVICE_SCOPE_COLLECTIONS_WRITE)
     app = await open_platform_service.get_app(db, app_id)
     _assert_owned(identity, app)
+    if identity.is_service:
+        required = {
+            "filterableAttributes",
+            "sortableAttributes",
+            "searchableAttributes",
+            "displayedAttributes",
+        }
+        if (
+            not required.issubset(body.model_fields_set)
+            or any(getattr(body, field) is None for field in required)
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="服务调用必须完整提交四类字段配置",
+            )
+        advanced = {
+            "distinctAttribute",
+            "typoToleranceEnabled",
+            "paginationMaxTotalHits",
+            "facetingMaxValuesPerFacet",
+        }
+        if body.model_fields_set.intersection(advanced):
+            raise HTTPException(
+                status_code=422,
+                detail="服务调用暂不支持高级集合配置",
+            )
     detail = await collection_service.update_settings(
         db, app_id, app.app_name, collection, body
     )

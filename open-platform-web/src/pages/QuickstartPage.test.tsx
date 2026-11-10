@@ -8,6 +8,8 @@ describe('QuickstartPage', () => {
     render(<MemoryRouter initialEntries={['/docs/quickstart']}><QuickstartPage /></MemoryRouter>)
 
     expect(screen.getByRole('heading', { name: '完善集成' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '平台限制' })).toBeInTheDocument()
+    expect(screen.getByText('单次最多 1000 条，请求体不超过 5 MiB，同一请求内 id 必须唯一')).toBeInTheDocument()
     expect(screen.getByText('SEARCH_BASE_URL=https://meilisearch.1oa.com.cn/documents', { selector: 'code' })).toBeInTheDocument()
     expect(screen.getByText('POST {SEARCH_BASE_URL}/api/v1/collections/{collection}/search', { selector: 'code' })).toBeInTheDocument()
     expect(screen.getByText(/用户明确授权后才执行真实请求/)).toBeInTheDocument()

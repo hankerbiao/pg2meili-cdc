@@ -33,6 +33,7 @@ export interface ApiKeyRecord {
   revoked_at: string | null
   version: number
   created_at: string
+  credential_ref?: string | null
 }
 
 export interface ApiKeySecret extends ApiKeyRecord {

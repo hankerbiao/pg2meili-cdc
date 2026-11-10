@@ -1,4 +1,4 @@
-import { Activity, AlertCircle, ArrowRight, CheckCircle2, Database, KeyRound, Search, Server, ShieldCheck } from 'lucide-react'
+import { Activity, AlertCircle, ArrowRight, Database, KeyRound, Search, Server, ShieldCheck } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { CodeBlock } from '../components/CodeBlock'
 import { DocsLayout } from '../components/DocsLayout'
@@ -146,7 +146,6 @@ export function RuntimeArchitecturePage() {
           </div>
           <div className="next-links integration-links">
             <Link to="/docs/api-reference"><Search size={18} /><span><strong>API Reference</strong><small>区域搜索请求与数据接口契约</small></span><ArrowRight size={18} /></Link>
-            <Link to="/docs/python-sdk"><CheckCircle2 size={18} /><span><strong>Python SDK</strong><small>Agent 发现、搜索与应用层重试</small></span><ArrowRight size={18} /></Link>
           </div>
         </section>
       </article>

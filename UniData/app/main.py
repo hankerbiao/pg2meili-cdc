@@ -22,6 +22,7 @@ from app.api.v1.endpoints.sdk import (
     validate_python_sdk_archive,
 )
 from app.api.v1.response import ok
+from app.api.oauth import router as oauth_router
 from app.core.config import Settings, get_settings
 from app.core.database import close_db, get_db_context
 from app.core.logging import init_logging
@@ -36,6 +37,75 @@ from app.services.agent_monitor import scan_agents_loop
 from app.services.open_platform_service import publish_outbox_loop
 from app.agent_guide import build_agent_guide, render_llms_text
 from fastapi.responses import PlainTextResponse
+
+MAX_DOCUMENT_BATCH_BODY_BYTES = 5 * 1024 * 1024
+
+
+class DocumentBatchBodyLimitMiddleware:
+    """Reject oversized batch writes before FastAPI parses their JSON bodies."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "")
+        if scope["type"] != "http" or scope.get("method") != "POST" or not (
+            path.startswith("/api/v1/data/") and path.endswith("/batch")
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        content_length = next(
+            (value for name, value in scope.get("headers", []) if name.lower() == b"content-length"),
+            None,
+        )
+        if content_length is not None:
+            try:
+                if int(content_length) > MAX_DOCUMENT_BATCH_BODY_BYTES:
+                    await self._reject(send)
+                    return
+            except ValueError:
+                await self._reject(send)
+                return
+
+        chunks = []
+        size = 0
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            chunk = message.get("body", b"")
+            size += len(chunk)
+            if size > MAX_DOCUMENT_BATCH_BODY_BYTES:
+                await self._reject(send)
+                return
+            chunks.append(chunk)
+            if not message.get("more_body", False):
+                break
+
+        body = b"".join(chunks)
+        sent = False
+
+        async def replay_receive():
+            nonlocal sent
+            if not sent:
+                sent = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            return await receive()
+
+        await self.app(scope, replay_receive, send)
+
+    @staticmethod
+    async def _reject(send):
+        body = b'{"data":null,"message":"\u6279\u91cf\u8bf7\u6c42\u4f53\u4e0d\u80fd\u8d85\u8fc7 5 MiB"}'
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
 
 
 def parse_cors_origins(value: str) -> list[str]:
@@ -123,6 +193,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    app.add_middleware(DocumentBatchBodyLimitMiddleware)
 
     # 全局 CORS 配置：留空时不注册中间件（仅同源访问），显式配置后按需放开
     if settings.cors_allow_origins:
@@ -135,6 +206,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         )
 
     # 挂载 API v1 的所有业务路由到统一前缀 /api/v1
+    app.include_router(oauth_router)
     include_api_routes(app)
 
     @app.exception_handler(HTTPException)

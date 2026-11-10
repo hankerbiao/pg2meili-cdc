@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 from argon2 import PasswordHasher
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.api.v1.endpoints.open_platform import serialize_bootstrap_replay_key
 from app.main import app
 
 
@@ -45,6 +47,28 @@ async def login(client: AsyncClient) -> str:
     )
     assert response.status_code == 200, response.text
     return response.json()["data"]["csrf_token"]
+
+
+def test_bootstrap_replay_key_omits_plaintext():
+    key = SimpleNamespace(
+        id="ak_0123456789abcdef",
+        app_id="app-id",
+        name="backend",
+        last_four="1234",
+        scopes=["data:write"],
+        status="active",
+        expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+        last_used_at=None,
+        revoked_at=None,
+        version=1,
+        created_at=datetime.now(timezone.utc),
+        credential_ref="cred_test",
+    )
+
+    serialized = serialize_bootstrap_replay_key(key)
+
+    assert serialized.credential_ref == "cred_test"
+    assert serialized.api_key is None
 
 
 class TestOpenPlatform:

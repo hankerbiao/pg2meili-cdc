@@ -5,19 +5,27 @@ import asyncio
 import hashlib
 import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.credentials import encrypt_secret
 from app.core.database import get_db_context
 from app.core.kafka_manager import get_kafka_manager
+from app.models.agent import AgentNode
 from app.models.cleanup_task import AppCleanupTask, CLEANUP_STATE_DELETED
-from app.models.open_platform import ApiKey, OpenPlatformApp, OpenPlatformAuditLog, OpenPlatformOutbox
+from app.models.open_platform import (
+    ApiKey,
+    ApiKeyCredential,
+    OpenPlatformApp,
+    OpenPlatformAuditLog,
+    OpenPlatformOutbox,
+)
 from app.services import cleanup_service
 from app.services.tenant_service import provision_tenant
 
@@ -217,6 +225,11 @@ class OpenPlatformService:
             key.revoked_at = utc_now()
             key.updated_at = utc_now()
             key.version += 1
+            credential = await db.scalar(
+                select(ApiKeyCredential).where(ApiKeyCredential.key_id == key.id)
+            )
+            if credential is not None:
+                credential.revoked_at = utc_now()
             cls._add_outbox(db, key.id, "key.revoked", key_event(key, app, "key.revoked"))
 
         task = await cleanup_service.create_task(db, app_id=app.id, app_name=app.app_name)
@@ -303,11 +316,14 @@ class OpenPlatformService:
 
         key_id, plaintext, secret_hash = generate_api_key()
         secret = plaintext.rsplit(".", 1)[1]
+        credential_ref = f"cred_{secrets.token_hex(16)}"
+        ciphertext, nonce = encrypt_secret(plaintext)
         key = ApiKey(
             id=key_id,
             app_id=app.id,
             name=name,
             secret_hash=secret_hash,
+            credential_ref=credential_ref,
             last_four=secret[-4:],
             scopes=scopes,
             status="active",
@@ -315,6 +331,12 @@ class OpenPlatformService:
             version=1,
         )
         db.add(key)
+        db.add(ApiKeyCredential(
+            credential_ref=credential_ref,
+            key_id=key_id,
+            ciphertext=ciphertext,
+            nonce=nonce,
+        ))
         await db.flush()
         cls._add_outbox(db, key.id, "key.upsert", key_event(key, app))
         cls.add_audit(db, actor=actor, action="key.create", target_type="api_key", target_id=key.id, app_id=app.id, source_ip=source_ip, details={"name": name, "scopes": scopes})
@@ -332,6 +354,11 @@ class OpenPlatformService:
         key.revoked_at = utc_now()
         key.updated_at = utc_now()
         key.version += 1
+        credential = await db.scalar(
+            select(ApiKeyCredential).where(ApiKeyCredential.key_id == key.id)
+        )
+        if credential is not None:
+            credential.revoked_at = utc_now()
         await db.flush()
         cls._add_outbox(db, key.id, "key.revoked", key_event(key, app, "key.revoked"))
         cls.add_audit(db, actor=actor, action="key.revoke", target_type="api_key", target_id=key.id, app_id=app.id, source_ip=source_ip)
@@ -380,6 +407,110 @@ class OpenPlatformService:
         if to_time:
             query = query.where(OpenPlatformAuditLog.created_at <= to_time)
         return list((await db.execute(query)).scalars().all())
+
+    @staticmethod
+    async def app_stats(db: AsyncSession, owner_itcode: str | None = None) -> dict[str, int]:
+        """按状态统计应用数；owner_itcode 非 None 时只统计该负责人名下（OA 用户视角）。"""
+        query = select(OpenPlatformApp.status, func.count(OpenPlatformApp.id))
+        if owner_itcode:
+            query = query.where(OpenPlatformApp.owner_itcode == owner_itcode)
+        counts = {row[0]: row[1] for row in (await db.execute(query.group_by(OpenPlatformApp.status))).all()}
+        return {"total": sum(counts.values()), "active": counts.get("active", 0), "disabled": counts.get("disabled", 0)}
+
+    @staticmethod
+    async def key_stats(
+        db: AsyncSession,
+        *,
+        owner_itcode: str | None = None,
+        now: datetime,
+        expiring_days: int = 30,
+        unused_days: int = 30,
+        include_unused: bool = True,
+    ) -> dict[str, int | None]:
+        """统计 API Key 总数、活跃数、即将到期数；include_unused 时另计长期未使用数。"""
+        status_query = select(ApiKey.status, func.count(ApiKey.id)).join(OpenPlatformApp, ApiKey.app_id == OpenPlatformApp.id)
+        expiring_query = (
+            select(func.count(ApiKey.id))
+            .join(OpenPlatformApp, ApiKey.app_id == OpenPlatformApp.id)
+            .where(ApiKey.status == "active", ApiKey.expires_at > now, ApiKey.expires_at <= now + timedelta(days=expiring_days))
+        )
+        unused_query = (
+            select(func.count(ApiKey.id))
+            .join(OpenPlatformApp, ApiKey.app_id == OpenPlatformApp.id)
+            .where(ApiKey.status == "active", ApiKey.last_used_at.is_(None) | (ApiKey.last_used_at < now - timedelta(days=unused_days)))
+        )
+        if owner_itcode:
+            status_query = status_query.where(OpenPlatformApp.owner_itcode == owner_itcode)
+            expiring_query = expiring_query.where(OpenPlatformApp.owner_itcode == owner_itcode)
+            unused_query = unused_query.where(OpenPlatformApp.owner_itcode == owner_itcode)
+        status_counts = {row[0]: row[1] for row in (await db.execute(status_query.group_by(ApiKey.status))).all()}
+        expiring = int((await db.execute(expiring_query)).scalar() or 0)
+        return {
+            "total": sum(status_counts.values()),
+            "active": status_counts.get("active", 0),
+            "expiring_in_30_days": expiring,
+            "unused_30_days": int((await db.execute(unused_query)).scalar() or 0) if include_unused else None,
+        }
+
+    @staticmethod
+    async def expiring_keys(
+        db: AsyncSession,
+        *,
+        owner_itcode: str | None = None,
+        now: datetime,
+        days: int = 30,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """即将到期的活跃 Key（含应用名），按到期时间升序。"""
+        query = (
+            select(ApiKey, OpenPlatformApp.app_name)
+            .join(OpenPlatformApp, ApiKey.app_id == OpenPlatformApp.id)
+            .where(ApiKey.status == "active", ApiKey.expires_at > now, ApiKey.expires_at <= now + timedelta(days=days))
+            .order_by(ApiKey.expires_at)
+            .limit(limit)
+        )
+        if owner_itcode:
+            query = query.where(OpenPlatformApp.owner_itcode == owner_itcode)
+        return [{"key": key, "app_name": app_name} for key, app_name in (await db.execute(query)).all()]
+
+    @staticmethod
+    async def agent_stats(db: AsyncSession, *, now: datetime) -> dict[str, int]:
+        """代理节点在线统计，与 /agents 端点使用同一在线判定口径。"""
+        deadline = now - timedelta(seconds=get_settings().agent_online_ttl_seconds)
+        total = int((await db.execute(select(func.count(AgentNode.id)))).scalar() or 0)
+        online = int((await db.execute(
+            select(func.count(AgentNode.id)).where(AgentNode.last_seen_at.is_not(None), AgentNode.last_seen_at >= deadline)
+        )).scalar() or 0)
+        return {"total": total, "online": online, "offline": total - online}
+
+    @staticmethod
+    async def audit_stats(db: AsyncSession, *, now: datetime, days: int = 7) -> int:
+        """近 N 天审计操作数。"""
+        deadline = now - timedelta(days=days)
+        return int((await db.execute(
+            select(func.count(OpenPlatformAuditLog.id)).where(OpenPlatformAuditLog.created_at >= deadline)
+        )).scalar() or 0)
+
+    @staticmethod
+    async def apps_recent_with_key_counts(db: AsyncSession, *, owner_itcode: str, limit: int = 5) -> list[dict[str, Any]]:
+        """某负责人最近更新的应用及各自活跃 Key 数。"""
+        apps = list((await db.execute(
+            select(OpenPlatformApp)
+            .where(OpenPlatformApp.owner_itcode == owner_itcode)
+            .order_by(OpenPlatformApp.updated_at.desc())
+            .limit(limit)
+        )).scalars().all())
+        if not apps:
+            return []
+        counts = {
+            row[0]: row[1]
+            for row in (await db.execute(
+                select(ApiKey.app_id, func.count(ApiKey.id))
+                .where(ApiKey.app_id.in_([app.id for app in apps]), ApiKey.status == "active")
+                .group_by(ApiKey.app_id)
+            )).all()
+        }
+        return [{"app": app, "active_key_count": counts.get(app.id, 0)} for app in apps]
 
     @staticmethod
     async def snapshot(db: AsyncSession) -> dict[str, Any]:

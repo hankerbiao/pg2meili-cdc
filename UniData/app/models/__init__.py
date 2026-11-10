@@ -2,7 +2,15 @@
 from app.models.base import Base
 from app.models.document import Document
 from app.models.agent import AgentNode
-from app.models.open_platform import ApiKey, OpenPlatformApp, OpenPlatformAuditLog, OpenPlatformOutbox
+from app.models.open_platform import (
+    ApiKey,
+    ApiKeyCredential,
+    BootstrapOperation,
+    OpenPlatformApp,
+    OpenPlatformAuditLog,
+    OpenPlatformOutbox,
+    ServiceRefreshToken,
+)
 from app.models.collection_settings import CollectionSettings
 from app.models.oa import OaUser
 from app.models.cleanup_task import AppCleanupTask
@@ -13,8 +21,11 @@ __all__ = [
     "AgentNode",
     "OpenPlatformApp",
     "ApiKey",
+    "ApiKeyCredential",
+    "BootstrapOperation",
     "OpenPlatformAuditLog",
     "OpenPlatformOutbox",
+    "ServiceRefreshToken",
     "CollectionSettings",
     "OaUser",
     "AppCleanupTask",

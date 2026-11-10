@@ -4,7 +4,7 @@
 """
 from typing import Any
 
-from fastapi import APIRouter, Depends, status, Path, Query
+from fastapi import APIRouter, Depends, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AppIdentity, get_current_app, require_scopes

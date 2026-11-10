@@ -16,7 +16,6 @@ import { AuthenticationPage } from './pages/AuthenticationPage'
 import { LoginPage } from './pages/LoginPage'
 import { OaCallbackPage } from './pages/OaCallbackPage'
 import { OaHomePage } from './pages/OaHomePage'
-import { PythonSdkPage } from './pages/PythonSdkPage'
 import { QuickstartPage } from './pages/QuickstartPage'
 import { RuntimeArchitecturePage } from './pages/RuntimeArchitecturePage'
 import { HowToUsePage } from './pages/HowToUsePage'
@@ -50,11 +49,11 @@ export function App() {
   return (
     <SiteLayout>
       <Routes>
-        <Route index element={<Navigate to="/docs/quickstart" replace />} />
+        <Route index element={<Navigate to="/docs/how-to-use" replace />} />
         <Route path="docs/how-to-use" element={<HowToUsePage />} />
         <Route path="docs/quickstart" element={<QuickstartPage />} />
         <Route path="docs/authentication" element={<AuthenticationPage />} />
-        <Route path="docs/python-sdk" element={<PythonSdkPage />} />
+        <Route path="docs/python-sdk" element={<Navigate to="/docs/api-reference" replace />} />
         <Route path="docs/api-reference" element={<ApiReferencePage />} />
         <Route path="docs/agent-guide" element={<AgentGuidePage />} />
         <Route path="docs/runtime-architecture" element={<RuntimeArchitecturePage />} />

@@ -18,6 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.service_auth import (
+    SERVICE_SCOPE_APPS_WRITE,
+    issue_access_token,
+)
 from app.main import app
 
 
@@ -74,6 +78,65 @@ async def caller_client(db_session: AsyncSession):
 
 
 class TestCallerJourney:
+    async def test_service_bootstrap_idempotent_replay_omits_plaintext(self, caller_client):
+        client, _ = caller_client
+        settings = get_settings()
+        original = (
+            settings.open_platform_service_client_id,
+            settings.open_platform_service_jwt_secret,
+            settings.open_platform_service_jwt_issuer,
+            settings.open_platform_service_jwt_audience,
+        )
+        settings.open_platform_service_client_id = "apps-test"
+        settings.open_platform_service_jwt_secret = "test-service-jwt-secret-with-at-least-32-characters"
+        settings.open_platform_service_jwt_issuer = "test-melidata"
+        settings.open_platform_service_jwt_audience = "melidata-management"
+
+        try:
+            token, _ = issue_access_token("apps-test", [SERVICE_SCOPE_APPS_WRITE])
+            request_body = {
+                "app_name": "e2e-service-bootstrap-replay",
+                "display_name": "E2E Service Bootstrap Replay",
+                "owner_itcode": "pytest",
+                "initial_keys": [
+                    {
+                        "name": "backend",
+                        "scopes": ["data:write"],
+                        "expires_at": _iso(90),
+                    }
+                ],
+            }
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Idempotency-Key": "e2e-service-bootstrap-replay",
+            }
+            first = await client.post(
+                "/api/v1/open-platform/apps/bootstrap",
+                headers=headers,
+                json=request_body,
+            )
+            assert first.status_code == 201, first.text
+            first_key = first.json()["data"]["keys"][0]
+            assert first_key["api_key"].startswith("ud_live_ak_")
+            assert first_key["credential_ref"]
+
+            replay = await client.post(
+                "/api/v1/open-platform/apps/bootstrap",
+                headers=headers,
+                json=request_body,
+            )
+            assert replay.status_code == 200, replay.text
+            replay_key = replay.json()["data"]["keys"][0]
+            assert replay_key["api_key"] is None
+            assert replay_key["credential_ref"] == first_key["credential_ref"]
+        finally:
+            (
+                settings.open_platform_service_client_id,
+                settings.open_platform_service_jwt_secret,
+                settings.open_platform_service_jwt_issuer,
+                settings.open_platform_service_jwt_audience,
+            ) = original
+
     async def test_full_lifecycle_with_real_api_key(self, caller_client):
         client, csrf = caller_client
 

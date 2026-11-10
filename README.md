@@ -16,6 +16,7 @@ MeliData accepts application documents through a protected API, persists them in
 - [Using the API](#using-the-api)
 - [Python SDK](#python-sdk)
 - [CDC Verification and Operations](#cdc-verification-and-operations)
+- [Current Production Service](docs/production-service.md)
 - [Multi-region Deployment](#multi-region-deployment)
 - [Development and Tests](#development-and-tests)
 - [Security](#security)
@@ -354,6 +355,8 @@ The control-plane write is committed synchronously. Search indexing is asynchron
 Kafka preserves per-partition order, and the outbox has a monotonic `event_version` used by the Agent to reject stale updates. Each region must keep an independent consumer group so every region receives the complete event stream.
 
 ## Multi-region Deployment
+
+For the currently running central service, see [Current Production Service](docs/production-service.md).
 
 The root Compose stack is appropriate for a complete central environment and local integration testing. A remote search region normally needs only the Go Agent, a regional Meilisearch, and Redis, plus network access to the central Kafka broker and UniData registration endpoint. It does not run a second PostgreSQL, Debezium, Kafka Connect, or UniData control plane.
 

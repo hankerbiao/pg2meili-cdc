@@ -215,8 +215,8 @@ class TestAgentGuideEndpoints:
         assert len(examples) > 0
 
         languages = [e["language"] for e in examples]
-        assert "python" in languages
-        assert "typescript" in languages
+        assert languages == ["curl"] * len(examples)
+        assert all(e["code"].lstrip().startswith("curl ") for e in examples)
 
     @pytest.mark.asyncio
     async def test_agent_guide_json_non_targets(self, clean_client: AsyncClient):

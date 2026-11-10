@@ -138,7 +138,13 @@ export function extractPublicOperations(document: OpenApiDocument): PublicOperat
       if (!tag) continue
       const parameters: OpenApiParameter[] = (operation.parameters ?? [])
         .filter((item) => item.in === 'path' || item.in === 'query')
-        .map((item) => ({ name: item.name, in: item.in, required: Boolean(item.required), description: item.description }))
+        .map((item) => ({
+          name: item.name,
+          in: item.in,
+          required: Boolean(item.required),
+          description: item.description,
+          example: item.example ?? item.schema?.example ?? item.schema?.default,
+        }))
       const jsonContent = operation.requestBody?.content?.['application/json']
       let requestBodyExample: string | null = null
       if (jsonContent) {

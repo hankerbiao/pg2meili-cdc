@@ -44,6 +44,26 @@ ALTER TABLE app_cleanup_tasks
     ADD COLUMN IF NOT EXISTS schema_dropped BOOLEAN NOT NULL DEFAULT FALSE;
 """
 
+_SERVICE_AUTH_EXTEND_SQL = (
+    """
+    ALTER TABLE api_keys
+        ADD COLUMN IF NOT EXISTS credential_ref VARCHAR(128)
+    """,
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_api_keys_credential_ref
+        ON api_keys (credential_ref)
+        WHERE credential_ref IS NOT NULL
+    """,
+    """
+    ALTER TABLE service_refresh_tokens
+        ADD COLUMN IF NOT EXISTS scopes JSONB NOT NULL DEFAULT '[]'::jsonb
+    """,
+    """
+    ALTER TABLE api_key_credentials
+        ADD COLUMN IF NOT EXISTS destroyed_at TIMESTAMPTZ
+    """,
+)
+
 
 MIGRATION_VERSION = "20260730_open_platform_api_keys"
 MIGRATION_VERSION_OA_USER_STATUS = "20260805_oa_user_status"
@@ -51,6 +71,7 @@ MIGRATION_VERSION_COLLECTION_SETTINGS = "20260805_collection_settings"
 MIGRATION_VERSION_COLLECTION_SETTINGS_EXTEND = "20260805_collection_settings_extend"
 MIGRATION_VERSION_COLLECTION_SETTINGS_RLS = "20260806_collection_settings_rls"
 MIGRATION_VERSION_CLEANUP_TASKS_REGIONS = "20260807_cleanup_task_regions"
+MIGRATION_VERSION_SERVICE_AUTH = "20261102_apps_service_auth"
 
 
 async def migrate() -> None:
@@ -110,6 +131,15 @@ async def migrate() -> None:
                 "ON CONFLICT (version) DO NOTHING"
             ),
             {"version": MIGRATION_VERSION_CLEANUP_TASKS_REGIONS},
+        )
+        for statement in _SERVICE_AUTH_EXTEND_SQL:
+            await connection.execute(text(statement))
+        await connection.execute(
+            text(
+                "INSERT INTO unidata_schema_migrations (version) VALUES (:version) "
+                "ON CONFLICT (version) DO NOTHING"
+            ),
+            {"version": MIGRATION_VERSION_SERVICE_AUTH},
         )
         await ensure_collection_settings_rls(connection)
         await connection.execute(
