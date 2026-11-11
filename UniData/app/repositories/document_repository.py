@@ -110,6 +110,9 @@ class DocumentRepository:
         offset: int = 0,
     ) -> list[Document]:
         """列出文档。"""
+        # 批量写入会让大量文档共享同一个 updated_at，单靠 updated_at 排序在 offset
+        # 翻页时顺序不稳定，同一批分页会重复返回/漏掉文档（实测 6 页 600 条只有 401
+        # 个唯一 id）。追加唯一列 row_id 作为稳定的次序兜底。
         query = (
             select(Document)
             .where(
@@ -117,7 +120,7 @@ class DocumentRepository:
                 Document.collection == collection,
                 Document.is_delete.is_(False),
             )
-            .order_by(Document.updated_at.desc())
+            .order_by(Document.updated_at.desc(), Document.row_id.asc())
             .limit(limit)
             .offset(offset)
         )

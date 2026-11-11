@@ -18,12 +18,15 @@
 安全: API Key 只从环境变量 / --api-key / --env-file 读取，不落仓库。
 
 运维要点（2026-11-11 实测，10.17.158.114）:
-    * 写入侧（MeliData API）很快，21457 条 22 批约 1 分钟。
+    * 全量 21458 条端到端 14.6 秒（拉取 215 页 5 秒 + 写入 9.1 秒 + 校验命中）。
     * 真正决定全量耗时的是 CDC 落索引速率，瓶颈在 Meilisearch 每批任务的
-      LMDB 提交（该机为机械盘，fsync 约 69ms）。MEILI_BATCH_SIZE=100 时约
-      10 docs/s，调成 1000 后约 50-60 docs/s，故同步大批量前建议：
-          echo 'MEILI_BATCH_SIZE=1000' >> .env.docker
-          docker compose up -d --no-deps meilisearch-sync
+      LMDB 提交（该机为机械盘，fsync 约 69ms）。两个杠杆，按收益排序：
+        1) 收窄 searchableAttributes（本例从 ["*"] 收窄到 8 个字段）：单批耗时
+           由 ~10s 降到 ~1.5s，是最大的一项。字段设了"*"意味 18 个字段
+           （含 _meili_id / syncedAt / sap.* 这些高基数字段）全被分词进索引。
+        2) MEILI_BATCH_SIZE 100 -> 4000（配合 MEILI_BATCH_MAX_BYTES 32MiB）：
+           吞吐 10 docs/s -> 300 docs/s；再上到 8000 反而变差（固定开销之外
+           单批提交时间线性增长，且容器内存涨到 165MB）。
     * 索引全部可见用 `POST /documents/api/v1/collections/{c}/search` 采样验证；
       该接口 maxTotalHits 固定 1000，空查询的 estimatedTotalHits 到 1000 即封顶，
       不能当总量用 —— 总量请取 `GET /indexes/{uid}/stats`（需 master key）。
@@ -59,6 +62,7 @@ SEARCHABLE_ATTRIBUTES = [
 FILTERABLE_ATTRIBUTES = [
     "source", "customerId", "productionModel", "inventoryLocation",
     "plannedStartDate", "aufnr", "salesOrder", "id",
+    "orderQuantity", "storageQuantity", "recordCount",
 ]
 SORTABLE_ATTRIBUTES = ["plannedStartDate", "orderQuantity", "storageQuantity"]
 

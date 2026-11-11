@@ -82,6 +82,12 @@ async def update_index_settings(
         collection=collection,
         filterable=body.filterableAttributes,
         sortable=body.sortableAttributes,
+        searchable=body.searchableAttributes,
+        displayed=body.displayedAttributes,
+        distinct_attribute=body.distinctAttribute,
+        typo_tolerance_enabled=body.typoToleranceEnabled,
+        pagination_max_total_hits=body.paginationMaxTotalHits,
+        faceting_max_values_per_facet=body.facetingMaxValuesPerFacet,
     )
     return ok(IndexSettingsResponse(
         collection=collection,

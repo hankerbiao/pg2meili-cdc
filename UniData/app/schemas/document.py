@@ -41,9 +41,28 @@ class DocumentBatchUpsertResponse(BaseModel):
 
 
 class IndexSettingsRequest(BaseModel):
-    """索引设置请求（可搜索/可排序字段）。"""
+    """索引设置请求（可过滤/可排序字段 + 扩展项）。
+
+    扩展项为 None 表示「不更新该项」；显式传值则覆盖。
+    收窄 searchableAttributes 能显著减小索引体积与 Meilisearch 提交开销，
+    因此这里与 open-platform 的集合设置保持同一套字段，避免静默丢弃。
+    """
     filterableAttributes: List[str] = Field(..., description="可过滤字段列表")
     sortableAttributes: List[str] = Field(..., description="可排序字段列表")
+    searchableAttributes: Optional[List[str]] = Field(
+        None, description="可搜索字段列表（None=全部字段；[]=清空）"
+    )
+    displayedAttributes: Optional[List[str]] = Field(
+        None, description="返回字段白名单（None=全部字段）"
+    )
+    distinctAttribute: Optional[str] = Field(None, description="去重字段")
+    typoToleranceEnabled: Optional[bool] = Field(None, description="是否启用拼写容错")
+    paginationMaxTotalHits: Optional[int] = Field(
+        None, ge=1, description="分页深度上限（Meilisearch maxTotalHits）"
+    )
+    facetingMaxValuesPerFacet: Optional[int] = Field(
+        None, ge=1, description="单分面取值上限"
+    )
 
 
 class IndexSettingsResponse(BaseModel):

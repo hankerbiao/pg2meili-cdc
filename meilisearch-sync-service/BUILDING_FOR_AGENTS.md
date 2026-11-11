@@ -101,9 +101,9 @@ Batch writes are enabled by default. Use these values when testing throughput:
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `MEILI_BATCH_ENABLED` | `true` | Set `false` for single-record compatibility mode. |
-| `MEILI_BATCH_SIZE` | `1000` | Flush after this many CDC events in one topic partition. |
+| `MEILI_BATCH_SIZE` | `4000` | Flush after this many CDC events in one topic partition. |
 | `MEILI_BATCH_FLUSH_MS` | `100` | Low-traffic collection window after the first CDC event. |
-| `MEILI_BATCH_MAX_BYTES` | `5242880` | Maximum serialized Meilisearch request payload per sub-batch. |
+| `MEILI_BATCH_MAX_BYTES` | `33554432` | Maximum serialized Meilisearch request payload per sub-batch. |
 
 All three numeric batch settings must be positive. The agent logs its resolved
 batch settings at startup and emits `[meili-batch]` records with flush reasons,

@@ -21,7 +21,7 @@ func TestLoadConfigDerivesConsumerGroupFromRegion(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate() error = %v", err)
 	}
-	if !cfg.MeiliBatchEnabled || cfg.MeiliBatchSize != 1000 || cfg.MeiliBatchFlushMS != 100 || cfg.MeiliBatchMaxBytes != 5242880 {
+	if !cfg.MeiliBatchEnabled || cfg.MeiliBatchSize != 4000 || cfg.MeiliBatchFlushMS != 100 || cfg.MeiliBatchMaxBytes != 33554432 {
 		t.Fatalf("unexpected batch defaults: %+v", cfg)
 	}
 }

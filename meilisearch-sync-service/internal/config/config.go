@@ -188,9 +188,11 @@ func LoadConfig() AppConfig {
 	corsRequire := getenv("CORS_REQUIRE_ALLOWLIST", "false")
 	corsRequireBool := corsRequire == "1" || strings.EqualFold(corsRequire, "true")
 	batchEnabled := getenv("MEILI_BATCH_ENABLED", "true")
-	batchSize := positiveInt(getenv("MEILI_BATCH_SIZE", "1000"))
+	// 提交成本几乎与单批文档数无关（Meilisearch 每次任务都要做一遍 LMDB 提交，
+	// 低速磁盘上单次提交就是数秒级），因此默认往大里聚合：4000 条/32MiB。
+	batchSize := positiveInt(getenv("MEILI_BATCH_SIZE", "4000"))
 	batchFlushMS := positiveInt(getenv("MEILI_BATCH_FLUSH_MS", "100"))
-	batchMaxBytes := positiveInt(getenv("MEILI_BATCH_MAX_BYTES", "5242880"))
+	batchMaxBytes := positiveInt(getenv("MEILI_BATCH_MAX_BYTES", "33554432"))
 	return AppConfig{
 		Brokers:                splitAndTrim(brokersEnv),
 		Topics:                 splitAndTrim(topicEnv),

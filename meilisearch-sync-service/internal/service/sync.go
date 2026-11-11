@@ -167,7 +167,9 @@ func Run(
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				if errs := more.Errors(); len(errs) > 0 {
+				// 低流量时聚合窗口到期会让 PollRecords 以 DeadlineExceeded 结束，
+				// 这是正常路径，不能当成拉取错误刷日志。
+				if errs := more.Errors(); len(errs) > 0 && !timedOut {
 					log.Printf("批量聚合期间从 Kafka 拉取消息出错，提前 flush: %s", summarizeFetchErrors(errs))
 					break
 				}
