@@ -188,7 +188,7 @@ func LoadConfig() AppConfig {
 	corsRequire := getenv("CORS_REQUIRE_ALLOWLIST", "false")
 	corsRequireBool := corsRequire == "1" || strings.EqualFold(corsRequire, "true")
 	batchEnabled := getenv("MEILI_BATCH_ENABLED", "true")
-	batchSize := positiveInt(getenv("MEILI_BATCH_SIZE", "100"))
+	batchSize := positiveInt(getenv("MEILI_BATCH_SIZE", "1000"))
 	batchFlushMS := positiveInt(getenv("MEILI_BATCH_FLUSH_MS", "100"))
 	batchMaxBytes := positiveInt(getenv("MEILI_BATCH_MAX_BYTES", "5242880"))
 	return AppConfig{
